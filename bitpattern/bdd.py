@@ -105,6 +105,9 @@ class BDDLeaf(BDDNode):
     def __repr__(self):
         return "ACCEPT" if self.value else "REJECT"
 
+    def __reduce__(self):
+        return BDDLeaf, (self.value,)
+
 
 ACCEPT = BDDLeaf(True)
 REJECT = BDDLeaf(False)
@@ -138,6 +141,10 @@ class BDD(BDDNode):
     # See BDDLeaf.__init__. Here it also guards the `left is right` reduction
     # above, which hands back a node that is still an instance of this class.
     def __init__(self, *_): pass
+
+    # Rebuild through the constructor, so unpickling re-interns.
+    def __reduce__(self):
+        return BDD, (self.bit, self.left, self.right)
 
     @lru_cache(maxsize=CACHE_SIZE)
     def __invert__(self):

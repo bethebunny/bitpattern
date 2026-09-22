@@ -135,11 +135,10 @@ class Pattern(IntSet):
     which is why a pattern denoting thousands of integers costs one node per
     *pinned* bit and nothing per free one.
 
-    A pattern may be a union of branches separated by `|`, which makes it closed
-    under `&`, `|`, `-` and `~`: any set of a fixed width is a union of cubes.
-    Branches are derived from the diagram rather than remembered from the text,
-    so patterns are canonical -- `Pattern("0000 | 0001")` and `Pattern("000?")`
-    are the same pattern and render identically.
+    The language describes one pattern; unions are built with the operators --
+    `Pattern("0000") | Pattern("0001")` -- and are closed under `&`, `|`, `-` and
+    `~`, since any set of a fixed width is a union of cubes. Branches come from
+    the diagram rather than the text, so that union *is* `Pattern("000?")`.
     """
 
     __slots__ = ()

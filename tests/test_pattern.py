@@ -317,7 +317,7 @@ class TestUnions:
         assert isinstance(Pattern("00??"), Set)
         assert Pattern("00??") <= Pattern("0???")
         assert Pattern("0000").isdisjoint(Pattern("1111"))
-        assert Pattern("00??") == {0, 1, 2, 3}
+        assert set(Pattern("00??")) == {0, 1, 2, 3}
 
     def test_empty_and_full(self):
         empty = Pattern("", width=4)
@@ -339,6 +339,13 @@ class TestUnions:
         for attribute in ("bits", "free"):
             with pytest.raises(ValueError, match="branches"):
                 getattr(union, attribute)
+
+    def test_pickles(self):
+        import pickle
+
+        pattern = ~Pattern("00??")
+        restored = pickle.loads(pickle.dumps(pattern))
+        assert type(restored) is Pattern and restored == pattern
 
     def test_intset_pattern_round_trips(self):
         source = IntSet([1, 4, 9, 16, 25], 8)

@@ -207,6 +207,19 @@ class TestIP:
             block = ipv4.cidr(text)
             assert [str(n) for n in ipv4.networks(block)] == [text]
 
+    def test_networks_of_a_narrower_set(self):
+        """Used to raise AttributeError: the widening path called a renamed method."""
+        assert [str(n) for n in ipv4.networks(IntSet([1, 2, 3], 2))] == [
+            "0.0.0.1/32", "0.0.0.2/31",
+        ]
+
+    def test_networks_of_a_wider_set_whose_members_fit(self):
+        assert [str(n) for n in ipv4.networks(IntSet([1], 40))] == ["0.0.0.1/32"]
+
+    def test_networks_rejects_members_outside_the_family(self):
+        with pytest.raises(ValueError, match="wider than 32 bits"):
+            list(ipv4.networks(IntSet([1 << 35])))
+
     def test_networks_of_the_empty_set(self):
         assert list(ipv4.networks(ipv4.none)) == []
 

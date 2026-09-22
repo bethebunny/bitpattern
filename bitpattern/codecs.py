@@ -244,9 +244,10 @@ class IP(Codec):
             yield from walk(low, top - 1, prefix << 1)
             yield from walk(high, top - 1, (prefix << 1) | 1)
 
-        if source.width != self.width:
-            source = IntSet.from_bdd(source.extended(self.width), self.width)
-        yield from walk(source.bdd, self.width - 1, 0)
+        bdd, width = source._canonical()
+        if width > self.width:
+            raise ValueError(f"set has members wider than {self.width} bits")
+        yield from walk(IntSet.from_bdd(bdd, width).widen(self.width).bdd, self.width - 1, 0)
 
 
 float16 = Float(width=16, name="float16", exponent=5, format=">e")

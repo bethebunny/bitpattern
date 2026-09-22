@@ -7,6 +7,7 @@ import pytest
 from hypothesis import assume, given, settings, strategies as st
 
 from bitpattern.bdd import ACCEPT, BDD, REJECT, less_than
+from bitpattern.pattern import Pattern
 from bitpattern.sets import IntSet
 
 WIDTH = 3
@@ -390,9 +391,27 @@ class TestSetProtocol:
         assert isinstance(IntSet(), AbstractSet)
         assert not isinstance(IntSet(), MutableSet)
 
-    def test_compares_equal_to_builtin_sets(self):
-        assert IntSet([1, 2], 4) == {1, 2}
-        assert IntSet([1, 2], 4) != {1, 2, 3}
+    def test_comparisons_take_only_intsets(self):
+        """Equality with a frozenset would need a frozenset-compatible hash."""
+        assert IntSet([1, 2], 4) != frozenset({1, 2})
+        assert frozenset({1, 2}) != IntSet([1, 2], 4)
+        for compare in (lambda a, b: a <= b, lambda a, b: a < b,
+                        lambda a, b: a >= b, lambda a, b: a > b):
+            with pytest.raises(TypeError):
+                compare(IntSet([1, 2], 4), {1, 2})
+
+    def test_equal_objects_hash_equally(self):
+        """The hash contract, checked directly across the types that meet here."""
+        values = [IntSet([1, 2], 4), IntSet([1, 2], 8), Pattern("00?1"),
+                  frozenset({1, 2}), {1, 2}, frozenset({1, 3}), IntSet([1, 3], 2)]
+        for a in values:
+            for b in values:
+                if a == b and not isinstance(a, set) and not isinstance(b, set):
+                    assert hash(a) == hash(b), (a, b)
+
+    def test_antisymmetry(self):
+        a, b = IntSet([1, 2], 2), IntSet([1, 2], 8)
+        assert a <= b and b <= a and a == b
 
     def test_in_place_operators(self):
         group = IntSet([1, 2], 4)
@@ -416,3 +435,64 @@ class TestSetProtocol:
         assert (a < b) == (left < right)
         assert a.isdisjoint(b) == left.isdisjoint(right)
         assert set(a ^ b) == left ^ right
+
+
+class TestReflectedOperators:
+    """The `Set` mixins' reflected operators iterate both operands."""
+
+    def test_are_not_the_mixins(self):
+        for name in ("__rand__", "__ror__", "__rsub__", "__rxor__"):
+            assert getattr(IntSet, name) is not getattr(AbstractSet, name), name
+
+    @pytest.mark.parametrize("left, right", [({1, 2}, [2, 3]), ([0, 7], {7}), (set(), [5])])
+    def test_agree_with_builtin_set(self, left, right):
+        group = IntSet(right, 4)
+        assert set(left & group) == set(left) & set(right)
+        assert set(left | group) == set(left) | set(right)
+        assert set(left - group) == set(left) - set(right)
+        assert set(left ^ group) == set(left) ^ set(right)
+
+    def test_do_not_enumerate(self):
+        """`{1} | huge` used to iterate all 2**64 members."""
+        huge = IntSet.range(0, 1 << 64, width=64)
+        assert ({1} | huge).size == 2**64
+        assert sorted({1, 2} & huge) == [1, 2]
+        assert ({1} ^ huge).size == 2**64 - 1
+        assert (iter([2**64 - 1]) - huge).size == 0
+
+    def test_rejects_non_iterables(self):
+        with pytest.raises(TypeError):
+            5 - IntSet([1], 4)
+
+
+class TestTruth:
+    def test_empty_is_false(self):
+        assert not IntSet()
+        assert not IntSet([], 64)
+        assert IntSet([0])
+
+    def test_does_not_go_through_len(self):
+        """`bool` used to call `__len__`, which overflows past 2**63 - 1."""
+        assert IntSet.range(0, 1 << 64, width=64)
+
+
+class TestPickling:
+    @pytest.mark.parametrize(
+        "group", [IntSet(), IntSet([1, 2], 4), IntSet.range(0, 1 << 64, width=64)]
+    )
+    def test_round_trips(self, group):
+        import copy
+        import pickle
+
+        for restored in (pickle.loads(pickle.dumps(group)), copy.deepcopy(group), copy.copy(group)):
+            assert restored == group
+            assert restored.width == group.width
+            assert restored.bdd is group.bdd  # re-interned, not duplicated
+
+    def test_leaves_stay_singletons(self):
+        import copy
+        import pickle
+
+        for leaf in (ACCEPT, REJECT):
+            assert pickle.loads(pickle.dumps(leaf)) is leaf
+            assert copy.deepcopy(leaf) is leaf

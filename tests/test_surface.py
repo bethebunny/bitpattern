@@ -181,8 +181,8 @@ class TestSubclassing:
         assert sorted(group & [1]) == [1]
         assert sorted(group - [2]) == [1]
         assert sorted(group | [8]) == [1, 2, 8]
-        assert (group <= [1]) is False
-        assert (group <= [1, 2, 3]) is True
+        assert (group <= IntSet([1])) is False
+        assert (group <= IntSet([1, 2, 3])) is True
         assert group.isdisjoint([7]) is True
 
     def test_mixin_results_are_plain_intsets(self):

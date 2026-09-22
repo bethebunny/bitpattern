@@ -192,39 +192,60 @@ class IntSet(AbstractSet):
         a, b, width = self._align(other)
         return type(self).from_bdd(a - b, width)
 
+    def __xor__(self, other: Iterable[int]) -> IntSet:
+        a, b, width = self._align(other)
+        return type(self).from_bdd((a | b) - (a & b), width)
+
+    # The `Set` mixins' reflected operators iterate both operands, so
+    # `{1} | huge` would never return. Union, intersection and symmetric
+    # difference commute; difference does not.
+    __rand__ = __and__
+    __ror__ = __or__
+    __rxor__ = __xor__
+
+    def __rsub__(self, other: Iterable[int]) -> IntSet:
+        if not isinstance(other, Iterable):
+            return NotImplemented
+        return IntSet(other) - self
+
     def __invert__(self) -> IntSet:
         """Every non-member under `2 ** width`."""
         return type(self).from_bdd(~self.bdd, self.width)
 
-    # The `Set` mixins answer these by iterating and by calling `len`, which is
-    # O(members) and overflows on a wide universe. The diagram answers in
-    # O(nodes): one set is inside another exactly when the difference is empty.
-    def __le__(self, other: Iterable[int]) -> bool:
-        a, b, _ = self._align(other)
-        return a - b is REJECT
+    def __bool__(self) -> bool:
+        # Without this, truth-testing falls back to `__len__`, which overflows.
+        return self.bdd is not REJECT
 
-    def __ge__(self, other: Iterable[int]) -> bool:
-        a, b, _ = self._align(other)
-        return b - a is REJECT
+    # Comparisons take only `IntSet`s. Equality must, to keep the hash contract
+    # -- a frozenset-compatible hash would be O(members) -- and the orderings
+    # follow, so that `a <= b and b <= a` still implies `a == b`.
+    def __le__(self, other: object) -> bool:
+        if not isinstance(other, IntSet):
+            return NotImplemented
+        return not self - other
 
-    def __lt__(self, other: Iterable[int]) -> bool:
-        a, b, _ = self._align(other)
-        return a is not b and a - b is REJECT
+    def __ge__(self, other: object) -> bool:
+        if not isinstance(other, IntSet):
+            return NotImplemented
+        return not other - self
 
-    def __gt__(self, other: Iterable[int]) -> bool:
-        a, b, _ = self._align(other)
-        return a is not b and b - a is REJECT
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, IntSet):
+            return NotImplemented
+        return self <= other and self != other
+
+    def __gt__(self, other: object) -> bool:
+        if not isinstance(other, IntSet):
+            return NotImplemented
+        return self >= other and self != other
 
     def isdisjoint(self, other: Iterable[int]) -> bool:
-        a, b, _ = self._align(other)
-        return a & b is REJECT
+        return not self & other
 
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, IntSet):
-            return self._canonical() == other._canonical()
-        if isinstance(other, AbstractSet):
-            return self._canonical() == IntSet(other)._canonical()
-        return NotImplemented
+        if not isinstance(other, IntSet):
+            return NotImplemented
+        return self._canonical() == other._canonical()
 
     def __hash__(self) -> int:
         # Not `Set._hash`, which is O(members) and would never return on a set of
