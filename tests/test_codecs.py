@@ -207,6 +207,18 @@ class TestIP:
             block = ipv4.cidr(text)
             assert [str(n) for n in ipv4.networks(block)] == [text]
 
+    def test_ipv6_stays_ipv6_below_2_to_the_32(self):
+        """`ipaddress.ip_address` guesses the family, and used to guess IPv4."""
+        assert ipv6.decode(1) == ipaddress.IPv6Address("::1")
+        assert all(a.version == 6 for a in ipv6.values(ipv6.cidr("::/126")))
+        assert list(ipv6.networks(ipv6.cidr("::/32"))) == [ipaddress.IPv6Network("::/32")]
+        assert ipv6.sample(ipv6.cidr("::/120")).version == 6
+
+    @pytest.mark.parametrize("codec, text", [(ipv4, "::1"), (ipv6, "1.2.3.4")])
+    def test_encode_rejects_the_other_family(self, codec, text):
+        with pytest.raises(ValueError):
+            codec.encode(text)
+
     def test_networks_of_a_narrower_set(self):
         """Used to raise AttributeError: the widening path called a renamed method."""
         assert [str(n) for n in ipv4.networks(IntSet([1, 2, 3], 2))] == [

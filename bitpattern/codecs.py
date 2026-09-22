@@ -200,17 +200,19 @@ class Float(Codec):
 class IP(Codec):
     """IPv4 or IPv6 addresses, whose encoding is already the natural one."""
 
+    # The family's own classes, not `ipaddress.ip_address`, which guesses the
+    # family from the value and so decodes every IPv6 address below 2**32 as IPv4.
+    address_type: type[ipaddress.IPv4Address] | type[ipaddress.IPv6Address]
+    network_type: type[ipaddress.IPv4Network] | type[ipaddress.IPv6Network]
+
     def encode(self, value: Any) -> int:
-        return int(ipaddress.ip_address(value))
+        return int(self.address_type(value))
 
     def decode(self, bits: int) -> Any:
-        return ipaddress.ip_address(bits)
+        return self.address_type(bits)
 
     def network(self, text: Any) -> Any:
-        network = ipaddress.ip_network(text, strict=False)
-        if network.max_prefixlen != self.width:
-            raise ValueError(f"{network} is not a /{self.width} family network")
-        return network
+        return self.network_type(text, strict=False)
 
     def cidr(self, text: Any) -> IntSet:
         """The addresses in one CIDR block."""
@@ -236,9 +238,7 @@ class IP(Codec):
             if node is REJECT:
                 return
             if node is ACCEPT:
-                yield ipaddress.ip_network(
-                    (prefix << (top + 1), self.width - 1 - top)
-                )
+                yield self.network_type((prefix << (top + 1), self.width - 1 - top))
                 return
             low, high = (node, node) if node.bit < top else (node.left, node.right)
             yield from walk(low, top - 1, prefix << 1)
@@ -254,5 +254,5 @@ float16 = Float(width=16, name="float16", exponent=5, format=">e")
 float32 = Float(width=32, name="float32", exponent=8, format=">f")
 float64 = Float(width=64, name="float64", exponent=11, format=">d")
 
-ipv4 = IP(width=32, name="ipv4")
-ipv6 = IP(width=128, name="ipv6")
+ipv4 = IP(32, "ipv4", ipaddress.IPv4Address, ipaddress.IPv4Network)
+ipv6 = IP(128, "ipv6", ipaddress.IPv6Address, ipaddress.IPv6Network)
