@@ -6,7 +6,7 @@ from collections.abc import MutableSet, Set as AbstractSet
 import pytest
 from hypothesis import assume, given, settings, strategies as st
 
-from bitpattern.bdd import ACCEPT, BDD, REJECT, less_than
+from bitpattern.bdd import ACCEPT, BDD, REJECT, less_than, node_count
 from bitpattern.pattern import Pattern
 from bitpattern.sets import IntSet
 
@@ -25,16 +25,6 @@ GROUPS = st.sets(VALUES, max_size=40)
 SUBSETS = [subset(mask) for mask in MASKS]
 SETS = [IntSet(members, WIDTH) for members in SUBSETS]
 NODES = [group.bdd for group in SETS]
-
-
-def nodes(node) -> int:
-    seen, stack = set(), [node]
-    while stack:
-        current = stack.pop()
-        if isinstance(current, BDD) and id(current) not in seen:
-            seen.add(id(current))
-            stack += [current.left, current.right]
-    return len(seen)
 
 
 def samples(width: int, count: int = 12) -> list[set[int]]:
@@ -294,7 +284,7 @@ class TestRange:
     def test_is_linear_in_width_not_in_members(self):
         span = IntSet.range(10**15, 10**18, width=64)
         assert span.size == 10**18 - 10**15
-        assert nodes(span.bdd) < 4 * 64
+        assert node_count(span.bdd) < 4 * 64
 
     def test_covers_the_whole_universe(self):
         assert IntSet.range(0, 1 << 64, width=64).bdd is ACCEPT

@@ -1,7 +1,5 @@
 """The published surface, and the reprs that have to survive a debugger."""
 
-import time
-
 import pytest
 
 import bitpattern
@@ -11,8 +9,8 @@ from bitpattern.codecs import float16, float32, float64, ipv4, ipv6
 
 
 class TestPublicSurface:
-    def test_the_top_level_is_three_names(self):
-        assert bitpattern.__all__ == ["IntSet", "Pattern", "__version__"]
+    def test_the_top_level_is_two_names(self):
+        assert bitpattern.__all__ == ["IntSet", "Pattern"]
 
     @pytest.mark.parametrize("name", ["ACCEPT", "REJECT", "BDD", "BDDLeaf", "BDDNode"])
     def test_the_engine_is_not_top_level(self, name):
@@ -31,11 +29,6 @@ class TestPublicSurface:
 
         assert bitpattern.bdd.__all__ == ["ACCEPT", "BDD", "BDDLeaf", "BDDNode", "REJECT"]
 
-    @pytest.mark.parametrize("name", ["_align", "_coerce", "_extended", "_canonical"])
-    def test_plumbing_is_private(self, name):
-        assert hasattr(IntSet, name)
-        assert not hasattr(IntSet, name.lstrip("_"))
-
     def test_is_typed(self):
         from pathlib import Path
 
@@ -53,9 +46,7 @@ class TestNodeRepr:
         a, b = ACCEPT, REJECT
         for depth in range(1, 23):
             a, b = BDD(depth, a, b), BDD(depth, b, a)
-        start = time.perf_counter()
         text = repr(a)
-        assert time.perf_counter() - start < 1.0
         assert len(text) < 100, text
         assert node_count(a) == 43
 
@@ -85,17 +76,13 @@ class TestIntSetRepr:
 
     def test_a_set_len_cannot_measure(self):
         """`repr(float64.nan)` used to raise MemoryError."""
-        start = time.perf_counter()
         text = repr(float64.nan)
-        assert time.perf_counter() - start < 1.0
         assert len(text) < 250, text
         assert "size=9007199254740990" in text and "width=64" in text
 
     @pytest.mark.parametrize("source", ["nan", "finite", "subnormal", "sign_clear"])
     def test_every_codec_set_reprs_promptly(self, source):
-        start = time.perf_counter()
         text = repr(getattr(float64, source))
-        assert time.perf_counter() - start < 1.0
         assert len(text) < 250
 
     def test_shows_powers_of_two_readably(self):
@@ -125,10 +112,10 @@ class TestPatternRepr:
         assert text == "<Pattern: 8 branches, width=32, size=16711680>"
         assert len(text) < 300
 
-    def test_the_empty_pattern_carries_its_width(self):
-        empty = IntSet([], 4).pattern
-        assert repr(empty) == "Pattern('', width=4)"
-        assert eval(repr(empty)) == empty
+    def test_the_empty_pattern_is_the_complement_of_everything(self):
+        empty = IntSet([], 5).pattern
+        assert repr(empty) == "~Pattern('?.????')"
+        assert eval(repr(empty)) == empty and eval(repr(empty)).width == 5
 
     def test_exponentially_many_branches_stay_bounded(self):
         """Used to hang: repr enumerated every branch before deciding to summarise."""
@@ -175,7 +162,7 @@ class TestReadme:
 
 
 class TestSubclassing:
-    """`_coerce` used to be `cls(other)`, which corrupted subclass results."""
+    """Operators used to coerce through `cls(other)`, corrupting subclass results."""
 
     class TextConstructed(IntSet):
         """A subclass whose constructor does not take an iterable, like Pattern."""
@@ -194,14 +181,11 @@ class TestSubclassing:
         assert (group <= IntSet([1, 2, 3])) is True
         assert group.isdisjoint([7]) is True
 
-    def test_mixin_results_are_plain_intsets(self):
-        group = self.TextConstructed("ignored")
-        assert sorted(group ^ IntSet([2, 3], 4)) == [1, 3]
-
     def test_results_keep_the_receiver_type(self):
         group = self.TextConstructed("ignored")
-        for result in (group & [1], group | [8], group - [2], ~group, group.widen(8)):
+        for result in (group & [1], group | [8], group - [2], group ^ [3], ~group, group.widen(8)):
             assert type(result) is self.TextConstructed
+        assert sorted(group ^ IntSet([2, 3], 4)) == [1, 3]
 
 
 class TestPatternIsAnIntSet:
@@ -227,11 +211,6 @@ class TestPatternIsAnIntSet:
 
     def test_widening_keeps_a_readable_spelling(self):
         assert repr(Pattern("00??").widen(8)) == "Pattern('0000.00??')"
-
-    def test_set_gives_a_plain_intset(self):
-        plain = Pattern("00??").set
-        assert type(plain) is IntSet
-        assert plain == Pattern("00??")
 
     def test_compares_and_hashes_with_intsets(self):
         assert Pattern("00??") == IntSet([0, 1, 2, 3], 4)

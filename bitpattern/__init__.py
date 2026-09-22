@@ -13,4 +13,4 @@ from .sets import IntSet
 
 __version__ = "0.1.0"
 
-__all__ = ["IntSet", "Pattern", "__version__"]
+__all__ = ["IntSet", "Pattern"]

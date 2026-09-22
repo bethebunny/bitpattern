@@ -46,8 +46,8 @@ class TestInterning:
     def test_equal_sets_share_one_diagram(self):
         assert IntSet([1, 2, 3], WIDTH).bdd is IntSet([3, 2, 1, 3], WIDTH).bdd
 
-    def test_leaf_and_node_interns_are_separate(self):
-        assert BDDLeaf.intern is not BDD.intern
+    def test_leaves_are_the_only_two_members(self):
+        assert list(BDDLeaf) == [REJECT, ACCEPT]
 
     def test_identical_branches_collapse(self):
         inner = BDD(3, ACCEPT, REJECT)
@@ -178,7 +178,12 @@ class TestScoping:
 
 
 class TestNodeSequence:
-    """A node read over its own bit range, which is what `__len__`/`[]` do."""
+    """Nodes are predicates only; a universe comes from `count`/`index`/`iterate`."""
+
+    @pytest.mark.parametrize("node", [ACCEPT, REJECT, BDD(3, ACCEPT, REJECT)])
+    def test_nodes_are_not_sequences(self, node):
+        for name in ("__len__", "__iter__", "__getitem__"):
+            assert not hasattr(node, name), name
 
     @pytest.mark.parametrize("mask", MASKS)
     def test_matches_the_subset_it_was_built_from(self, mask):

@@ -1,14 +1,4 @@
-"""Driving hypothesis from an `IntSet`.
-
-This is the use case the library was built for, kept here rather than shipped so
-the package stays dependency-free. `from_intset` is the whole integration: an
-`IntSet` can report its cardinality and return its n-th member in O(width), so a
-strategy is just an index drawn over that range. Nothing is enumerated, so a set
-of `2 ** 63` floats costs no more to sample from than a set of three.
-
-The strategies themselves live in `bitpattern.strategies`, behind the optional
-`[hypothesis]` extra; this module is the end-to-end proof that they work.
-"""
+"""`bitpattern.strategies`, end to end: the use case the library was built for."""
 
 import math
 
@@ -17,10 +7,7 @@ from hypothesis import HealthCheck, given, settings, strategies as st
 
 from bitpattern import IntSet, Pattern
 from bitpattern.codecs import float64, ipv4
-
-
 from bitpattern.strategies import from_codec, from_intset
-
 
 SETTINGS = settings(max_examples=200, deadline=None,
                     suppress_health_check=[HealthCheck.too_slow])
@@ -37,7 +24,7 @@ class TestFromIntSet:
     def test_respects_a_range(self, value):
         assert 10 <= value < 20
 
-    @given(value=from_intset(Pattern("*1.*.*.0000.1111.?01?").set))
+    @given(value=from_intset(Pattern("*1.*.*.0000.1111.?01?")))
     @SETTINGS
     def test_respects_a_pattern(self, value):
         assert value in Pattern("*1.*.*.0000.1111.?01?")

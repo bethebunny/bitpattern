@@ -5,18 +5,12 @@ import itertools
 import pytest
 
 from bitpattern import IntSet, Pattern
+from bitpattern.bdd import node_count
 from bitpattern.codecs import ipv4
 from bitpattern.pattern import QUARTET, group
 
 TARGET = "*1.*.*.0000.1111.?01?"
 
-
-def group(bits: str) -> str:
-    """Write a bit string as dotted quartets, leading group short if need be."""
-    head = len(bits) % QUARTET or QUARTET
-    return ".".join(
-        [bits[:head]] + [bits[at:at + QUARTET] for at in range(head, len(bits), QUARTET)]
-    )
 
 
 def matches(bits: str, value: int) -> bool:
@@ -49,13 +43,7 @@ class TestTarget:
         assert 0 not in self.pattern
 
     def test_costs_one_node_per_pinned_bit(self):
-        seen, stack = set(), [self.pattern.set.bdd]
-        while stack:
-            node = stack.pop()
-            if getattr(node, "left", None) is not None and id(node) not in seen:
-                seen.add(id(node))
-                stack += [node.left, node.right]
-        assert len(seen) == self.pattern.width - self.pattern.free == 11
+        assert node_count(self.pattern.bdd) == self.pattern.width - self.pattern.free == 11
 
 
 class TestExpansion:
@@ -289,7 +277,7 @@ class TestUnions:
         for mask in range(1 << (1 << width)):
             members = {v for v in range(1 << width) if mask >> v & 1}
             pattern = IntSet(members, width).pattern
-            rebuilt = Pattern("", width=width)
+            rebuilt = IntSet([], width).pattern
             for branch in pattern.branches:
                 rebuilt = rebuilt | Pattern(group(branch))
             assert rebuilt == pattern
@@ -320,19 +308,10 @@ class TestUnions:
         assert set(Pattern("00??")) == {0, 1, 2, 3}
 
     def test_empty_and_full(self):
-        empty = Pattern("", width=4)
+        empty = ~Pattern("????")
         assert empty.branches == () and empty.size == 0 and list(empty) == []
         assert Pattern("????").branches == ("????",)
         assert ~empty == Pattern("????")
-
-    def test_the_empty_pattern_needs_a_width(self):
-        with pytest.raises(ValueError, match="no width of its own"):
-            Pattern("")
-
-    def test_width_argument_must_agree(self):
-        assert Pattern("0000", width=4) == Pattern("0000")
-        with pytest.raises(ValueError):
-            Pattern("0000", width=8)
 
     def test_bits_and_free_reject_unions(self):
         union = Pattern("0000") | Pattern("1111")

@@ -4,51 +4,37 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from functools import lru_cache
-from typing import Self
 
-from .bdd import ACCEPT, BDD, BDDNode, CACHE_SIZE, REJECT, render_count
+from .bdd import ACCEPT, BDD, BDDNode, CACHE_SIZE, REJECT, cofactors, render_count
 from .sets import IntSet
 
 __all__ = ["Pattern", "parse"]
 
-#: Bits per group. Every group but the leading one is exactly this wide.
-QUARTET = 4
-
-WILD = "?"
-GLOB = "*"
-UNION = "|"
+QUARTET = 4  # bits per group; only the leading group may be shorter
+WILD, GLOB, UNION = "?", "*", "|"
 LITERAL = frozenset("01" + WILD)
 
-# How many branches a repr spells out before truncating.
-EXACT, ROOM = 8, 200
+# A union's repr spells out at most this many branches, in this many characters.
+REPR_BRANCHES, REPR_CHARS = 8, 200
 
 
-def parse(text: str) -> str | None:
-    """Expand a pattern into its bit string, msb first; `None` if it is empty.
+def parse(text: str) -> str:
+    """Expand a pattern into its bit string, most significant bit first.
 
-    Groups are separated by `.` and run from the most significant quartet down:
-    `0` and `1` pin a bit, `?` leaves one free, and `*` stands for however many
-    `?` the group still needs. The leading group may be short, which is how
-    widths that are not multiples of four are written; every other group must
-    come to exactly four bits.
-
-    The language describes one pattern. Unions are Python, not syntax --
-    `Pattern("01??") | Pattern("1???")` -- which is also how they print.
+    Groups are separated by `.`, most significant first: `0` and `1` pin a bit,
+    `?` frees one, and `*` frees the rest of its group. Every group is four bits
+    except the leading one, which may be shorter.
     """
     text = text.strip()
-    if not text:
-        return None
     if UNION in text:
         left, _, right = (part.strip() for part in text.partition(UNION))
         raise ValueError(
-            f"pattern {text!r} contains {UNION!r}: patterns are single branches, "
-            f"so combine them in Python instead -- "
-            f"Pattern({left!r}) {UNION} Pattern({right!r})"
+            f"pattern {text!r} contains {UNION!r}; patterns are single branches, so "
+            f"combine them in Python: Pattern({left!r}) {UNION} Pattern({right!r})"
         )
-    groups = text.split(".")
     return "".join(
         expand(group, leading=not position, text=text)
-        for position, group in enumerate(groups)
+        for position, group in enumerate(text.split("."))
     )
 
 
@@ -58,30 +44,24 @@ def expand(group: str, leading: bool, text: str) -> str:
         where = "leading group" if leading else "group"
         return ValueError(f"{where} {group!r} in pattern {text!r}: {reason}")
 
+    head, glob, tail = group.partition(GLOB)
     if not group:
         raise bad("is empty")
-    head, glob, tail = group.partition(GLOB)
     if GLOB in tail:
-        raise bad(f"has more than one {GLOB!r}, so its width is ambiguous")
-    if unknown := sorted(set(head + tail) - LITERAL):
-        raise bad(f"has unexpected character{'s' * (len(unknown) > 1)} {''.join(unknown)!r}")
-
-    pinned = len(head) + len(tail)
-    if pinned > QUARTET:
-        raise bad(f"is {pinned} bits wide, over the {QUARTET} of a quartet")
-    if not glob:
-        if leading or pinned == QUARTET:
-            return group
-        raise bad(f"is {pinned} bits wide; only the leading group may be short")
-    return head + WILD * (QUARTET - pinned) + tail
+        raise bad(f"has more than one {GLOB!r}")
+    if unknown := set(head + tail) - LITERAL:
+        raise bad(f"has unexpected characters {''.join(sorted(unknown))!r}")
+    if (pinned := len(head) + len(tail)) > QUARTET:
+        raise bad(f"is {pinned} bits, over a quartet")
+    if glob:
+        return head + WILD * (QUARTET - pinned) + tail
+    if leading or pinned == QUARTET:
+        return group
+    raise bad(f"is {pinned} bits; only the leading group may be short")
 
 
 def build(bits: str) -> BDDNode:
-    """The predicate matching one expanded, most-significant-first bit string.
-
-    Built from bit 0 upwards, so the diagram comes out reduced: a free bit is
-    simply never tested, and costs no node at all.
-    """
+    """The predicate matching an expanded bit string. Free bits cost no node."""
     node: BDDNode = ACCEPT
     for bit, char in enumerate(reversed(bits)):
         if char == "0":
@@ -91,129 +71,84 @@ def build(bits: str) -> BDDNode:
     return node
 
 
-def cover(bdd: BDDNode, width: int) -> list[str]:
-    """A diagram's branches, as expanded bit strings, most significant first.
-
-    Canonical rather than minimal: reduction has already merged every mergeable
-    sibling, so no two branches here combine, but minimum-cardinality cube cover
-    is NP-hard and this is not it.
-
-    Note this is *not* the walk `IP.networks` uses. A CIDR block is a prefix, so
-    its free bits are always at the bottom and a free bit there has to be split
-    into two blocks. A pattern's free bits can sit anywhere, so here a free bit
-    becomes `?` and the walk does not branch at all -- otherwise the one pattern
-    `???????????????1` would come back as 32768 of them.
-    """
+def cover(bdd: BDDNode, width: int) -> Iterator[str]:
+    """A diagram's branches as expanded bit strings: canonical, not minimal."""
     def walk(node: BDDNode, top: int, prefix: str) -> Iterator[str]:
         if node is REJECT:
             return
         if node is ACCEPT:
             yield prefix + WILD * (top + 1)
             return
-        if node.bit < top:
-            yield from walk(node, top - 1, prefix + WILD)
-            return
-        yield from walk(node.left, top - 1, prefix + "0")
-        yield from walk(node.right, top - 1, prefix + "1")
+        low, high = cofactors(node, top)
+        # Unlike `IP.networks`, don't split a free bit: a CIDR block has to be a
+        # prefix, but a pattern's free bits can sit anywhere.
+        if low is high:
+            yield from walk(low, top - 1, prefix + WILD)
+        else:
+            yield from walk(low, top - 1, prefix + "0")
+            yield from walk(high, top - 1, prefix + "1")
 
-    return list(walk(bdd, width - 1, ""))
+    return walk(bdd, width - 1, "")
 
 
 @lru_cache(maxsize=CACHE_SIZE)
 def branch_count(node: BDDNode) -> int:
     """How many branches `cover` yields, without yielding them: one per path to
-    `ACCEPT`. A union can have exponentially many -- popcount parity has 2**63."""
+    `ACCEPT`. Popcount parity over 64 bits has 2**63 of them in 128 nodes."""
     if not isinstance(node, BDD):
         return int(node is ACCEPT)
     return branch_count(node.left) + branch_count(node.right)
 
 
 def group(bits: str) -> str:
-    """Write a bit string as dotted quartets, leading group short if need be."""
+    """Write a bit string as dotted quartets, the leading group short if need be."""
     head = len(bits) % QUARTET or QUARTET
-    return ".".join(
-        [bits[:head]] + [bits[at:at + QUARTET] for at in range(head, len(bits), QUARTET)]
-    )
+    return ".".join([bits[:head], *(bits[at:at + QUARTET] for at in range(head, len(bits), QUARTET))])
 
 
 class Pattern(IntSet):
-    """A set of integers described by a bit pattern such as `*1.*.*.0000`.
+    """An `IntSet` written as a bit pattern, such as `*1.*.*.0000`.
 
-    A `Pattern` *is* an `IntSet` -- same members, same width, same operations --
-    that additionally knows how to write itself down. The pattern fixes a width,
-    so the set is finite, and the free bits are the ones the diagram never tests,
-    which is why a pattern denoting thousands of integers costs one node per
-    *pinned* bit and nothing per free one.
-
-    The language describes one pattern; unions are built with the operators --
-    `Pattern("0000") | Pattern("0001")` -- and are closed under `&`, `|`, `-` and
-    `~`, since any set of a fixed width is a union of cubes. Branches come from
-    the diagram rather than the text, so that union *is* `Pattern("000?")`.
+    The language describes one pattern; unions come from the operators and print
+    that way. Branches are read off the diagram rather than kept from the text,
+    so `Pattern("0000") | Pattern("0001")` *is* `Pattern("000?")`.
     """
 
     __slots__ = ()
 
-    def __init__(self, text: str, width: int | None = None):
+    def __init__(self, text: str):
         bits = parse(text)
-        node: BDDNode = REJECT
-        if bits is not None:
-            if width is not None and width != len(bits):
-                raise ValueError(f"pattern {text!r} is {len(bits)} bits, not {width}")
-            width, node = len(bits), build(bits)
-        elif width is None:
-            raise ValueError("the empty pattern has no width of its own; pass one")
-        self.bdd = node
-        self.width = width
-        self._form = None
-
-    @classmethod
-    def from_set(cls, source: IntSet) -> Self:
-        return cls.from_bdd(source.bdd, source.width)
-
-    @property
-    def set(self) -> IntSet:
-        """This pattern as a plain `IntSet`. A `Pattern` already is one, so this
-        only matters when a bare `IntSet` is what you want to hand on."""
-        return IntSet.from_bdd(self.bdd, self.width)
+        self.bdd = build(bits)
+        self.width = len(bits)
 
     @property
     def branches(self) -> tuple[str, ...]:
-        """The canonical branches, as expanded bit strings."""
         return tuple(cover(self.bdd, self.width))
 
     @property
     def bits(self) -> str:
-        """A single-branch pattern's expanded bit string, most significant first."""
-        branches = self.branches
-        if len(branches) != 1:
+        """The expanded bit string of a single-branch pattern."""
+        if len(branches := self.branches) != 1:
             raise ValueError(f"{len(branches)} branches, so no single bit string")
         return branches[0]
 
     @property
     def free(self) -> int:
-        """How many bits a single-branch pattern leaves unconstrained."""
+        """How many bits a single-branch pattern leaves free."""
         return self.bits.count(WILD)
 
     def __str__(self) -> str:
-        """The canonical spelling: one branch, or several joined by `|`.
-
-        Only a single branch parses back through `Pattern`; a union has to be
-        rebuilt with the operator, which is what `repr` shows.
-        """
         return f" {UNION} ".join(group(branch) for branch in self.branches)
 
     def __repr__(self) -> str:
-        """Evaluable Python where it fits -- a union prints as the expression
-        that would rebuild it, rather than as syntax the language does not have."""
         branches = branch_count(self.bdd)
+        if not self.width:  # the language has no zero-width pattern
+            return f"<Pattern: width=0, size={self.size}>"
         if not branches:
-            # The one shape whose width its own text cannot carry.
-            return f"Pattern('', width={self.width})"
-        if branches <= EXACT:
-            rendered = f" {UNION} ".join(
-                f"Pattern({group(branch)!r})" for branch in self.branches
-            )
-            if len(rendered) <= ROOM:
+            return f"~Pattern({group(WILD * self.width)!r})"
+        if branches <= REPR_BRANCHES:
+            rendered = f" {UNION} ".join(f"Pattern({group(branch)!r})" for branch in self.branches)
+            if len(rendered) <= REPR_CHARS:
                 return rendered
         return (
             f"<Pattern: {render_count(branches)} branches, "
