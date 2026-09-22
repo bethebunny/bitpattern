@@ -130,6 +130,15 @@ class TestPatternRepr:
         assert repr(empty) == "Pattern('', width=4)"
         assert eval(repr(empty)) == empty
 
+    def test_exponentially_many_branches_stay_bounded(self):
+        """Used to hang: repr enumerated every branch before deciding to summarise."""
+        even, odd = ACCEPT, REJECT  # popcount parity: 128 nodes, 2**63 branches
+        for bit in range(64):
+            even, odd = BDD(bit, even, odd), BDD(bit, odd, even)
+        assert repr(Pattern.from_bdd(even, 64)) == (
+            "<Pattern: 2**63 branches, width=64, size=2**63>"
+        )
+
     def test_a_scattered_set_stays_bounded(self):
         pattern = IntSet(range(0, 2**16, 3)).pattern
         assert len(pattern.branches) > 100

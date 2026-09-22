@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from functools import lru_cache
 from typing import Self
 
-from .bdd import ACCEPT, BDD, BDDNode, REJECT, render_count
+from .bdd import ACCEPT, BDD, BDDNode, CACHE_SIZE, REJECT, render_count
 from .sets import IntSet
 
 __all__ = ["Pattern", "parse"]
@@ -118,6 +119,15 @@ def cover(bdd: BDDNode, width: int) -> list[str]:
     return list(walk(bdd, width - 1, ""))
 
 
+@lru_cache(maxsize=CACHE_SIZE)
+def branch_count(node: BDDNode) -> int:
+    """How many branches `cover` yields, without yielding them: one per path to
+    `ACCEPT`. A union can have exponentially many -- popcount parity has 2**63."""
+    if not isinstance(node, BDD):
+        return int(node is ACCEPT)
+    return branch_count(node.left) + branch_count(node.right)
+
+
 def group(bits: str) -> str:
     """Write a bit string as dotted quartets, leading group short if need be."""
     head = len(bits) % QUARTET or QUARTET
@@ -195,17 +205,17 @@ class Pattern(IntSet):
     def __repr__(self) -> str:
         """Evaluable Python where it fits -- a union prints as the expression
         that would rebuild it, rather than as syntax the language does not have."""
-        branches = self.branches
+        branches = branch_count(self.bdd)
         if not branches:
             # The one shape whose width its own text cannot carry.
             return f"Pattern('', width={self.width})"
-        if len(branches) <= EXACT:
+        if branches <= EXACT:
             rendered = f" {UNION} ".join(
-                f"Pattern({group(branch)!r})" for branch in branches
+                f"Pattern({group(branch)!r})" for branch in self.branches
             )
             if len(rendered) <= ROOM:
                 return rendered
         return (
-            f"<Pattern: {len(branches)} branches, "
+            f"<Pattern: {render_count(branches)} branches, "
             f"width={self.width}, size={render_count(self.size)}>"
         )
