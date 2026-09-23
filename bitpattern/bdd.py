@@ -1,17 +1,44 @@
 from __future__ import annotations
 
 import enum
+import functools
 import operator
 import weakref
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Callable, ClassVar, Iterator
 
 __all__ = ["ACCEPT", "BDD", "BDDLeaf", "BDDNode", "REJECT"]
 
-# Bounds each memo table. BDD `apply` is exponential without memoisation, but an
-# unbounded cache would keep every node alive and defeat the weak interning.
-CACHE_SIZE = 1 << 16
+
+def weak_cache(fn):
+    """Memoise `fn` for exactly as long as its arguments and result are alive.
+
+    BDD `apply` is exponential without memoisation, but a cache holding nodes
+    strongly would keep every one it had seen alive and defeat the weak
+    interning. Results are held weakly too: `a & ACCEPT` is `a`, and a strong
+    result would keep its own key alive.
+    """
+    table = weakref.WeakKeyDictionary()
+
+    @functools.wraps(fn)
+    def cached(*args):
+        *path, last = args
+        entries = table
+        for arg in path:
+            if (inner := entries.get(arg)) is None:
+                inner = entries[arg] = weakref.WeakKeyDictionary()
+            entries = inner
+        if (ref := entries.get(last)) is None or (result := ref()) is None:
+            result = fn(*args)
+            entries[last] = _reference(result)
+        return result
+
+    return cached
+
+
+def _reference(value):
+    # Nodes are held weakly; counts are ints, which can't be, and hold nothing.
+    return weakref.ref(value) if isinstance(value, BDDNode) else lambda: value
 
 
 class BDDNode:
@@ -97,22 +124,31 @@ class BDD(BDDNode):
 
     def __and__(self, other: BDDNode):
         if not isinstance(other, BDDNode): return NotImplemented
-        return _apply(operator.and_, self, other)
+        return _and(self, other)
 
     def __or__(self, other: BDDNode):
         if not isinstance(other, BDDNode): return NotImplemented
-        return _apply(operator.or_, self, other)
+        return _or(self, other)
 
     def __repr__(self):
         return f"<BDD bit={self.bit}, {node_count(self)} nodes, {render_count(size(self))} members>"
 
 
-@lru_cache(maxsize=CACHE_SIZE)
+@weak_cache
 def _negate(node: BDD) -> BDDNode:
     return BDD(node.bit, ~node.left, ~node.right)
 
 
-@lru_cache(maxsize=CACHE_SIZE)
+@weak_cache
+def _and(a: BDD, b: BDDNode) -> BDDNode:
+    return _apply(operator.and_, a, b)
+
+
+@weak_cache
+def _or(a: BDD, b: BDDNode) -> BDDNode:
+    return _apply(operator.or_, a, b)
+
+
 def _apply(op: Callable[[BDDNode, BDDNode], BDDNode], a: BDD, b: BDDNode) -> BDDNode:
     # The higher bit goes outermost, and a leaf settles the result on its own.
     if isinstance(b, BDDLeaf) or a.bit < b.bit:
@@ -127,7 +163,7 @@ def cofactors(node: BDDNode, bit: int) -> tuple[BDDNode, BDDNode]:
     return (node, node) if node.bit < bit else (node.left, node.right)
 
 
-@lru_cache(maxsize=CACHE_SIZE)
+@weak_cache
 def size(node: BDDNode) -> int:
     """How many integers in `[0, 2 ** (node.bit + 1))` satisfy `node`."""
     if isinstance(node, BDDLeaf):
@@ -174,7 +210,7 @@ def iterate(node: BDDNode, top: int) -> Iterator[int]:
         yield 1 << top | value
 
 
-@lru_cache(maxsize=CACHE_SIZE)
+@weak_cache
 def node_count(node: BDDNode) -> int:
     seen, stack = set(), [node]
     while stack:

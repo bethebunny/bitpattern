@@ -2,7 +2,8 @@
 
 import pytest
 
-from bitpattern.bdd import ACCEPT, BDD, BDDLeaf, REJECT, count, index, iterate
+from bitpattern.bdd import ACCEPT, BDD, BDDLeaf, REJECT, count, index, iterate, node_count, size
+from bitpattern.pattern import branch_count
 from bitpattern.sets import IntSet
 
 WIDTH = 3
@@ -191,3 +192,57 @@ class TestNodeSequence:
         diagram = node(mask)
         assert list(iterate(diagram, WIDTH - 1)) == members
         assert count(diagram, WIDTH - 1) == len(members)
+
+
+def parity(width):
+    """Popcount parity: two nodes a level, and exponentially many paths."""
+    even, odd = ACCEPT, REJECT
+    for bit in range(width):
+        even, odd = BDD(bit, even, odd), BDD(bit, odd, even)
+    return even, odd
+
+
+class TestCaching:
+    """Memo tables hold nodes weakly, so computing with one never keeps it alive."""
+
+    @pytest.mark.parametrize(
+        "operate",
+        [
+            lambda x: ~x,
+            lambda x: x & x,
+            lambda x: x & ACCEPT,  # the result *is* `x`: a strong value would pin its key
+            lambda x: x | REJECT,
+            lambda x: x - ACCEPT,
+            size,
+            node_count,
+            branch_count,
+        ],
+        ids=["invert", "and-self", "and-accept", "or-reject", "sub", "size", "node_count",
+             "branch_count"],
+    )
+    def test_operations_do_not_keep_nodes_alive(self, operate):
+        import gc
+        import weakref
+
+        def compute():
+            node = BDD(1001, BDD(1000, ACCEPT, REJECT), REJECT)  # bits nothing else uses
+            operate(node)
+            return weakref.ref(node)
+
+        probe = compute()
+        gc.collect()
+        assert probe() is None
+
+    def test_results_stay_cached_while_alive(self):
+        node = BDD(1001, BDD(1000, ACCEPT, REJECT), REJECT)
+        assert ~node is ~node
+        assert node & ~node is REJECT
+
+    def test_shared_diagrams_stay_polynomial(self):
+        """Without memoisation these walk all 2**64 paths."""
+        even, odd = parity(64)
+        assert ~even is odd
+        assert even & odd is REJECT
+        assert even | odd is ACCEPT
+        assert size(even) == 2**63
+        assert branch_count(even) == 2**63

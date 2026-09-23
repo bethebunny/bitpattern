@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from functools import lru_cache
 
-from .bdd import ACCEPT, BDD, BDDNode, CACHE_SIZE, REJECT, cofactors, render_count
+from .bdd import ACCEPT, BDD, BDDNode, REJECT, cofactors, render_count, weak_cache
 from .sets import IntSet
 
 __all__ = ["Pattern", "parse"]
@@ -91,7 +90,7 @@ def cover(bdd: BDDNode, width: int) -> Iterator[str]:
     return walk(bdd, width - 1, "")
 
 
-@lru_cache(maxsize=CACHE_SIZE)
+@weak_cache
 def branch_count(node: BDDNode) -> int:
     """How many branches `cover` yields, without yielding them: one per path to
     `ACCEPT`. Popcount parity over 64 bits has 2**63 of them in 128 nodes."""
