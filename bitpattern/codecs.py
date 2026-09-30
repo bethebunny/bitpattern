@@ -1,7 +1,7 @@
-"""Sets of floats, IP addresses and the like, over their raw bit patterns.
+"""Floats and IP addresses as integers, so that sets of them are IntSets.
 
-Raw rather than rearranged into value order, so that `Pattern("?111.1111.1111.…")`
-names the float64 NaNs because that is what their bits look like.
+Values are encoded as their raw bits, so patterns match the bit layout. For
+instance the float16 NaNs and infinities are `float16.pattern("?111.11??.*.*")`.
 """
 
 from __future__ import annotations
@@ -10,19 +10,25 @@ import ipaddress
 import math
 import random
 import struct
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import Any, Iterable, Iterator
+from functools import cached_property
+from typing import Generic, TypeVar
 
-from .bdd import ACCEPT, REJECT, cofactors
+from .bdd import BDD, cofactors
 from .pattern import Pattern, build
 from .sets import IntSet
 
-__all__ = ["Codec", "Float", "IP", "float16", "float32", "float64", "ipv4", "ipv6"]
+__all__ = ["IP", "Codec", "Float", "float16", "float32", "float64", "ipv4", "ipv6"]
+
+T = TypeVar("T")
+Address = TypeVar("Address", ipaddress.IPv4Address, ipaddress.IPv6Address)
+Network = TypeVar("Network", ipaddress.IPv4Network, ipaddress.IPv6Network)
 
 
 @dataclass(frozen=True, repr=False)
-class Codec:
-    """A fixed-width encoding of some value type as a non-negative integer."""
+class Codec(Generic[T]):
+    """A fixed-width encoding of values as non-negative integers."""
 
     width: int
     name: str
@@ -30,171 +36,176 @@ class Codec:
     def __repr__(self) -> str:
         return self.name
 
-    def encode(self, value: Any) -> int:
+    def encode(self, value: T) -> int:
         raise NotImplementedError
 
-    def decode(self, bits: int) -> Any:
+    def decode(self, bits: int) -> T:
         raise NotImplementedError
 
-    @property
+    @cached_property
     def all(self) -> IntSet:
-        """Every bit pattern of this width, whether or not it encodes a value."""
-        return IntSet.from_bdd(ACCEPT, self.width)
+        """Every bit pattern of this width, whether or not it decodes to a value."""
+        return IntSet.from_bdd(BDD.ACCEPT, self.width)
 
-    @property
+    @cached_property
     def none(self) -> IntSet:
-        return IntSet.from_bdd(REJECT, self.width)
+        return IntSet.from_bdd(BDD.REJECT, self.width)
 
-    def set(self, values: Iterable[Any]) -> IntSet:
+    def set(self, values: Iterable[T]) -> IntSet:
         return IntSet(map(self.encode, values), self.width)
 
     def pattern(self, text: str) -> Pattern:
-        parsed = Pattern(text)
-        if parsed.width != self.width:
-            raise ValueError(f"pattern is {parsed.width} bits wide, not {self.width}")
-        return parsed
+        pattern = Pattern(text)
+        if pattern.width != self.width:
+            raise ValueError(f"pattern is {pattern.width} bits, not {self.width}")
+        return pattern
 
-    def values(self, source: IntSet) -> Iterator[Any]:
-        """Decode a set's members, in ascending bit order."""
+    def values(self, source: IntSet) -> Iterator[T]:
+        """Decode the members of `source`, in order of their bits."""
         return map(self.decode, source)
 
-    def sample(self, source: IntSet | None = None, rng: random.Random | None = None) -> Any:
-        return self.decode((self.all if source is None else source).sample(rng))
+    def choice(
+        self, source: IntSet | None = None, rng: random.Random | None = None
+    ) -> T:
+        """A random value from `source`, or from every bit pattern."""
+        return self.decode((self.all if source is None else source).choice(rng))
 
 
 @dataclass(frozen=True, repr=False)
-class Float(Codec):
-    """An IEEE-754 binary format: sign, then exponent, then mantissa bits.
+class Float(Codec[float]):
+    """An IEEE 754 binary format: a sign bit, then the exponent, then the mantissa.
 
-    For non-negative floats, bit order is value order, so indexing them walks up
-    in magnitude from `+0.0`. Negative floats run the other way.
+    Non-negative floats sort in the same order as their bits, so indexing them
+    counts up from `+0.0`. Negative floats count down.
     """
 
     exponent: int
-    format: str
+    format: str  # for struct, eg. ">d"
 
     @property
     def mantissa(self) -> int:
-        return self.width - self.exponent - 1
+        return self.width - 1 - self.exponent
 
     def encode(self, value: float) -> int:
-        return int.from_bytes(struct.pack(self.format, value), "big")
+        return int.from_bytes(struct.pack(self.format, value))
 
     def decode(self, bits: int) -> float:
-        return struct.unpack(self.format, bits.to_bytes(self.width // 8, "big"))[0]
+        return struct.unpack(self.format, bits.to_bytes(self.width // 8))[0]
 
     def _field(self, sign: str, exponent: str, mantissa: str) -> IntSet:
-        return IntSet.from_bdd(build(sign + exponent * self.exponent + mantissa * self.mantissa), self.width)
+        bits = sign + exponent * self.exponent + mantissa * self.mantissa
+        return IntSet.from_bdd(build(bits), self.width)
 
-    # The sign bit halves the universe, NaNs included. The value-level sets below
-    # are narrower, because a NaN has a sign but is neither positive nor negative.
+    # The sign bit splits every bit pattern in half, NaNs included. positive and
+    # negative are narrower, since a NaN has a sign but isn't positive or negative.
 
-    @property
+    @cached_property
     def sign_clear(self) -> IntSet:
         return self._field("0", "?", "?")
 
-    @property
+    @cached_property
     def sign_set(self) -> IntSet:
         return self._field("1", "?", "?")
 
-    @property
+    @cached_property
     def zeros(self) -> IntSet:
         """Both `-0.0` and `+0.0`."""
         return self._field("?", "0", "0")
 
-    @property
+    @cached_property
     def positive(self) -> IntSet:
         return self.sign_clear - self.zeros - self.nan
 
-    @property
+    @cached_property
     def negative(self) -> IntSet:
         return self.sign_set - self.zeros - self.nan
 
-    @property
+    @cached_property
     def nonnegative(self) -> IntSet:
-        """`value >= 0`, which `-0.0` satisfies too."""
+        """`value >= 0`, which `-0.0` is too."""
         return self.positive | self.zeros
 
-    @property
+    @cached_property
     def subnormal(self) -> IntSet:
         return self._field("?", "0", "?") - self.zeros
 
-    @property
+    @cached_property
     def infinities(self) -> IntSet:
         return self._field("?", "1", "0")
 
-    @property
+    @cached_property
     def nan(self) -> IntSet:
         return self._field("?", "1", "?") - self.infinities
 
-    @property
+    @cached_property
     def finite(self) -> IntSet:
         return self.all - self._field("?", "1", "?")
 
     def _key(self, bits: int) -> int:
-        """Reorder a bit pattern so unsigned order is float order: negatives are
-        flipped to reverse them below the positives, which are lifted above."""
+        """Reorder bits so that unsigned order is float order. Negative floats get
+        flipped, which reverses them, and positive floats get moved above them."""
         sign, mask = 1 << (self.width - 1), (1 << self.width) - 1
         return bits ^ mask if bits & sign else bits | sign
 
     def range(self, low: float, high: float) -> IntSet:
-        """Bit patterns for the values in `[low, high)`. NaNs sort outside every
-        finite range, so finite bounds exclude them."""
+        """Floats in `[low, high)`. NaNs aren't ordered, so they're never in a range."""
         if math.isnan(low) or math.isnan(high):
-            raise ValueError("NaN is not ordered, so it cannot bound a range")
+            raise ValueError("NaN isn't ordered, so it can't bound a range")
         sign, mask = 1 << (self.width - 1), (1 << self.width) - 1
         start, stop = self._key(self.encode(low)), self._key(self.encode(high))
-        # Keys below `sign` are the negatives, reversed; the rest are shifted.
-        negative = IntSet.range(mask - min(stop, sign) + 1, mask - start + 1, self.width)
+        # Keys below sign are the negative floats, flipped, and the rest are positive.
+        negative = IntSet.range(
+            mask - min(stop, sign) + 1, mask - start + 1, self.width
+        )
         nonnegative = IntSet.range(max(start, sign) - sign, stop - sign, self.width)
         return negative | nonnegative
 
 
 @dataclass(frozen=True, repr=False)
-class IP(Codec):
-    """IPv4 or IPv6 addresses, whose encoding is already the natural one."""
+class IP(Codec[Address], Generic[Address, Network]):
+    """IPv4 or IPv6 addresses, which are integers already."""
 
-    # The family's own classes, not `ipaddress.ip_address`, which guesses the
-    # family from the value and so decodes every IPv6 address below 2**32 as IPv4.
-    address_type: type[ipaddress.IPv4Address] | type[ipaddress.IPv6Address]
-    network_type: type[ipaddress.IPv4Network] | type[ipaddress.IPv6Network]
+    # The family's own classes, since ipaddress.ip_address() guesses the family
+    # from the value, and would decode every IPv6 address below 2**32 as IPv4.
+    address_type: type[Address]
+    network_type: type[Network]
 
-    def encode(self, value: Any) -> int:
+    def encode(self, value: Address | str | int) -> int:
         return int(self.address_type(value))
 
-    def decode(self, bits: int) -> Any:
+    def decode(self, bits: int) -> Address:
         return self.address_type(bits)
 
-    def cidr(self, text: Any) -> IntSet:
-        network = self.network_type(text, strict=False)
-        start = int(network.network_address)
-        return IntSet.range(start, start + network.num_addresses, self.width)
+    def cidr(self, network: Network | str) -> IntSet:
+        block = self.network_type(network, strict=False)
+        start = int(block.network_address)
+        return IntSet.range(start, start + block.num_addresses, self.width)
 
-    def range(self, low: Any, high: Any) -> IntSet:
+    def range(self, low: Address | str | int, high: Address | str | int) -> IntSet:
         """Addresses in `[low, high)`."""
         return IntSet.range(self.encode(low), self.encode(high), self.width)
 
-    def networks(self, source: IntSet) -> Iterator[Any]:
-        """The minimal CIDR cover of a set: route aggregation, read off the diagram.
+    def networks(self, source: IntSet) -> Iterator[Network]:
+        """The fewest CIDR blocks that make up `source`, ie. route aggregation.
 
-        Each `ACCEPT` is one block, and reduction makes each as large as it can be.
-        Unlike `Pattern` branches this cover is minimal, since prefixes nest.
+        Each path to ACCEPT is a block, and since the diagram is reduced, each one
+        is as big as it can be. Unlike a pattern, a block's free bits all have to
+        be at the end, so this splits even the bits that the diagram doesn't test.
         """
-        def walk(node, top: int, prefix: int) -> Iterator[Any]:
-            if node is REJECT:
-                return
-            if node is ACCEPT:
-                yield self.network_type((prefix << (top + 1), self.width - 1 - top))
-                return
-            # Split even a free bit: a block has to be a prefix.
-            low, high = cofactors(node, top)
-            yield from walk(low, top - 1, prefix << 1)
-            yield from walk(high, top - 1, prefix << 1 | 1)
 
-        bdd, width = source._canonical()
-        if width > self.width:
+        def walk(node: BDD, bit: int, prefix: int) -> Iterator[Network]:
+            if node is BDD.ACCEPT:
+                yield self.network_type((prefix << (bit + 1), self.width - 1 - bit))
+            elif node:
+                low, high = cofactors(node, bit)
+                yield from walk(low, bit - 1, prefix << 1)
+                yield from walk(high, bit - 1, prefix << 1 | 1)
+
+        if source and source[-1].bit_length() > self.width:
             raise ValueError(f"set has members wider than {self.width} bits")
-        yield from walk(IntSet.from_bdd(bdd, width).widen(self.width).bdd, self.width - 1, 0)
+        # A wider set's extra high bits are all clear, so walking them adds nothing.
+        wide = source.widen(self.width)
+        yield from walk(wide.bdd, wide.width - 1, 0)
 
 
 float16 = Float(16, "float16", exponent=5, format=">e")

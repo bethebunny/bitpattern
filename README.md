@@ -1,9 +1,9 @@
 # bitpattern
 
-Sets of integers described by their bits, backed by binary decision diagrams.
+Sets of integers, described by their bits and backed by binary decision diagrams.
 
-A pattern is quartets of bits, most significant first, where `?` frees one bit and
-`*` frees the rest of its quartet:
+A pattern is groups of 4 bits, most significant first. `?` is a free bit, and `*`
+frees the rest of its group:
 
 ```python
 >>> from bitpattern import Pattern
@@ -17,15 +17,15 @@ Pattern('???1.????.????.0000.1111.?01?')
 
 ```
 
-That set has 8192 members and is stored in **11 nodes** — one per *pinned* bit, and
-nothing at all per free bit. Membership, cardinality and n-th-element are all O(width),
-so nothing here ever enumerates.
+That's 8192 integers in 11 nodes, one for each bit that's pinned to 0 or 1. Free
+bits don't cost anything. Checking membership, counting and indexing all work on
+the diagram, so they never have to enumerate the members.
 
-## `size`, not `len`
+## Use `size`, not `len`
 
-`len()` must fit a `Py_ssize_t`, and these sets routinely do not. Use `.size` whenever
-the universe is wider than 63 bits; everything else — indexing, iteration, `sample` —
-works regardless.
+`len()` has to fit in a `Py_ssize_t`, and these sets often don't. `.size` always
+works, and so does everything else on a set, eg. indexing, slicing and `choice()`.
+Things that call `len()` themselves, like `random.sample`, only work while it fits.
 
 ```python
 >>> from bitpattern.codecs import float64
@@ -40,24 +40,31 @@ OverflowError: cannot fit 'int' into an index-sized integer
 
 ## Sets
 
-`IntSet` is an immutable, hashable `collections.abc.Set`:
+`IntSet` is an immutable, hashable `collections.abc.Set`. It's also a `Sequence`
+of its members in order, so it can be indexed and sliced, and slicing gives back a
+set:
 
 ```python
 >>> from bitpattern import IntSet
->>> IntSet.range(3, 17)
+>>> s = IntSet.range(3, 17)
+>>> s
 IntSet([3, 4, 5, 6, ..., 15, 16], size=14, width=5)
 >>> IntSet([1, 2]) <= IntSet([1, 2, 3])
 True
+>>> s[2], s.index(10)
+(5, 7)
+>>> s[2:5]
+IntSet([5, 6, 7], width=5)
 
 ```
 
-Ranges cost one node per bit, not one per member: `IntSet.range(10**15, 10**18, width=64)`
-is 90 nodes.
+Ranges cost one node per bit, however many integers are in them.
+`IntSet.range(10**15, 10**18, width=64)` is 90 nodes.
 
 ## Floats
 
-IEEE-754 is sign-magnitude, so for non-negative floats the bit order *is* the value
-order — which makes index 0 the natural minimal case:
+IEEE 754 floats are sign and magnitude, so non-negative floats sort in the same
+order as their bits. That makes index 0 the natural minimal example:
 
 ```python
 >>> reals = float64.positive - float64.infinities
@@ -66,17 +73,17 @@ order — which makes index 0 the natural minimal case:
 >>> float64.decode(float64.range(1.0, 2.0)[0])
 1.0
 >>> positives = float64.finite & float64.sign_clear
->>> [float64.decode(positives[at]) for at in range(2)]
-[0.0, 5e-324]
+>>> float64.decode(positives[0]), float64.decode(positives[1])
+(0.0, 5e-324)
 
 ```
 
-Named sets: `positive`, `negative`, `nonnegative`, `zeros`, `subnormal`, `infinities`,
-`nan`, `finite`, and the bit-level halves `sign_clear` / `sign_set`. Note a NaN has a
-sign bit but is neither positive nor negative, so it is in `sign_clear` but not in
-`positive`.
+The named sets are `positive`, `negative`, `nonnegative`, `zeros`, `subnormal`,
+`infinities`, `nan` and `finite`, plus `sign_clear` and `sign_set`, which split
+every bit pattern in half by its sign bit. NaNs have a sign bit, but they aren't
+positive or negative, so a NaN can be in `sign_clear` but never in `positive`.
 
-## Addresses
+## IP addresses
 
 ```python
 >>> from bitpattern.codecs import ipv4
@@ -86,8 +93,9 @@ sign bit but is neither positive nor negative, so it is in `sign_clear` but not 
 
 ```
 
-`networks` reads the minimal CIDR cover straight off the diagram — route aggregation
-for free. `ipv6` works the same way at 128 bits.
+`networks` reads the fewest CIDR blocks that make up a set straight off the
+diagram, so route aggregation comes for free. `ipv6` works the same way, with 128
+bits.
 
 ## Hypothesis
 
@@ -97,31 +105,32 @@ pip install 'bitpattern[hypothesis]'
 
 ```python
 from hypothesis import given
-from bitpattern.strategies import from_codec
+
 from bitpattern.codecs import float64
+from bitpattern.strategies import from_codec
+
 
 @given(from_codec(float64, float64.finite))
-def test_round_trips(value: float):
-    ...
+def test_round_trips(value: float): ...
 ```
 
-Drawing is by index, so a set of `2 ** 63` floats costs no more to sample than a set of
-three, and shrinking the index shrinks the float.
+Values are drawn by index, so drawing from `2**63` floats is just as cheap as
+drawing from 3, and shrinking the index shrinks the float.
 
-## Patterns as output
+## Writing sets as patterns
 
-Any set can be written back out as a pattern:
+Any set can be written out as a pattern:
 
 ```python
 >>> len(spare.pattern.branches)
 8
 >>> spare.pattern.branches[0]
-'0000101000000000????????????????'
+'0000.1010.0000.0000.????.????.????.????'
 
 ```
 
-The pattern *language* describes one pattern. Unions are Python, and that is how they
-print — as the expression that would rebuild them:
+A pattern only spells out a single branch. Unions are Python, and that's how they
+print, as the expression that builds them:
 
 ```python
 >>> Pattern("0000") | Pattern("0001")
@@ -131,12 +140,11 @@ Pattern('01??') | Pattern('1???')
 
 ```
 
-Branches are derived from the diagram rather than remembered from the text, so patterns
-are canonical: `Pattern("0000") | Pattern("0001")` *is* `Pattern("000?")`, and prints
-that way.
+Branches come from the diagram rather than the text, so patterns are canonical:
+`Pattern("0000") | Pattern("0001")` _is_ `Pattern("000?")`, and prints that way.
 
-A `Pattern` *is* an `IntSet` — it just also knows how to write itself down — so the two
-mix freely, and operations on a pattern stay patterns:
+A `Pattern` is an `IntSet` that also knows how to write itself down, so the two
+mix freely, and operations on a pattern give back a pattern:
 
 ```python
 >>> isinstance(Pattern("00??"), IntSet)
@@ -151,8 +159,8 @@ True
 | module | what's in it |
 | --- | --- |
 | `bitpattern` | `IntSet`, `Pattern` |
-| `bitpattern.codecs` | `float16/32/64`, `ipv4`, `ipv6`, `Codec` |
+| `bitpattern.codecs` | `float16`, `float32`, `float64`, `ipv4`, `ipv6`, `Codec` |
 | `bitpattern.strategies` | `from_intset`, `from_codec` |
-| `bitpattern.bdd` | the engine, if you're extending it |
+| `bitpattern.bdd` | `BDD`, the diagrams themselves, if you want to build on them |
 
-MIT licensed. Requires Python 3.11+.
+MIT licensed. Needs Python 3.11+.

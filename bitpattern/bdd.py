@@ -1,27 +1,30 @@
+"""Reduced, ordered binary decision diagrams over the bits of an integer."""
+
 from __future__ import annotations
 
-import enum
 import functools
-import operator
 import weakref
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Callable, ClassVar, Iterator
+from typing import ClassVar, TypeVar, TypeVarTuple, final
 
-__all__ = ["ACCEPT", "BDD", "BDDLeaf", "BDDNode", "REJECT"]
+__all__ = ["BDD"]
+
+T = TypeVar("T")
+Ts = TypeVarTuple("Ts")
 
 
-def weak_cache(fn):
-    """Memoise `fn` for exactly as long as its arguments and result are alive.
+def weak_cache(fn: Callable[[*Ts], T]) -> Callable[[*Ts], T]:
+    """Like functools.cache, but entries only live as long as the nodes in them.
 
-    BDD `apply` is exponential without memoisation, but a cache holding nodes
-    strongly would keep every one it had seen alive and defeat the weak
-    interning. Results are held weakly too: `a & ACCEPT` is `a`, and a strong
-    result would keep its own key alive.
+    A strong cache would keep every node it had seen alive, defeating the weak
+    interning. Results are held weakly too, since eg. `a & BDD.ACCEPT` is `a`, and
+    a strong result would keep its own key alive.
     """
     table = weakref.WeakKeyDictionary()
 
     @functools.wraps(fn)
-    def cached(*args):
+    def cached(*args: *Ts) -> T:
         *path, last = args
         entries = table
         for arg in path:
@@ -36,220 +39,211 @@ def weak_cache(fn):
     return cached
 
 
-def _reference(value):
-    # Nodes are held weakly; counts are ints, which can't be, and hold nothing.
-    return weakref.ref(value) if isinstance(value, BDDNode) else lambda: value
+def _reference(value: T) -> Callable[[], T | None]:
+    # Counts can't be weakly referenced, but they can't keep a node alive either.
+    return weakref.ref(value) if isinstance(value, BDD) else lambda: value
 
 
-class BDDNode:
-    """A reduced, ordered binary decision diagram: a predicate over integer bits.
+# No __init__: BDD(...) can hand back a node that already exists, and an __init__
+# would overwrite its fields. And no subclasses, which would share BDD's interning.
+@final
+@dataclass(frozen=True, eq=False, repr=False, init=False)
+class BDD:
+    """A predicate on the bits of an integer, as a reduced, ordered decision diagram.
 
-    `bit` is the bit tested, `left` the branch taken when it is clear and `right`
-    when it is set. Bits no node tests are free. Nodes are interned, so equal
-    diagrams are the same object.
+    `BDD(bit, left, right)` tests `bit`, and follows `left` if it's clear or `right`
+    if it's set. Bits that nothing tests are free. Every path ends at `BDD.ACCEPT`
+    or `BDD.REJECT`, which test nothing and are their own branches. Diagrams are
+    reduced, so `BDD(bit, x, x)` is just `x`, and interned, so equal ones are the
+    same object.
     """
 
     bit: int
+    left: BDD
+    right: BDD
 
-    def __invert__(self) -> BDDNode: raise NotImplementedError
-    def __and__(self, other: BDDNode) -> BDDNode: raise NotImplementedError
-    def __or__(self, other: BDDNode) -> BDDNode: raise NotImplementedError
+    ACCEPT: ClassVar[BDD]
+    REJECT: ClassVar[BDD]
+    intern: ClassVar[weakref.WeakValueDictionary[tuple[int, BDD, BDD], BDD]] = (
+        weakref.WeakValueDictionary()
+    )
 
-    def __sub__(self, other: BDDNode) -> BDDNode:
-        if not isinstance(other, BDDNode): return NotImplemented
-        return self & ~other
-
-
-class BDDLeaf(BDDNode, enum.Enum):
-    REJECT = False
-    ACCEPT = True
-
-    @property
-    def bit(self) -> int:
-        return -1
-
-    def __bool__(self):
-        return self.value
-
-    def __invert__(self):
-        return BDDLeaf(not self.value)
-
-    def __and__(self, other: BDDNode):
-        if not isinstance(other, BDDNode): return NotImplemented
-        return self and other
-
-    def __or__(self, other: BDDNode):
-        if not isinstance(other, BDDNode): return NotImplemented
-        return self or other
-
-    def __repr__(self):
-        return self.name
-
-    __str__ = __repr__
-
-
-ACCEPT, REJECT = BDDLeaf.ACCEPT, BDDLeaf.REJECT
-
-
-@dataclass(frozen=True, eq=False, repr=False)
-class BDD(BDDNode):
-    bit: int
-    left: BDDNode
-    right: BDDNode
-
-    intern: ClassVar[weakref.WeakValueDictionary[tuple, BDD]] = weakref.WeakValueDictionary()
-
-    def __new__(cls, bit: int, left: BDDNode, right: BDDNode) -> BDDNode:
-        if left is right: return left
+    def __new__(cls, bit: int, left: BDD, right: BDD) -> BDD:
+        if left is right:
+            return left
         if left.bit >= bit or right.bit >= bit:
-            raise ValueError(f"children of bit {bit} must test lower bits, not {left.bit} and {right.bit}")
+            raise ValueError(
+                f"children must test bits below {bit}, not {left.bit} and {right.bit}"
+            )
         key = (bit, left, right)
         if (node := cls.intern.get(key)) is None:
             node = cls.intern[key] = object.__new__(cls)
-            object.__setattr__(node, "bit", bit)
-            object.__setattr__(node, "left", left)
-            object.__setattr__(node, "right", right)
+            vars(node).update(bit=bit, left=left, right=right)
         return node
 
-    # Nodes are built once, in `__new__`. The dataclass `__init__` would rewrite a
-    # shared node's fields -- including the child that `left is right` returns.
-    def __init__(self, *_): pass
+    def __bool__(self) -> bool:
+        return self is not BDD.REJECT  # every other diagram has a path to ACCEPT
 
-    # Rebuild through the constructor, so unpickling re-interns.
-    def __reduce__(self):
+    @weak_cache
+    def __invert__(self) -> BDD:
+        if self.bit < 0:
+            return BDD.REJECT if self else BDD.ACCEPT
+        return BDD(self.bit, ~self.left, ~self.right)
+
+    # & and | turn away anything that isn't a BDD before it gets to their caches,
+    # which can only hold things that can be weakly referenced.
+    def __and__(self, other: BDD) -> BDD:
+        if not isinstance(other, BDD):
+            return NotImplemented
+        return self._and(other)
+
+    def __or__(self, other: BDD) -> BDD:
+        if not isinstance(other, BDD):
+            return NotImplemented
+        return self._or(other)
+
+    def __sub__(self, other: BDD) -> BDD:
+        if not isinstance(other, BDD):
+            return NotImplemented
+        return self & ~other
+
+    @weak_cache
+    def _and(self, other: BDD) -> BDD:
+        if self is BDD.REJECT or other is BDD.ACCEPT:
+            return self
+        if other is BDD.REJECT or self is BDD.ACCEPT:
+            return other
+        bit = max(self.bit, other.bit)
+        (a0, a1), (b0, b1) = cofactors(self, bit), cofactors(other, bit)
+        return BDD(bit, a0 & b0, a1 & b1)
+
+    @weak_cache
+    def _or(self, other: BDD) -> BDD:
+        if self is BDD.ACCEPT or other is BDD.REJECT:
+            return self
+        if other is BDD.ACCEPT or self is BDD.REJECT:
+            return other
+        bit = max(self.bit, other.bit)
+        (a0, a1), (b0, b1) = cofactors(self, bit), cofactors(other, bit)
+        return BDD(bit, a0 | b0, a1 | b1)
+
+    # Leaves unpickle by name, and nodes through the constructor so they get
+    # re-interned.
+    def __reduce__(self) -> str | tuple[type[BDD], tuple[int, BDD, BDD]]:
+        if self.bit < 0:
+            return repr(self)
         return BDD, (self.bit, self.left, self.right)
 
-    def __invert__(self):
-        return _negate(self)
-
-    def __and__(self, other: BDDNode):
-        if not isinstance(other, BDDNode): return NotImplemented
-        return _and(self, other)
-
-    def __or__(self, other: BDDNode):
-        if not isinstance(other, BDDNode): return NotImplemented
-        return _or(self, other)
-
-    def __repr__(self):
-        return f"<BDD bit={self.bit}, {node_count(self)} nodes, {render_count(size(self))} members>"
+    def __repr__(self) -> str:
+        if self.bit < 0:
+            return "BDD.ACCEPT" if self else "BDD.REJECT"
+        members = render_count(size(self))
+        return f"<BDD bit={self.bit}, {node_count(self)} nodes, {members} members>"
 
 
-@weak_cache
-def _negate(node: BDD) -> BDDNode:
-    return BDD(node.bit, ~node.left, ~node.right)
+def _leaf() -> BDD:
+    leaf = object.__new__(BDD)
+    vars(leaf).update(bit=-1, left=leaf, right=leaf)
+    return leaf
 
 
-@weak_cache
-def _and(a: BDD, b: BDDNode) -> BDDNode:
-    return _apply(operator.and_, a, b)
+# The leaves test nothing, so they sit below every bit and are their own branches.
+BDD.ACCEPT, BDD.REJECT = _leaf(), _leaf()
+
+
+def cofactors(node: BDD, bit: int) -> tuple[BDD, BDD]:
+    """`node`'s branches for `bit` clear and set. `node` can't test above `bit`."""
+    return (node.left, node.right) if node.bit == bit else (node, node)
 
 
 @weak_cache
-def _or(a: BDD, b: BDDNode) -> BDDNode:
-    return _apply(operator.or_, a, b)
+def size(node: BDD) -> int:
+    """How many integers below `2 ** (node.bit + 1)` satisfy `node`."""
+    if node.bit < 0:
+        return int(node is BDD.ACCEPT)
+    return count(node.left, node.bit) + count(node.right, node.bit)
 
 
-def _apply(op: Callable[[BDDNode, BDDNode], BDDNode], a: BDD, b: BDDNode) -> BDDNode:
-    # The higher bit goes outermost, and a leaf settles the result on its own.
-    if isinstance(b, BDDLeaf) or a.bit < b.bit:
-        return op(b, a)
-    if a.bit > b.bit:
-        return BDD(a.bit, op(a.left, b), op(a.right, b))
-    return BDD(a.bit, op(a.left, b.left), op(a.right, b.right))
+def count(node: BDD, width: int) -> int:
+    """How many integers below `2 ** width` satisfy `node`."""
+    if node.bit >= width:
+        raise ValueError(f"node tests bit {node.bit}, outside width {width}")
+    return size(node) << (width - 1 - node.bit)  # each free bit above doubles it
 
 
-def cofactors(node: BDDNode, bit: int) -> tuple[BDDNode, BDDNode]:
-    """`node` given `bit` clear, and given it set. `node` may not test above `bit`."""
-    return (node, node) if node.bit < bit else (node.left, node.right)
+def nth(node: BDD, width: int, n: int) -> int:
+    """The `n`th smallest integer below `2 ** width` that satisfies `node`."""
+    total = count(node, width)
+    if not -total <= n < total:
+        raise IndexError(n)
+    return _nth(node, n % total)
 
 
-@weak_cache
-def size(node: BDDNode) -> int:
-    """How many integers in `[0, 2 ** (node.bit + 1))` satisfy `node`."""
-    if isinstance(node, BDDLeaf):
-        return int(node.value)
-    return count(node.left, node.bit - 1) + count(node.right, node.bit - 1)
-
-
-def count(node: BDDNode, top: int) -> int:
-    """How many integers in `[0, 2 ** (top + 1))` satisfy `node`."""
-    if node.bit > top:
-        raise ValueError(f"node tests bit {node.bit}, above top bit {top}")
-    return size(node) << (top - node.bit)  # each free bit above doubles it
-
-
-def index(node: BDDNode, top: int, item: int) -> int:
-    """The `item`-th smallest integer in `[0, 2 ** (top + 1))` satisfying `node`."""
-    total = count(node, top)
-    if not -total <= item < total:
-        raise IndexError(item)
-    return _index(node, item % total)
-
-
-def _index(node: BDDNode, item: int) -> int:
-    if isinstance(node, BDDLeaf):
-        return item  # ACCEPT: the n-th member of its span is n
-    # Free bits above `node.bit` are the high bits of the result, so they vary slowest.
-    free, item = divmod(item, size(node))
+def _nth(node: BDD, n: int) -> int:
+    if node.bit < 0:
+        return n  # every bit below is free, so the nth member is n
+    # Free bits above the node are the high bits of the result, so they vary slowest.
+    free, n = divmod(n, size(node))
     high = free << (node.bit + 1)
-    if item < (low := count(node.left, node.bit - 1)):
-        return high | _index(node.left, item)
-    return high | 1 << node.bit | _index(node.right, item - low)
+    if n < (left_count := count(node.left, node.bit)):
+        return high | _nth(node.left, n)
+    return high | 1 << node.bit | _nth(node.right, n - left_count)
 
 
-def iterate(node: BDDNode, top: int) -> Iterator[int]:
-    """Every integer in `[0, 2 ** (top + 1))` satisfying `node`, ascending."""
-    if node is REJECT:
-        return
-    if top < 0:
-        yield 0
-        return
-    low, high = cofactors(node, top)
-    yield from iterate(low, top - 1)
-    for value in iterate(high, top - 1):
-        yield 1 << top | value
+def iterate(node: BDD, width: int) -> Iterator[int]:
+    """Every integer below `2 ** width` that satisfies `node`, in order."""
+    if node is BDD.ACCEPT:
+        yield from range(1 << width)
+    elif node:
+        bit = width - 1
+        low, high = cofactors(node, bit)
+        yield from iterate(low, bit)
+        for value in iterate(high, bit):
+            yield 1 << bit | value
 
 
 @weak_cache
-def node_count(node: BDDNode) -> int:
-    seen, stack = set(), [node]
+def node_count(node: BDD) -> int:
+    """How many nodes there are under `node`, not counting the leaves."""
+    seen: set[BDD] = set()
+    stack = [node]
     while stack:
-        if isinstance(current := stack.pop(), BDD) and current not in seen:
+        if (current := stack.pop()).bit >= 0 and current not in seen:
             seen.add(current)
             stack += current.left, current.right
     return len(seen)
 
 
 def render_count(total: int) -> str:
-    """`total`, written `2**k` when it is a large power of two."""
+    """`total`, or `2**k` if it's a big power of two."""
     if total >= 1024 and not total & (total - 1):
         return f"2**{total.bit_length() - 1}"
-    return repr(total)
+    return str(total)
 
 
-def pin(value: int, width: int) -> BDDNode:
-    """`x == value`, over bits `[0, width)`."""
-    node: BDDNode = ACCEPT
+def pin(value: int, width: int) -> BDD:
+    """Exactly `value`, over `width` bits."""
+    node = BDD.ACCEPT
     for bit in range(width):
-        node = BDD(bit, REJECT, node) if value >> bit & 1 else BDD(bit, node, REJECT)
+        if value >> bit & 1:
+            node = BDD(bit, BDD.REJECT, node)
+        else:
+            node = BDD(bit, node, BDD.REJECT)
     return node
 
 
-def zeros(low: int, high: int) -> BDDNode:
-    """Bits `[low, high)` all clear."""
-    node: BDDNode = ACCEPT
-    for bit in range(low, high):
-        node = BDD(bit, node, REJECT)
-    return node
-
-
-def less_than(bound: int, width: int) -> BDDNode:
-    """`x < bound`, over bits `[0, width)`."""
-    if bound <= 0: return REJECT
-    if bound >= 1 << width: return ACCEPT
-    node: BDDNode = REJECT
+def less_than(bound: int, width: int) -> BDD:
+    """Integers below `bound`, over `width` bits."""
+    if bound <= 0:
+        return BDD.REJECT
+    if bound >= 1 << width:
+        return BDD.ACCEPT
+    node = BDD.REJECT
     for bit in range(width):
-        # Where `bound` has a set bit, a clear one in `x` settles it; where `bound`
-        # has a clear bit, a set one rules `x` out. Otherwise the lower bits decide.
-        node = BDD(bit, ACCEPT, node) if bound >> bit & 1 else BDD(bit, node, REJECT)
+        # The highest bit where x and bound differ decides it. Where bound has a 1,
+        # a 0 makes x smaller, and where bound has a 0, a 1 makes x bigger.
+        if bound >> bit & 1:
+            node = BDD(bit, BDD.ACCEPT, node)
+        else:
+            node = BDD(bit, node, BDD.REJECT)
     return node

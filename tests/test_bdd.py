@@ -1,8 +1,19 @@
 """Node-level tests: interning, reduction, and the boolean algebra."""
 
+import gc
+import weakref
+
 import pytest
 
-from bitpattern.bdd import ACCEPT, BDD, BDDLeaf, REJECT, count, index, iterate, node_count, size
+from bitpattern.bdd import (
+    BDD,
+    cofactors,
+    count,
+    iterate,
+    node_count,
+    nth,
+    size,
+)
 from bitpattern.pattern import branch_count
 from bitpattern.sets import IntSet
 
@@ -10,8 +21,8 @@ WIDTH = 3
 UNIVERSE = range(1 << WIDTH)
 MASKS = range(1 << len(UNIVERSE))
 
-# A handful of masks spread across the lattice, for the laws that need three
-# operands and so cannot be checked over every triple.
+# A spread of masks for the laws with three operands, which are too slow to check
+# over every triple.
 SAMPLE = [0, 1, 0b10101010, 0b00001111, 0b11001010, 0b01111110, 0b10000001, 255]
 
 
@@ -19,230 +30,276 @@ def subset(mask):
     return {value for value in UNIVERSE if mask >> value & 1}
 
 
-def node(mask):
+def diagram(mask):
     return IntSet(subset(mask), WIDTH).bdd
 
 
-@pytest.fixture(params=SAMPLE, ids=hex)
-def a(request):
-    return node(request.param)
-
-
-@pytest.fixture(params=SAMPLE, ids=hex)
-def b(request):
-    return node(request.param)
-
-
-class TestInterning:
-    def test_leaves_are_singletons(self):
-        assert BDDLeaf(True) is ACCEPT
-        assert BDDLeaf(False) is REJECT
-        assert BDDLeaf(1) is ACCEPT and BDDLeaf(0) is REJECT
-
-    def test_structural_equality_is_identity(self):
-        assert BDD(3, ACCEPT, REJECT) is BDD(3, ACCEPT, REJECT)
-        assert BDD(3, ACCEPT, REJECT) is not BDD(3, REJECT, ACCEPT)
-        assert BDD(3, ACCEPT, REJECT) is not BDD(2, ACCEPT, REJECT)
-
-    def test_equal_sets_share_one_diagram(self):
-        assert IntSet([1, 2, 3], WIDTH).bdd is IntSet([3, 2, 1, 3], WIDTH).bdd
-
-    def test_leaves_are_the_only_two_members(self):
-        assert list(BDDLeaf) == [REJECT, ACCEPT]
-
-    def test_identical_branches_collapse(self):
-        inner = BDD(3, ACCEPT, REJECT)
-        assert BDD(5, inner, inner) is inner
-        assert BDD(5, ACCEPT, ACCEPT) is ACCEPT
-
-    def test_collapse_does_not_mutate_the_shared_branch(self):
-        """Regression: __new__ hands back a node that __init__ would overwrite."""
-        inner = BDD(3, ACCEPT, REJECT)
-        before = (inner.bit, inner.left, inner.right)
-        BDD(5, inner, inner)
-        assert (inner.bit, inner.left, inner.right) == before
-
-    def test_reconstruction_does_not_mutate(self):
-        original = BDD(3, ACCEPT, REJECT)
-        BDD(3, ACCEPT, REJECT)
-        assert (original.bit, original.left, original.right) == (3, ACCEPT, REJECT)
-
-
-class TestOrdering:
-    def test_children_must_test_lower_bits(self):
-        inner = BDD(3, ACCEPT, REJECT)
-        with pytest.raises(ValueError):
-            BDD(1, inner, REJECT)
-        with pytest.raises(ValueError):
-            BDD(3, inner, REJECT)
-
-    def test_collapse_wins_over_the_ordering_check(self):
-        """`BDD(b, x, x)` builds no node, so `b` never has to dominate `x`."""
-        inner = BDD(3, ACCEPT, REJECT)
-        assert BDD(1, inner, inner) is inner
-
-
-class TestOperandGuards:
-    """Operators decline non-nodes rather than reaching for `.bit` or `.value`."""
-
-    @pytest.mark.parametrize("node", [ACCEPT, REJECT, BDD(3, ACCEPT, REJECT)])
-    @pytest.mark.parametrize("other", [5, "x", None, 1.5])
-    def test_binary_operators_reject_foreign_operands(self, node, other):
-        for operate in (lambda: node & other, lambda: node | other, lambda: node - other):
-            with pytest.raises(TypeError):
-                operate()
-
-
-class TestAlgebra:
-    def test_double_negation(self, a):
-        assert ~~a is a
-
-    def test_idempotence(self, a):
-        assert a & a is a
-        assert a | a is a
-
-    def test_complement(self, a):
-        assert a & ~a is REJECT
-        assert a | ~a is ACCEPT
-
-    def test_identity_elements(self, a):
-        assert a & ACCEPT is a
-        assert a | REJECT is a
-        assert a & REJECT is REJECT
-        assert a | ACCEPT is ACCEPT
-
-    def test_commutativity(self, a, b):
-        assert a & b is b & a
-        assert a | b is b | a
-
-    def test_de_morgan(self, a, b):
-        assert ~(a & b) is ~a | ~b
-        assert ~(a | b) is ~a & ~b
-
-    def test_absorption(self, a, b):
-        assert a & (a | b) is a
-        assert a | (a & b) is a
-
-    def test_difference_is_conjunction_with_complement(self, a, b):
-        assert a - b is a & ~b
-
-    @pytest.mark.parametrize("third", SAMPLE, ids=hex)
-    def test_associativity(self, a, b, third):
-        c = node(third)
-        assert (a & b) & c is a & (b & c)
-        assert (a | b) | c is a | (b | c)
-
-    @pytest.mark.parametrize("third", SAMPLE, ids=hex)
-    def test_distributivity(self, a, b, third):
-        c = node(third)
-        assert a & (b | c) is (a & b) | (a & c)
-        assert a | (b & c) is (a | b) & (a | c)
-
-
-class TestScoping:
-    """`count`/`index`/`iterate` read a predicate over a chosen bit range."""
-
-    def test_accept_fills_its_scope(self):
-        assert count(ACCEPT, -1) == 1
-        assert count(ACCEPT, 3) == 16
-        assert list(iterate(ACCEPT, 3)) == list(range(16))
-
-    def test_reject_is_empty_at_every_scope(self):
-        assert count(REJECT, -1) == 0
-        assert count(REJECT, 7) == 0
-        assert list(iterate(REJECT, 7)) == []
-
-    def test_free_high_bits_multiply_the_count(self):
-        evens = BDD(0, ACCEPT, REJECT)
-        assert count(evens, 0) == 1
-        assert count(evens, 3) == 8
-        assert list(iterate(evens, 3)) == [0, 2, 4, 6, 8, 10, 12, 14]
-
-    def test_index_agrees_with_iterate(self):
-        evens = BDD(0, ACCEPT, REJECT)
-        members = list(iterate(evens, 3))
-        assert [index(evens, 3, i) for i in range(len(members))] == members
-        assert [index(evens, 3, ~i) for i in range(len(members))] == members[::-1]
-
-    def test_index_rejects_out_of_range(self):
-        for item in (8, -9, 100):
-            with pytest.raises(IndexError):
-                index(BDD(0, ACCEPT, REJECT), 3, item)
-
-    def test_empty_scope_holds_only_zero(self):
-        assert list(iterate(ACCEPT, -1)) == [0]
-        assert index(ACCEPT, -1, 0) == 0
-
-    def test_scope_must_cover_the_diagram(self):
-        with pytest.raises(ValueError):
-            count(BDD(5, ACCEPT, REJECT), 3)
-
-
-class TestNodeSequence:
-    """Nodes are predicates only; a universe comes from `count`/`index`/`iterate`."""
-
-    @pytest.mark.parametrize("node", [ACCEPT, REJECT, BDD(3, ACCEPT, REJECT)])
-    def test_nodes_are_not_sequences(self, node):
-        for name in ("__len__", "__iter__", "__getitem__"):
-            assert not hasattr(node, name), name
-
-    @pytest.mark.parametrize("mask", MASKS)
-    def test_matches_the_subset_it_was_built_from(self, mask):
-        members = sorted(subset(mask))
-        diagram = node(mask)
-        assert list(iterate(diagram, WIDTH - 1)) == members
-        assert count(diagram, WIDTH - 1) == len(members)
-
-
 def parity(width):
-    """Popcount parity: two nodes a level, and exponentially many paths."""
-    even, odd = ACCEPT, REJECT
+    """Popcount parity: two nodes per bit, and exponentially many paths."""
+    even, odd = BDD.ACCEPT, BDD.REJECT
     for bit in range(width):
         even, odd = BDD(bit, even, odd), BDD(bit, odd, even)
     return even, odd
 
 
-class TestCaching:
-    """Memo tables hold nodes weakly, so computing with one never keeps it alive."""
+@pytest.fixture(params=SAMPLE, ids=hex)
+def a(request):
+    return diagram(request.param)
 
-    @pytest.mark.parametrize(
-        "operate",
-        [
-            lambda x: ~x,
-            lambda x: x & x,
-            lambda x: x & ACCEPT,  # the result *is* `x`: a strong value would pin its key
-            lambda x: x | REJECT,
-            lambda x: x - ACCEPT,
-            size,
-            node_count,
-            branch_count,
-        ],
-        ids=["invert", "and-self", "and-accept", "or-reject", "sub", "size", "node_count",
-             "branch_count"],
-    )
-    def test_operations_do_not_keep_nodes_alive(self, operate):
-        import gc
-        import weakref
 
-        def compute():
-            node = BDD(1001, BDD(1000, ACCEPT, REJECT), REJECT)  # bits nothing else uses
-            operate(node)
-            return weakref.ref(node)
+@pytest.fixture(params=SAMPLE, ids=hex)
+def b(request):
+    return diagram(request.param)
 
-        probe = compute()
-        gc.collect()
-        assert probe() is None
 
-    def test_results_stay_cached_while_alive(self):
-        node = BDD(1001, BDD(1000, ACCEPT, REJECT), REJECT)
-        assert ~node is ~node
-        assert node & ~node is REJECT
+def test_everything_is_a_bdd():
+    for node in (BDD.ACCEPT, BDD.REJECT, BDD(3, BDD.ACCEPT, BDD.REJECT)):
+        assert type(node) is BDD
 
-    def test_shared_diagrams_stay_polynomial(self):
-        """Without memoisation these walk all 2**64 paths."""
-        even, odd = parity(64)
-        assert ~even is odd
-        assert even & odd is REJECT
-        assert even | odd is ACCEPT
-        assert size(even) == 2**63
-        assert branch_count(even) == 2**63
+
+def test_only_reject_is_false():
+    assert not BDD.REJECT
+    assert BDD.ACCEPT
+    assert BDD(3, BDD.ACCEPT, BDD.REJECT) and BDD(3, BDD.REJECT, BDD.ACCEPT)
+
+
+def test_leaves_cant_be_built():
+    with pytest.raises(ValueError):
+        BDD(-1, BDD.ACCEPT, BDD.REJECT)
+
+
+def test_structural_equality_is_identity():
+    assert BDD(3, BDD.ACCEPT, BDD.REJECT) is BDD(3, BDD.ACCEPT, BDD.REJECT)
+    assert BDD(3, BDD.ACCEPT, BDD.REJECT) is not BDD(3, BDD.REJECT, BDD.ACCEPT)
+    assert BDD(3, BDD.ACCEPT, BDD.REJECT) is not BDD(2, BDD.ACCEPT, BDD.REJECT)
+
+
+def test_equal_sets_share_one_diagram():
+    assert IntSet([1, 2, 3], WIDTH).bdd is IntSet([3, 2, 1, 3], WIDTH).bdd
+
+
+def test_identical_branches_collapse():
+    inner = BDD(3, BDD.ACCEPT, BDD.REJECT)
+    assert BDD(5, inner, inner) is inner
+    assert BDD(5, BDD.ACCEPT, BDD.ACCEPT) is BDD.ACCEPT
+
+
+def test_collapsing_leaves_the_branch_alone():
+    """`BDD(5, inner, inner)` returns `inner`, which mustn't get reinitialized."""
+    inner = BDD(3, BDD.ACCEPT, BDD.REJECT)
+    BDD(5, inner, inner)
+    assert (inner.bit, inner.left, inner.right) == (3, BDD.ACCEPT, BDD.REJECT)
+
+
+def test_reinterning_leaves_the_node_alone():
+    original = BDD(3, BDD.ACCEPT, BDD.REJECT)
+    BDD(3, BDD.ACCEPT, BDD.REJECT)
+    assert (original.bit, original.left, original.right) == (3, BDD.ACCEPT, BDD.REJECT)
+
+
+def test_children_must_test_lower_bits():
+    inner = BDD(3, BDD.ACCEPT, BDD.REJECT)
+    with pytest.raises(ValueError):
+        BDD(1, inner, BDD.REJECT)
+    with pytest.raises(ValueError):
+        BDD(3, inner, BDD.REJECT)
+
+
+def test_collapsing_skips_the_ordering_check():
+    """`BDD(b, x, x)` doesn't build a node, so `b` doesn't have to be above `x`."""
+    inner = BDD(3, BDD.ACCEPT, BDD.REJECT)
+    assert BDD(1, inner, inner) is inner
+
+
+def test_leaves_are_below_every_bit():
+    assert BDD.ACCEPT.bit == BDD.REJECT.bit == -1
+
+
+def test_leaves_are_their_own_branches():
+    for leaf in (BDD.ACCEPT, BDD.REJECT):
+        assert leaf.left is leaf.right is leaf
+        assert cofactors(leaf, 0) == (leaf, leaf)
+
+
+def test_cofactors_split_only_the_bit_a_node_tests():
+    inner = BDD(3, BDD.ACCEPT, BDD.REJECT)
+    assert cofactors(inner, 3) == (BDD.ACCEPT, BDD.REJECT)
+    assert cofactors(inner, 5) == (inner, inner)
+
+
+@pytest.mark.parametrize(
+    "node", [BDD.ACCEPT, BDD.REJECT, BDD(3, BDD.ACCEPT, BDD.REJECT)]
+)
+@pytest.mark.parametrize("other", [5, "x", None, 1.5])
+def test_operators_refuse_anything_but_nodes(node, other):
+    """They return NotImplemented before the cache, which couldn't key on these."""
+    for operate in (lambda: node & other, lambda: node | other, lambda: node - other):
+        with pytest.raises(TypeError, match="unsupported operand"):
+            operate()
+
+
+def test_double_negation(a):
+    assert ~~a is a
+
+
+def test_idempotence(a):
+    assert a & a is a
+    assert a | a is a
+
+
+def test_complement(a):
+    assert a & ~a is BDD.REJECT
+    assert a | ~a is BDD.ACCEPT
+
+
+def test_identity_elements(a):
+    assert a & BDD.ACCEPT is a
+    assert a | BDD.REJECT is a
+    assert a & BDD.REJECT is BDD.REJECT
+    assert a | BDD.ACCEPT is BDD.ACCEPT
+
+
+def test_commutativity(a, b):
+    assert a & b is b & a
+    assert a | b is b | a
+
+
+def test_de_morgan(a, b):
+    assert ~(a & b) is ~a | ~b
+    assert ~(a | b) is ~a & ~b
+
+
+def test_absorption(a, b):
+    assert a & (a | b) is a
+    assert a | (a & b) is a
+
+
+def test_difference_is_conjunction_with_complement(a, b):
+    assert a - b is a & ~b
+
+
+@pytest.mark.parametrize("third", SAMPLE, ids=hex)
+def test_associativity(a, b, third):
+    c = diagram(third)
+    assert (a & b) & c is a & (b & c)
+    assert (a | b) | c is a | (b | c)
+
+
+@pytest.mark.parametrize("third", SAMPLE, ids=hex)
+def test_distributivity(a, b, third):
+    c = diagram(third)
+    assert a & (b | c) is (a & b) | (a & c)
+    assert a | (b & c) is (a | b) & (a | c)
+
+
+def test_accept_is_everything():
+    assert count(BDD.ACCEPT, 0) == 1
+    assert count(BDD.ACCEPT, 4) == 16
+    assert list(iterate(BDD.ACCEPT, 4)) == list(range(16))
+
+
+def test_reject_is_nothing():
+    assert count(BDD.REJECT, 0) == 0
+    assert count(BDD.REJECT, 8) == 0
+    assert list(iterate(BDD.REJECT, 8)) == []
+
+
+def test_free_high_bits_multiply_the_count():
+    evens = BDD(0, BDD.ACCEPT, BDD.REJECT)
+    assert count(evens, 1) == 1
+    assert count(evens, 4) == 8
+    assert list(iterate(evens, 4)) == [0, 2, 4, 6, 8, 10, 12, 14]
+
+
+def test_nth_agrees_with_iterate():
+    evens = BDD(0, BDD.ACCEPT, BDD.REJECT)
+    members = list(iterate(evens, 4))
+    assert [nth(evens, 4, i) for i in range(len(members))] == members
+    assert [nth(evens, 4, ~i) for i in range(len(members))] == members[::-1]
+
+
+def test_nth_out_of_range():
+    for item in (8, -9, 100):
+        with pytest.raises(IndexError):
+            nth(BDD(0, BDD.ACCEPT, BDD.REJECT), 4, item)
+
+
+def test_zero_width_holds_only_zero():
+    assert list(iterate(BDD.ACCEPT, 0)) == [0]
+    assert nth(BDD.ACCEPT, 0, 0) == 0
+
+
+def test_width_must_cover_the_diagram():
+    with pytest.raises(ValueError):
+        count(BDD(5, BDD.ACCEPT, BDD.REJECT), 5)
+
+
+@pytest.mark.parametrize("mask", MASKS)
+def test_matches_the_subset_it_was_built_from(mask):
+    members = sorted(subset(mask))
+    assert list(iterate(diagram(mask), WIDTH)) == members
+    assert count(diagram(mask), WIDTH) == len(members)
+
+
+@pytest.mark.parametrize(
+    "node", [BDD.ACCEPT, BDD.REJECT, BDD(3, BDD.ACCEPT, BDD.REJECT)]
+)
+def test_nodes_are_not_sequences(node):
+    """Only a width says which integers a diagram is about, so nodes can't count."""
+    for name in ("__len__", "__iter__", "__getitem__"):
+        assert not hasattr(node, name), name
+
+
+@pytest.mark.parametrize(
+    "operate",
+    [
+        lambda x: ~x,
+        lambda x: x & x,
+        lambda x: x & BDD.ACCEPT,
+        lambda x: x | BDD.REJECT,
+        lambda x: x - BDD.ACCEPT,
+        size,
+        node_count,
+        branch_count,
+    ],
+    ids=[
+        "invert",
+        "and-self",
+        "and-accept",
+        "or-reject",
+        "sub",
+        "size",
+        "node_count",
+        "branch_count",
+    ],
+)
+def test_memoising_doesnt_keep_nodes_alive(operate):
+    """Memo tables hold nodes weakly. `x & BDD.ACCEPT` is `x`, so the results have to
+    be held weakly too, or they'd keep their own keys alive."""
+
+    def compute():
+        node = BDD(
+            1001, BDD(1000, BDD.ACCEPT, BDD.REJECT), BDD.REJECT
+        )  # bits nothing else uses
+        operate(node)
+        return weakref.ref(node)
+
+    probe = compute()
+    gc.collect()
+    assert probe() is None
+
+
+def test_results_stay_memoised_while_alive():
+    node = BDD(1001, BDD(1000, BDD.ACCEPT, BDD.REJECT), BDD.REJECT)
+    assert ~node is ~node
+    assert node & ~node is BDD.REJECT
+
+
+def test_shared_diagrams_stay_polynomial():
+    """Without memoising, these would walk all 2**64 paths."""
+    even, odd = parity(64)
+    assert ~even is odd
+    assert even & odd is BDD.REJECT
+    assert even | odd is BDD.ACCEPT
+    assert size(even) == 2**63
+    assert branch_count(even) == 2**63

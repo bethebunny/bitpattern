@@ -1,11 +1,12 @@
-"""Bit patterns and integer sets backed by binary decision diagrams.
+"""Sets of integers, described by their bits and backed by binary decision diagrams.
 
     >>> from bitpattern import Pattern
     >>> Pattern("*1.*.*.0000.1111.?01?").size
     8192
 
-The engine lives in `bitpattern.bdd`, value codecs in `bitpattern.codecs`, and
-hypothesis strategies in `bitpattern.strategies`.
+Codecs for floats and IP addresses are in `bitpattern.codecs`, hypothesis
+strategies are in `bitpattern.strategies`, and the diagrams themselves are in
+`bitpattern.bdd`.
 """
 
 from .pattern import Pattern
