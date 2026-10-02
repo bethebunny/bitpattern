@@ -24,13 +24,14 @@ def expand(text: str) -> str:
             f"patterns can't contain '|', use Pattern({left!r}) | Pattern({right!r})"
         )
     bits = ""
-    for at, group in enumerate(text.strip().split(".")):
-        head, glob, tail = group.partition("*")
-        expanded = head + "?" * (4 - len(head) - len(tail)) + tail if glob else group
+    for at, quartet in enumerate(text.strip().split(".")):
+        head, glob, tail = quartet.partition("*")
+        expanded = head + "?" * (4 - len(head) - len(tail)) + tail if glob else quartet
         if not re.fullmatch("[01?]{1,4}" if at == 0 else "[01?]{4}", expanded):
             raise ValueError(
-                f"bad group {group!r} in {text!r}. Groups are 4 bits of 0, 1 or ?, "
-                "with * filling out the rest, and only the leading one can be shorter."
+                f"bad quartet {quartet!r} in {text!r}. Quartets are 4 bits of 0, 1 "
+                "or ?, with * filling out the rest, and only the leading one can be "
+                "shorter."
             )
         bits += expanded
     return bits
@@ -60,8 +61,8 @@ def paths(node: BDD, width: int) -> Iterator[str]:
     if node is BDD.ACCEPT:
         yield free
     elif node:
-        yield from (free + "0" + path for path in paths(node.left, node.bit))
-        yield from (free + "1" + path for path in paths(node.right, node.bit))
+        yield from (f"{free}0{path}" for path in paths(node.left, node.bit))
+        yield from (f"{free}1{path}" for path in paths(node.right, node.bit))
 
 
 @weak_cache
@@ -75,10 +76,10 @@ def path_count(node: BDD) -> int:
 class Pattern(IntSet):
     """An IntSet that reads and writes itself as a bit pattern, like `*1.*.*.0000`.
 
-    Patterns are written most significant bit first, in groups of 4 separated by
+    Patterns are written most significant bit first, in quartets separated by
     `.`. `0` and `1` are fixed bits, `?` can be either, and `*` is shorthand for
-    enough `?` to fill out its group. Only the leading group can be shorter than
-    4 bits, so a pattern can be any width.
+    enough `?` to fill out its quartet. The leading quartet can be shorter, for
+    widths that aren't a multiple of 4.
 
     >>> p = Pattern("*1.0000")
     >>> p
@@ -86,17 +87,13 @@ class Pattern(IntSet):
     >>> p.size
     8
 
-    Patterns only spell out a single branch. Unions come from the set operators,
-    and repr as the expression that builds them. Branches come from the diagram
-    rather than the text, so `Pattern("0000") | Pattern("0001")` is `Pattern("000?")`.
-    The same set always has the same branches, and they never overlap, but they
-    aren't always the fewest patterns that would cover it.
+    Unions repr as the disjoint patterns that make them up.
 
     >>> Pattern("1?1") | Pattern("?1?")
     Pattern('01?') | Pattern('101') | Pattern('11?')
 
-    A branch needs a node for each fixed bit and none for free bits, so a pattern's
-    diagram stays small however many members it has.
+    Only fixed bits need nodes, so a pattern's memory is bounded by the length of
+    its text.
     """
 
     __slots__ = ()
