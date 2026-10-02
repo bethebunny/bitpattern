@@ -6,85 +6,38 @@
 > pip install 'bitpattern[hypothesis]'  # with the hypothesis strategies
 > ```
 
-bitpattern is a library for efficiently describing and working with very large
-sets of structured data. It allows
-- expressing structured bit patterns via a glob-like syntax
-- composing these pattern sets via normal set operations
-- very efficient sampling and counting of sets much larger than would
-  ordinarily fit in memory
+bitpattern is a library for describing and working with very large sets of structured
+data. It can sample and count sets much larger than would ordinarily fit in memory.
 
-bitpattern uses a data structure called a Binary Decision Diagram to encode
-extremely large sets. Whereas set operations are typically described in terms
-of the size of the set, bitpattern sets support most operations in O(#bits) of
-the _largest member_ of the set. #bits is called the `width` of the set.
-
-```python
->>> from bitpattern import Pattern
->>> p = Pattern("*1.*.*.0000.1111.?01?")
->>> p
-Pattern('???1.????.????.0000.1111.?01?')
->>> p.width
-24
->>> p.size
-8192
->>> p[0]
-1048818
->>> 0x1230FA in p
-True
->>> import random
->>> random.sample(p, 3)
-[13799675, 14393594, 1724667]
-
-```
-
-The pattern syntax follows normal glob rules. Patterns are expressed as quartets
-of 4 bits, most significant to least significant, with 0 and 1 representing a fixed
-bit, ? can be either, and * is shorthand for multiple ?.
-
-Patterns are sets, and work with normal set operations.
-
-```python
->>> Pattern("0000") | Pattern("0001")
-Pattern('000?')
->>> ~Pattern("00??")
-Pattern('01??') | Pattern('1???')
->>> Pattern("0???") & Pattern("??00")
-Pattern('0?00')
->>> Pattern("0???") - Pattern("00??")
-Pattern('01??')
->>> Pattern("000?") <= Pattern("00??")
-True
-
-```
-
-## Patterns for sets of structured data
-
-Patterns start to really shine when expressing structured sets. Consider for example
-64 bit floats. How many finite normal floats are there? Can we sample them directly?
-These sets are huge and noncontiguous, so you can't express them in traditional data structures.
-
-bitpattern allows equipping a bit pattern set with a structured type via a [Codec](#codecs)
-that encodes/decodes. This allows them to be used directly with structured types like floats.
+Consider for example 64 bit floats. How many finite normal floats are there? Can we
+sample them directly? These sets are huge and noncontiguous, so you can't express them
+in traditional data structures.
 
 ```python
 >>> from bitpattern.codecs import float64
 >>> supported = float64.finite - float64.subnormal
 >>> supported.size
 18428729675200069634
->>> list(supported[:5])
-[0.0, 2.2250738585072014e-308, 2.225073858507202e-308, 2.2250738585072024e-308, 2.225073858507203e-308]
->>> nans = float64.pattern("?111.1111.1111.0*.*.*.*.*.*.*.*.*.*.*.*.*")
 >>> 0.25 in supported
 True
->>> 0.25 in nans
-False
+>>> list(supported[:3])
+[0.0, 2.2250738585072014e-308, 2.225073858507202e-308]
 >>> supported.choice()
--7.966640143021799e+266
+2.3171912436506223e+167
+>>> float64.range(1.0, 2.0).size
+4503599627370496
 
 ```
 
-These are `BDDSet`s, which are sets of values backed by the `IntSet` of their bits,
-eg. `supported.storage`.
+`supported` is a `BDDSet[float]`, a set of floats backed by the `IntSet` of their bits,
+`supported.storage`. `float64` is the [codec](#codecs) that encodes them. BDDSets work
+with the normal set operations, and are also sequences of their values, in the order of
+their bits.
+
+bitpattern uses a data structure called a Binary Decision Diagram to encode
+extremely large sets. Whereas set operations are typically described in terms
+of the size of the set, bitpattern sets support most operations in O(#bits) of
+the _largest member_ of the set. #bits is called the `width` of the set.
 
 This becomes particularly useful for use cases like [hypothesis](https://hypothesis.works/).
 
@@ -106,6 +59,37 @@ from bitpattern.strategies import from_set
 
 @given(from_set(float64.finite - float64.subnormal))
 def test_kernel_matches_reference(x: float): ...
+```
+
+## Patterns
+
+The pattern syntax follows normal glob rules. Patterns are expressed as quartets of 4
+bits separated by `.`, most significant to least significant, with 0 and 1 representing
+a fixed bit, ? can be either, and * is shorthand for multiple ?. The leading quartet can
+be shorter, for widths that aren't a multiple of 4.
+
+Patterns are sets, and work with normal set operations.
+
+```python
+>>> from bitpattern import Pattern
+>>> Pattern("*1.0000")
+Pattern('???1.0000')
+>>> Pattern("0000") | Pattern("0001")
+Pattern('000?')
+>>> ~Pattern("00??")
+Pattern('01??') | Pattern('1???')
+
+```
+
+Codecs take patterns too, which match the bits of their encoding. A float64 is a sign
+bit, 11 exponent bits and 52 mantissa bits, and quiet NaNs have every exponent bit and
+the top mantissa bit set:
+
+```python
+>>> quiet = float64.pattern("?111.1111.1111.1*.*.*.*.*.*.*.*.*.*.*.*.*")
+>>> quiet <= float64.nan
+True
+
 ```
 
 ## Codecs
@@ -145,7 +129,7 @@ aren't values, override `all` with the ones that are, so that `~` leaves the oth
 
 ## IntSet
 
-`IntSet` is the backing abstraction for Patterns and codecs, and is provided directly.
+`IntSet` is the backing abstraction for BDDSets and patterns, and is provided directly.
 An `IntSet` is an immutable set of
 non-negative integers below `2 ** width`. It's a `collections.abc.Set`, and also a
 `Sequence` of its members in sorted order. Slicing gives back a set.
