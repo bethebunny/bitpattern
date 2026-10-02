@@ -8,12 +8,9 @@ import operator
 import random
 from collections.abc import Iterable, Iterator, Sequence
 from collections.abc import Set as AbstractSet
-from typing import TYPE_CHECKING, Self, overload
+from typing import Self, overload
 
 from .bdd import BDD, count, iterate, less_than, nth, pin, render_count
-
-if TYPE_CHECKING:
-    from .pattern import Pattern
 
 __all__ = ["IntSet"]
 
@@ -116,12 +113,6 @@ class IntSet(AbstractSet[int], Sequence[int]):
         if width <= self.width:
             return self
         return type(self).from_bdd(self._extended(width), width)
-
-    @property
-    def pattern(self) -> Pattern:  # XXX: remove this, layering violation
-        from .pattern import Pattern  # circular: Pattern is an IntSet
-
-        return Pattern.from_bdd(self.bdd, self.width)
 
     @property
     def size(self) -> int:

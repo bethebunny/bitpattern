@@ -153,12 +153,13 @@ def test_unions_repr_as_the_expression_that_builds_them():
 
 
 def test_lots_of_branches_are_summarized():
-    pattern = (ipv4.cidr("10.0.0.0/8") - ipv4.cidr("10.1.0.0/16")).storage.pattern
+    spare = (ipv4.cidr("10.0.0.0/8") - ipv4.cidr("10.1.0.0/16")).storage
+    pattern = Pattern.from_bdd(spare.bdd, spare.width)
     assert repr(pattern) == "<Pattern: 8 branches, width=32, size=16711680>"
 
 
 def test_the_empty_pattern_is_the_complement_of_everything():
-    empty = IntSet([], width=5).pattern
+    empty = Pattern.from_bdd(BDD.REJECT, 5)
     assert repr(empty) == "~Pattern('?.????')"
     assert eval(repr(empty)) == empty and eval(repr(empty)).width == 5
 
@@ -173,7 +174,8 @@ def test_exponentially_many_branches_repr_briefly():
 
 
 def test_a_scattered_set_reprs_briefly():
-    pattern = IntSet(range(0, 2**16, 3)).pattern
+    scattered = IntSet(range(0, 2**16, 3))
+    pattern = Pattern.from_bdd(scattered.bdd, scattered.width)
     assert len(pattern.branches) > 100
     assert len(repr(pattern)) < 300
 
@@ -239,7 +241,6 @@ def test_operations_on_patterns_stay_patterns():
         pattern - [2],
         ~pattern,
         pattern.widen(8),
-        pattern.pattern,
         pattern[1:3],
     ):
         assert isinstance(result, Pattern)

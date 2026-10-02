@@ -277,7 +277,8 @@ def test_union_str_joins_the_branches():
 
 
 def test_long_unions_are_summarized():
-    pattern = (ipv4.cidr("10.0.0.0/8") - ipv4.cidr("10.1.0.0/16")).storage.pattern
+    spare = (ipv4.cidr("10.0.0.0/8") - ipv4.cidr("10.1.0.0/16")).storage
+    pattern = Pattern.from_bdd(spare.bdd, spare.width)
     assert repr(pattern) == "<Pattern: 8 branches, width=32, size=16711680>"
 
 
@@ -286,7 +287,7 @@ def test_branches_rebuild_every_subset(width):
     """Every subset of a small universe, written out as branches and read back."""
     for mask in range(1 << (1 << width)):
         members = {v for v in range(1 << width) if mask >> v & 1}
-        pattern = IntSet(members, width=width).pattern
+        pattern = Pattern.from_bdd(IntSet(members, width=width).bdd, width)
         branches = [Pattern(branch) for branch in pattern.branches]
         assert all(branch.width == width for branch in branches)
         # Branches are disjoint, so their sizes add up to the whole.
@@ -323,7 +324,7 @@ def test_patterns_pickle():
     assert type(restored) is Pattern and restored == pattern
 
 
-def test_intset_pattern_round_trips():
+def test_any_intset_can_be_read_as_a_pattern():
     source = IntSet([1, 4, 9, 16, 25], width=8)
-    assert set(source.pattern) == set(source)
-    assert source.pattern == source
+    pattern = Pattern.from_bdd(source.bdd, source.width)
+    assert type(pattern) is Pattern and pattern == source
