@@ -9,15 +9,10 @@ from __future__ import annotations
 
 from typing import TypeVar, overload
 
+from hypothesis import strategies as st
+
 from .codecs import BDDSet
 from .intset import IntSet
-
-try:
-    from hypothesis import strategies as st
-except ImportError as e:
-    raise ImportError(
-        "bitpattern.strategies needs hypothesis: pip install 'bitpattern[hypothesis]'"
-    ) from e
 
 __all__ = ["from_set"]
 

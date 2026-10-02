@@ -1,8 +1,6 @@
 """Hypothesis strategies, end to end. This is what the library was built for."""
 
-import importlib
 import math
-import sys
 
 import pytest
 from hypothesis import HealthCheck, given, settings
@@ -116,10 +114,3 @@ def test_draws_from_a_cidr_block(value):
 @SETTINGS
 def test_draws_around_a_hole(value):
     assert value.packed[0] == 10 and value.packed[1] != 1
-
-
-def test_without_hypothesis_says_how_to_get_it(monkeypatch):
-    monkeypatch.setitem(sys.modules, "hypothesis", None)
-    monkeypatch.delitem(sys.modules, "bitpattern.strategies")
-    with pytest.raises(ImportError, match=r"bitpattern\[hypothesis\]"):
-        importlib.import_module("bitpattern.strategies")
