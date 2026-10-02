@@ -10,7 +10,7 @@ from collections.abc import Iterable, Iterator, Sequence
 from collections.abc import Set as AbstractSet
 from typing import Self, overload
 
-from .bdd import BDD, count, iterate, less_than, nth, pin, render_count
+from .bdd import BDD, accepts, count, iterate, less_than, nth, pin, render_count
 
 __all__ = ["IntSet"]
 
@@ -128,10 +128,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
     def __contains__(self, value: object) -> bool:
         if not isinstance(value, int) or value < 0 or value.bit_length() > self.width:
             return False
-        node = self.bdd  # XXX: if things like `iterate` are free functions in BDD, contains probably can be too.
-        while node.bit >= 0:
-            node = node.right if value >> node.bit & 1 else node.left
-        return bool(node)
+        return accepts(self.bdd, value)
 
     def __iter__(self) -> Iterator[int]:
         return iterate(self.bdd, self.width)

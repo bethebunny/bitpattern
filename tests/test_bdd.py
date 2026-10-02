@@ -7,6 +7,7 @@ import pytest
 
 from bitpattern.bdd import (
     BDD,
+    accepts,
     cofactors,
     count,
     iterate,
@@ -209,6 +210,7 @@ def test_free_high_bits_multiply_the_count():
     assert count(evens, 1) == 1
     assert count(evens, 4) == 8
     assert list(iterate(evens, 4)) == [0, 2, 4, 6, 8, 10, 12, 14]
+    assert accepts(evens, 2**100) and not accepts(evens, 2**100 + 1)
 
 
 def test_nth_agrees_with_iterate():
@@ -236,9 +238,10 @@ def test_width_must_cover_the_diagram():
 
 @pytest.mark.parametrize("mask", MASKS)
 def test_matches_the_subset_it_was_built_from(mask):
-    members = sorted(subset(mask))
-    assert list(iterate(diagram(mask), WIDTH)) == members
-    assert count(diagram(mask), WIDTH) == len(members)
+    node, members = diagram(mask), sorted(subset(mask))
+    assert list(iterate(node, WIDTH)) == members
+    assert count(node, WIDTH) == len(members)
+    assert [value for value in UNIVERSE if accepts(node, value)] == members
 
 
 @pytest.mark.parametrize(

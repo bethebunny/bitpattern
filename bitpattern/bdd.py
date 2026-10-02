@@ -169,6 +169,13 @@ def cofactors(node: BDD, bit: int) -> tuple[BDD, BDD]:
     return (node.left, node.right) if node.bit == bit else (node, node)
 
 
+def accepts(node: BDD, value: int) -> bool:
+    """Whether `value` satisfies `node`. Bits `node` doesn't test are free."""
+    while not node.leaf:
+        node = node.right if value >> node.bit & 1 else node.left
+    return node is BDD.ACCEPT
+
+
 @weak_cache
 def size(node: BDD) -> int:
     """How many integers below `2 ** (node.bit + 1)` satisfy `node`."""
