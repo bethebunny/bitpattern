@@ -121,12 +121,16 @@ class BDD:
             vars(node).update(bit=bit, left=left, right=right)
         return node
 
+    @property
+    def leaf(self) -> bool:
+        return self.bit == -1
+
     def __bool__(self) -> bool:
         return self is not BDD.REJECT
 
     @weak_cache
     def __invert__(self) -> BDD:
-        if self.bit < 0:
+        if self.leaf:
             return BDD.REJECT if self else BDD.ACCEPT
         return BDD(self.bit, ~self.left, ~self.right)
 
@@ -170,12 +174,12 @@ class BDD:
     # Leaves unpickle by name, and nodes through the constructor so they get
     # re-interned.
     def __reduce__(self) -> str | tuple[type[BDD], tuple[int, BDD, BDD]]:
-        if self.bit < 0:
+        if self.leaf:
             return repr(self)
         return BDD, (self.bit, self.left, self.right)
 
     def __repr__(self) -> str:
-        if self.bit < 0:
+        if self.leaf:
             return "BDD.ACCEPT" if self else "BDD.REJECT"
         members = render_count(size(self))
         return f"<BDD bit={self.bit}, {node_count(self)} nodes, {members} members>"
@@ -198,7 +202,7 @@ def cofactors(node: BDD, bit: int) -> tuple[BDD, BDD]:
 @weak_cache
 def size(node: BDD) -> int:
     """How many integers below `2 ** (node.bit + 1)` satisfy `node`."""
-    if node.bit < 0:
+    if node.leaf:
         return int(node is BDD.ACCEPT)
     return count(node.left, node.bit) + count(node.right, node.bit)
 
@@ -219,7 +223,7 @@ def nth(node: BDD, width: int, n: int) -> int:
 
 
 def _nth(node: BDD, n: int) -> int:
-    if node.bit < 0:
+    if node.leaf:
         return n  # every bit below is free, so the nth member is n
     # Free bits above the node are the high bits of the result, so they vary slowest.
     free, n = divmod(n, size(node))
@@ -247,7 +251,7 @@ def node_count(node: BDD) -> int:
     seen: set[BDD] = set()
     stack = [node]
     while stack:
-        if (current := stack.pop()).bit >= 0 and current not in seen:
+        if not (current := stack.pop()).leaf and current not in seen:
             seen.add(current)
             stack += current.left, current.right
     return len(seen)
