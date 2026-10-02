@@ -1,9 +1,22 @@
 # bitpattern
 
-Sets of integers, described by their bits and backed by binary decision diagrams.
+> [!NOTE]
+> ```bash
+> pip install bitpattern
+> pip install 'bitpattern[hypothesis]'  # with the hypothesis strategies
+> ```
 
-A pattern is groups of 4 bits, most significant first. `?` is a free bit, and `*`
-frees the rest of its group:
+bitpattern is a library for efficiently describing and working with very large
+sets of structured data. It allows
+- expressing structured bit patterns via a glob-like syntax
+- composing these pattern sets via normal set operations
+- very efficient sampling and counting of sets much larger than would
+  ordinarily fit in memory
+
+bitpattern uses a data structure called a Binary Decision Diagram to encode
+extremely large sets. Whereas set operations are typically described in terms
+of the size of the set, bitpattern sets support most operations in O(#bits) of
+the _largest member_ of the set. #bits is called the `width` of the set.
 
 ```python
 >>> from bitpattern import Pattern
@@ -14,76 +27,89 @@ Pattern('???1.????.????.0000.1111.?01?')
 (24, 8192)
 >>> p[0], p[-1]
 (1048818, 16773371)
+>>> 0x1230FA in p
+True
+>>> import random
+>>> random.sample(p, 3)
+[13799675, 14393594, 1724667]
 
 ```
 
-That's 8192 integers in 11 nodes, one for each bit that's pinned to 0 or 1. Free
-bits don't cost anything. Checking membership, counting and indexing all work on
-the diagram, so they never have to enumerate the members.
+The pattern syntax follows normal glob rules. Patterns are expressed as quartets
+of 4 bits, most significant to least significant, with 0 and 1 representing a fixed
+bit, ? can be either, and * is shorthand for multiple ?.
 
-## Use `size`, not `len`
+Patterns are sets, and work with normal set operations.
 
-`len()` has to fit in a `Py_ssize_t`, and these sets often don't. `.size` always
-works, and so does everything else on a set, eg. indexing, slicing and `choice()`.
-Things that call `len()` themselves, like `random.sample`, only work while it fits.
+```python
+>>> Pattern("0000") | Pattern("0001")
+Pattern('000?')
+>>> ~Pattern("00??")
+Pattern('01??') | Pattern('1???')
+>>> Pattern("0???") & Pattern("??00")
+Pattern('0?00')
+>>> Pattern("0???") - Pattern("00??")
+Pattern('01??')
+>>> Pattern("000?") <= Pattern("00??")
+True
+
+```
+
+## Patterns for sets of structured data
+
+Patterns start to really shine when expressing structured sets. Consider for example
+64 bit floats. How many finite normal floats are there? Can we sample them directly?
+These sets are huge and noncontiguous, so you can't express them in traditional data structures.
+
+bitpattern allows equipping a bit pattern set with a structured type via a Codec
+that encodes/decodes. This allows them to be used directly with structured types like floats.
 
 ```python
 >>> from bitpattern.codecs import float64
->>> float64.finite.size
-18437736874454810624
->>> len(float64.finite)
-Traceback (most recent call last):
-  ...
-OverflowError: cannot fit 'int' into an index-sized integer
-
-```
-
-## Sets
-
-`IntSet` is an immutable, hashable `collections.abc.Set`. It's also a `Sequence`
-of its members in order, so it can be indexed and sliced, and slicing gives back a
-set:
-
-```python
->>> from bitpattern import IntSet
->>> s = IntSet.range(3, 17)
->>> s
-IntSet([3, 4, 5, 6, ..., 15, 16], size=14, width=5)
->>> IntSet([1, 2]) <= IntSet([1, 2, 3])
+>>> supported = float64.finite - float64.subnormal
+>>> supported.size
+18428729675200069634
+>>> list(supported[:5])
+[0.0, 2.2250738585072014e-308, 2.225073858507202e-308, 2.2250738585072024e-308, 2.225073858507203e-308]
+>>> nans = float64.pattern("?111.1111.1111.0*.*.*.*.*.*.*.*.*.*.*.*.*")
+>>> 0.25 in supported
 True
->>> s[2], s.index(10)
-(5, 7)
->>> s[2:5]
-IntSet([5, 6, 7], width=5)
+>>> 0.25 in nans
+False
+>>> supported.choice()
+-7.966640143021799e+266
 
 ```
 
-Ranges cost one node per bit, however many integers are in them.
-`IntSet.range(10**15, 10**18, width=64)` is 90 nodes.
+These are `BDDSet`s, which are sets of values backed by the `IntSet` of their bits,
+eg. `supported.bits`.
 
-## Floats
+This becomes particularly useful for use cases like [hypothesis](https://hypothesis.works/).
 
-IEEE 754 floats are sign and magnitude, so non-negative floats sort in the same
-order as their bits. That makes index 0 the natural minimal example:
+Hypothesis really likes you to express and sample from the _true domain_ of your
+input data. Rejection sampling (in hypothesis literally sampling from the whole
+range and then calling `reject` on inputs that don't match your criteria) frequently
+eliminates too much data. By default hypothesis will fail tests that reject
+more than ~80% of inputs, but for instance subnormals are well under 1% of floats, so
+this isn't practical.
+
+`bitpattern.strategies` turns these sets into hypothesis strategies:
 
 ```python
->>> reals = float64.positive - float64.infinities
->>> reals.size
-9218868437227405311
->>> float64.decode(float64.range(1.0, 2.0)[0])
-1.0
->>> positives = float64.finite & float64.sign_clear
->>> float64.decode(positives[0]), float64.decode(positives[1])
-(0.0, 5e-324)
+from hypothesis import given
 
+from bitpattern.codecs import float64
+from bitpattern.strategies import from_set
+
+
+@given(from_set(float64.finite - float64.subnormal))
+def test_kernel_matches_reference(x: float): ...
 ```
-
-The named sets are `positive`, `negative`, `nonnegative`, `zeros`, `subnormal`,
-`infinities`, `nan` and `finite`, plus `sign_clear` and `sign_set`, which split
-every bit pattern in half by its sign bit. NaNs have a sign bit, but they aren't
-positive or negative, so a NaN can be in `sign_clear` but never in `positive`.
 
 ## IP addresses
+
+`bitpattern.codecs` also has `ipv4` and `ipv6`, and `networks()` finds the fewest CIDR
+blocks that make up a set of addresses.
 
 ```python
 >>> from bitpattern.codecs import ipv4
@@ -93,74 +119,63 @@ positive or negative, so a NaN can be in `sign_clear` but never in `positive`.
 
 ```
 
-`networks` reads the fewest CIDR blocks that make up a set straight off the
-diagram, so route aggregation comes for free. `ipv6` works the same way, with 128
-bits.
+## IntSet
 
-## Hypothesis
+`IntSet` is the backing abstraction for Patterns and codecs, and is provided directly.
+An `IntSet` is an immutable set of
+non-negative integers below `2 ** width`. It's a `collections.abc.Set`, and also a
+`Sequence` of its members in sorted order. Slicing gives back a set.
 
-```bash
-pip install 'bitpattern[hypothesis]'
-```
+An `IntSet` is a reduced, ordered binary decision diagram, or BDD ([Bryant, 1986]).
+The BDD abstraction is also provided in `bitpattern.bdd`.
+
 
 ```python
-from hypothesis import given
-
-from bitpattern.codecs import float64
-from bitpattern.strategies import from_codec
-
-
-@given(from_codec(float64, float64.finite))
-def test_round_trips(value: float): ...
-```
-
-Values are drawn by index, so drawing from `2**63` floats is just as cheap as
-drawing from 3, and shrinking the index shrinks the float.
-
-## Writing sets as patterns
-
-Any set can be written out as a pattern:
-
-```python
->>> len(spare.pattern.branches)
-8
->>> spare.pattern.branches[0]
-'0000.1010.0000.0000.????.????.????.????'
+>>> from bitpattern import IntSet
+>>> s = IntSet.range(3, 17)
+>>> s
+IntSet([3, 4, 5, 6, ..., 15, 16], size=14, width=5)
+>>> s[2], s.index(10), s[2:5]
+(5, 7, IntSet([5, 6, 7], width=5))
+>>> s & IntSet([1, 2, 3, 4])
+IntSet([3, 4], width=5)
+>>> ~IntSet([1, 3], width=2)
+IntSet([0, 2], width=2)
 
 ```
 
-A pattern only spells out a single branch. Unions are Python, and that's how they
-print, as the expression that builds them:
+> [!WARNING]
+> Python isn't really designed for data structures larger than memory.
+> In particular many operations will fail if `__len__` returns a number >= 2**63.
+> When working with very large sets:
+>
+> - Use `myset.size` instead of `len(myset)`
+> - Use `myset.choice()` instead of `random.choice(myset)` or `random.sample(myset, k)`
+> - Use `myset[0]` and `myset[-1]` instead of `min(myset)` and `max(myset)`, which
+>   look at every member
+> - Use `bitpattern.strategies` instead of hypothesis's `sampled_from(myset)`
 
-```python
->>> Pattern("0000") | Pattern("0001")
-Pattern('000?')
->>> ~Pattern("00??")
-Pattern('01??') | Pattern('1???')
+Here's how `IntSet` compares to other ways of storing a set. `n` and `m` are set
+sizes, `w` is the width (number of bits of the largest member), and `|a|` is the number of nodes in `a`'s diagram.
+`|a|` is at most `n * w`, and is usually much smaller. Notably, any set that is expressible
+via the Pattern language has `|a| <= 2w`. For most use cases `w` is a constant and may be read as `O(1)`.
 
-```
+| | sorted `list` | `set` | balanced tree | `IntSet` |
+| --- | --- | --- | --- | --- |
+| `x in a` | O(log n) | O(1) | O(log n) | O(w) |
+| `a[i]` | O(1) | n/a | O(log n) | O(w) |
+| `len(a)` | O(1) | O(1) | O(1) | O(1) |
+| `a \| b`, `a & b`, `a - b` | O(n + m) | O(n + m) | O(n + m) | O(\|a\| · \|b\|) |
+| `~a` | O(2<sup>w</sup>) | O(2<sup>w</sup>) | O(2<sup>w</sup>) | O(\|a\|) |
+| slice `a[i:j]` | O(j - i) | n/a | O(log n + j - i) | O(w) |
+| `a == b` | O(n) | O(n) | O(n) | O(1) |
+| `hash(a)` | O(n) | O(n) | O(n) | O(w) |
+| random member | O(1) | O(n) | O(log n) | O(w) |
+| memory | O(n) | O(n) | O(n) | O(\|a\|) |
 
-Branches come from the diagram rather than the text, so patterns are canonical:
-`Pattern("0000") | Pattern("0001")` _is_ `Pattern("000?")`, and prints that way.
+`a == b` is O(1) between sets of the same width, and O(w) between different widths.
 
-A `Pattern` is an `IntSet` that also knows how to write itself down, so the two
-mix freely, and operations on a pattern give back a pattern:
+[Bryant, 1986]: https://doi.org/10.1109/TC.1986.1676819
 
-```python
->>> isinstance(Pattern("00??"), IntSet)
-True
->>> Pattern("00??") == IntSet([0, 1, 2, 3], 4)
-True
-
-```
-
-## Layout
-
-| module | what's in it |
-| --- | --- |
-| `bitpattern` | `IntSet`, `Pattern` |
-| `bitpattern.codecs` | `float16`, `float32`, `float64`, `ipv4`, `ipv6`, `Codec` |
-| `bitpattern.strategies` | `from_intset`, `from_codec` |
-| `bitpattern.bdd` | `BDD`, the diagrams themselves, if you want to build on them |
-
-MIT licensed. Needs Python 3.11+.
+R. E. Bryant. Graph-Based Algorithms for Boolean Function Manipulation. _IEEE
+Transactions on Computers_, 35(8):677–691, 1986.

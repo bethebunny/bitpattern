@@ -1,6 +1,7 @@
 """The public names, reprs, and the README."""
 
 import doctest
+import random
 from pathlib import Path
 
 import pytest
@@ -19,7 +20,7 @@ class TextConstructed(IntSet):
     __slots__ = ()
 
     def __init__(self, text: str) -> None:
-        super().__init__([1, 2], 4)
+        super().__init__([1, 2], width=4)
 
 
 def test_top_level_is_just_the_sets():
@@ -28,7 +29,7 @@ def test_top_level_is_just_the_sets():
 
 @pytest.mark.parametrize(
     "name",
-    ["BDD", "Codec", "float64", "ipv4"],
+    ["BDD", "BDDSet", "Codec", "float64", "ipv4"],
 )
 def test_engine_and_codecs_arent_top_level(name):
     assert not hasattr(bitpattern, name)
@@ -47,6 +48,7 @@ def test_is_typed():
 
 
 def test_readme_examples_run():
+    random.seed(0)  # the README draws random members
     failures, attempted = doctest.testfile(
         str(README),
         module_relative=False,
@@ -83,13 +85,13 @@ def test_render_count():
 
 
 def test_small_intset_reprs_round_trip():
-    for group in (IntSet(), IntSet([1, 3, 8], 4), IntSet(range(10), 4)):
+    for group in (IntSet(), IntSet([1, 3, 8], width=4), IntSet(range(10), width=4)):
         assert eval(repr(group)) == group
         assert eval(repr(group)).width == group.width
 
 
 def test_empty_intset_repr():
-    assert repr(IntSet([], 8)) == "IntSet([], width=8)"
+    assert repr(IntSet([], width=8)) == "IntSet([], width=8)"
 
 
 def test_big_intset_reprs_are_truncated():
@@ -104,7 +106,7 @@ def test_sets_len_cant_measure_repr_briefly(name):
 
 def test_float64_nan_repr():
     text = repr(float64.nan)
-    assert "size=9007199254740990" in text and "width=64" in text
+    assert text.startswith("BDDSet(float64, [nan, ") and "size=9007199254740990" in text
 
 
 def test_reprs_show_powers_of_two_readably():
@@ -131,12 +133,12 @@ def test_unions_repr_as_the_expression_that_builds_them():
 
 
 def test_lots_of_branches_are_summarized():
-    pattern = (ipv4.cidr("10.0.0.0/8") - ipv4.cidr("10.1.0.0/16")).pattern
+    pattern = (ipv4.cidr("10.0.0.0/8") - ipv4.cidr("10.1.0.0/16")).bits.pattern
     assert repr(pattern) == "<Pattern: 8 branches, width=32, size=16711680>"
 
 
 def test_the_empty_pattern_is_the_complement_of_everything():
-    empty = IntSet([], 5).pattern
+    empty = IntSet([], width=5).pattern
     assert repr(empty) == "~Pattern('?.????')"
     assert eval(repr(empty)) == empty and eval(repr(empty)).width == 5
 
@@ -194,7 +196,7 @@ def test_results_keep_the_subclass():
         group[:1],
     ):
         assert type(result) is TextConstructed
-    assert sorted(group ^ IntSet([2, 3], 4)) == [1, 3]
+    assert sorted(group ^ IntSet([2, 3], width=4)) == [1, 3]
 
 
 def test_pattern_is_an_intset():
@@ -228,10 +230,10 @@ def test_widening_keeps_a_readable_spelling():
 
 
 def test_patterns_compare_and_hash_with_intsets():
-    assert Pattern("00??") == IntSet([0, 1, 2, 3], 4)
-    assert hash(Pattern("00??")) == hash(IntSet([0, 1, 2, 3], 4))
+    assert Pattern("00??") == IntSet([0, 1, 2, 3], width=4)
+    assert hash(Pattern("00??")) == hash(IntSet([0, 1, 2, 3], width=4))
     table: dict[IntSet, str] = {Pattern("00??"): "a"}
-    assert table[IntSet([0, 1, 2, 3], 4)] == "a"
+    assert table[IntSet([0, 1, 2, 3], width=4)] == "a"
 
 
 def test_patterns_have_no_instance_dict():

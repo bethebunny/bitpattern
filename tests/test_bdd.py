@@ -31,7 +31,7 @@ def subset(mask):
 
 
 def diagram(mask):
-    return IntSet(subset(mask), WIDTH).bdd
+    return IntSet(subset(mask), width=WIDTH).bdd
 
 
 def parity(width):
@@ -75,7 +75,7 @@ def test_structural_equality_is_identity():
 
 
 def test_equal_sets_share_one_diagram():
-    assert IntSet([1, 2, 3], WIDTH).bdd is IntSet([3, 2, 1, 3], WIDTH).bdd
+    assert IntSet([1, 2, 3], width=WIDTH).bdd is IntSet([3, 2, 1, 3], width=WIDTH).bdd
 
 
 def test_identical_branches_collapse():

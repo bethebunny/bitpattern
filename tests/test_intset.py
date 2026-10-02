@@ -26,7 +26,7 @@ def subset(mask):
 
 
 SUBSETS = [subset(mask) for mask in MASKS]
-SETS = [IntSet(members, WIDTH) for members in SUBSETS]
+SETS = [IntSet(members, width=WIDTH) for members in SUBSETS]
 NODES = [group.bdd for group in SETS]
 
 VALUES = st.integers(min_value=0, max_value=(1 << 16) - 1)
@@ -129,7 +129,7 @@ def test_indexing_matches_sorted_order(members):
 @pytest.mark.parametrize("members", [set(), {0}, {1}, {0, 1}, {0, 3}, {2, 3}])
 def test_widening_keeps_the_members(narrow, wide, members):
     members = {value for value in members if value.bit_length() <= narrow}
-    group = IntSet(members, narrow).widen(wide)
+    group = IntSet(members, width=narrow).widen(wide)
     assert group.width == wide
     check(group, members)
 
@@ -145,7 +145,7 @@ def test_widening_keeps_the_members_at_larger_widths(members, width):
 
 def test_widening_doesnt_add_members():
     """`{0}` at width 1 is "bit 0 is clear", ie. every even number."""
-    assert list(IntSet([0], 1).widen(4)) == [0]
+    assert list(IntSet([0], width=1).widen(4)) == [0]
 
 
 @pytest.mark.parametrize("left_width", [0, 1, 2, 3, 5])
@@ -153,9 +153,9 @@ def test_widening_doesnt_add_members():
 def test_operators_across_widths(left_width, right_width):
     width = max(left_width, right_width)
     for left in samples(left_width):
-        a = IntSet(left, left_width)
+        a = IntSet(left, width=left_width)
         for right in samples(right_width):
-            b = IntSet(right, right_width)
+            b = IntSet(right, width=right_width)
             for got, want in [
                 (a & b, left & right),
                 (a | b, left | right),
@@ -172,7 +172,7 @@ def test_has_no_mutators():
 
 
 def test_widen_returns_a_new_set():
-    group = IntSet([1], 2)
+    group = IntSet([1], width=2)
     wider = group.widen(8)
     assert wider is not group
     assert (group.width, wider.width) == (2, 8)
@@ -180,12 +180,12 @@ def test_widen_returns_a_new_set():
 
 
 def test_widen_does_nothing_if_already_wide_enough():
-    group = IntSet([1], 8)
+    group = IntSet([1], width=8)
     assert group.widen(4) is group
 
 
 def test_in_place_operators_rebind():
-    group = IntSet([1, 2], 4)
+    group = IntSet([1, 2], width=4)
     other = group
     group |= [9]
     assert sorted(group) == [1, 2, 9]
@@ -198,15 +198,15 @@ def test_rejects_negatives():
 
 
 def test_only_non_negative_ints_are_members():
-    assert -1 not in IntSet([1], 4)
-    assert "1" not in IntSet([1], 4)
-    assert None not in IntSet([1], 4)
+    assert -1 not in IntSet([1], width=4)
+    assert "1" not in IntSet([1], width=4)
+    assert None not in IntSet([1], width=4)
 
 
 @pytest.mark.parametrize("mask", MASKS)
 def test_equal_sets_hash_equally_across_widths(mask):
     """Equality is by members, so hashing has to ignore the width."""
-    forms = [IntSet(SUBSETS[mask], width) for width in range(3, 10)]
+    forms = [IntSet(SUBSETS[mask], width=width) for width in range(3, 10)]
     assert len({hash(form) for form in forms}) == 1
     assert all(form == forms[0] for form in forms)
 
@@ -223,9 +223,9 @@ def test_distinct_sets_hash_apart():
 
 
 def test_usable_as_dict_keys():
-    table = {IntSet([1], 1): "a", IntSet([1, 2], 4): "b"}
-    assert table[IntSet([1], 8)] == "a"
-    assert table[IntSet([1, 2], 2)] == "b"
+    table = {IntSet([1], width=1): "a", IntSet([1, 2], width=4): "b"}
+    assert table[IntSet([1], width=8)] == "a"
+    assert table[IntSet([1, 2], width=2)] == "b"
 
 
 def test_empty_and_zero_hash_apart():
@@ -260,14 +260,14 @@ def test_zero_width_holds_only_zero():
 
 
 def test_operators_take_any_iterable():
-    group = IntSet([1, 2, 3], 2)
+    group = IntSet([1, 2, 3], width=2)
     assert set(group & [2, 3, 9]) == {2, 3}
     assert set(group | iter([9])) == {1, 2, 3, 9}
     assert set(group - (2, 3)) == {1}
 
 
 def test_repr_lists_members_in_order():
-    assert repr(IntSet([3, 1], 2)) == "IntSet([1, 3], width=2)"
+    assert repr(IntSet([3, 1], width=2)) == "IntSet([1, 3], width=2)"
 
 
 @pytest.mark.parametrize("width", range(8))
@@ -281,7 +281,7 @@ def test_less_than_agrees_with_builtin(width):
 def test_range_agrees_with_builtin(width):
     for start in range(1 << width):
         for stop in range(1 << width):
-            got = IntSet.range(start, stop, width)
+            got = IntSet.range(start, stop, width=width)
             assert list(got) == list(range(start, max(start, stop)))
             assert got.width == width
 
@@ -310,7 +310,7 @@ def test_range_rejects_a_negative_start():
 
 
 def test_size_agrees_with_len_when_it_fits():
-    group = IntSet([1, 2, 3], 8)
+    group = IntSet([1, 2, 3], width=8)
     assert group.size == len(group) == 3
 
 
@@ -340,30 +340,30 @@ def test_complement_agrees_with_builtin_set(mask):
 
 
 def test_complement_is_an_involution():
-    group = IntSet([1, 5], 4)
+    group = IntSet([1, 5], width=4)
     assert ~~group == group
     assert (group | ~group).bdd is BDD.ACCEPT
     assert (group & ~group).bdd is BDD.REJECT
 
 
 def test_complement_respects_the_width():
-    assert list(~IntSet([1], 2)) == [0, 2, 3]
-    assert list(~IntSet([1], 3)) == [0, 2, 3, 4, 5, 6, 7]
+    assert list(~IntSet([1], width=2)) == [0, 2, 3]
+    assert list(~IntSet([1], width=3)) == [0, 2, 3, 4, 5, 6, 7]
 
 
 def test_choice_is_always_a_member():
-    group = IntSet([3, 99, 12345], 16)
+    group = IntSet([3, 99, 12345], width=16)
     for seed in range(100):
-        assert group.choice(random.Random(seed)) in group
+        assert group.choice(rng=random.Random(seed)) in group
 
 
 def test_choice_reaches_every_member():
-    group = IntSet([3, 99, 12345], 16)
-    assert {group.choice(random.Random(seed)) for seed in range(60)} == set(group)
+    group = IntSet([3, 99, 12345], width=16)
+    assert {group.choice(rng=random.Random(seed)) for seed in range(60)} == set(group)
 
 
 def test_choice_works_where_len_overflows():
-    assert HUGE.choice(random.Random(0)) < 2**64
+    assert HUGE.choice(rng=random.Random(0)) < 2**64
     with pytest.raises(OverflowError):
         random.Random(0).choice(HUGE)
 
@@ -419,7 +419,7 @@ def test_slicing_agrees_with_list_slicing_at_larger_widths(members, start, stop,
 
 
 def test_slices_keep_the_type_and_width():
-    assert IntSet([1, 2, 3], 8)[1:].width == 8
+    assert IntSet([1, 2, 3], width=8)[1:].width == 8
     assert type(Pattern("00??")[1:3]) is Pattern
     assert Pattern("00??")[1:3] == IntSet([1, 2])
 
@@ -483,9 +483,9 @@ def test_comparisons_agree_with_builtin_set_at_larger_widths(left, right):
 
 
 def test_comparisons_across_widths():
-    assert IntSet([1], 1) <= IntSet([1, 3], 2)
-    assert not IntSet([1, 3], 2) <= IntSet([1], 1)
-    assert IntSet([1], 1).isdisjoint(IntSet([2, 3], 2))
+    assert IntSet([1], width=1) <= IntSet([1, 3], width=2)
+    assert not IntSet([1, 3], width=2) <= IntSet([1], width=1)
+    assert IntSet([1], width=1).isdisjoint(IntSet([2, 3], width=2))
 
 
 def test_is_an_immutable_set_and_sequence():
@@ -497,21 +497,21 @@ def test_is_an_immutable_set_and_sequence():
 
 def test_only_compares_with_intsets():
     """Being equal to a frozenset would mean hashing like one."""
-    assert IntSet([1, 2], 4) != frozenset({1, 2})
-    assert frozenset({1, 2}) != IntSet([1, 2], 4)
+    assert IntSet([1, 2], width=4) != frozenset({1, 2})
+    assert frozenset({1, 2}) != IntSet([1, 2], width=4)
     for compare in (operator.le, operator.lt, operator.ge, operator.gt):
         with pytest.raises(TypeError):
-            compare(IntSet([1, 2], 4), {1, 2})
+            compare(IntSet([1, 2], width=4), {1, 2})
 
 
 def test_equal_objects_hash_equally():
     values = [
-        IntSet([1, 2], 4),
-        IntSet([1, 2], 8),
+        IntSet([1, 2], width=4),
+        IntSet([1, 2], width=8),
         Pattern("00?1"),
         frozenset({1, 2}),
         frozenset({1, 3}),
-        IntSet([1, 3], 2),
+        IntSet([1, 3], width=2),
     ]
     for a in values:
         for b in values:
@@ -520,12 +520,12 @@ def test_equal_objects_hash_equally():
 
 
 def test_antisymmetry():
-    a, b = IntSet([1, 2], 2), IntSet([1, 2], 8)
+    a, b = IntSet([1, 2], width=2), IntSet([1, 2], width=8)
     assert a <= b <= a and a == b
 
 
 def test_in_place_operators():
-    group = IntSet([1, 2], 4)
+    group = IntSet([1, 2], width=4)
     group |= [9]
     assert sorted(group) == [1, 2, 9]
     group -= [1]
@@ -538,9 +538,9 @@ def test_in_place_operators():
 def test_refuses_non_iterables(other):
     for operate in (operator.and_, operator.le, operator.sub):
         with pytest.raises(TypeError):
-            operate(IntSet([1], 2), other)
+            operate(IntSet([1], width=2), other)
         with pytest.raises(TypeError):
-            operate(other, IntSet([1], 2))
+            operate(other, IntSet([1], width=2))
 
 
 def test_reflected_operators_are_overridden():
@@ -550,7 +550,7 @@ def test_reflected_operators_are_overridden():
 
 @pytest.mark.parametrize("left, right", [({1, 2}, [2, 3]), ([0, 7], {7}), (set(), [5])])
 def test_reflected_operators_agree_with_builtin_set(left, right):
-    group = IntSet(right, 4)
+    group = IntSet(right, width=4)
     assert set(left & group) == set(left) & set(right)
     assert set(left | group) == set(left) | set(right)
     assert set(left - group) == set(left) - set(right)
@@ -571,7 +571,7 @@ def test_reflected_operators_dont_enumerate():
 
 def test_empty_is_false():
     assert not IntSet()
-    assert not IntSet([], 64)
+    assert not IntSet([], width=64)
     assert IntSet([0])
 
 
@@ -580,7 +580,7 @@ def test_truth_doesnt_use_len():
     assert HUGE
 
 
-@pytest.mark.parametrize("group", [IntSet(), IntSet([1, 2], 4), HUGE])
+@pytest.mark.parametrize("group", [IntSet(), IntSet([1, 2], width=4), HUGE])
 def test_pickling_and_copying_round_trip(group):
     for restored in (
         pickle.loads(pickle.dumps(group)),

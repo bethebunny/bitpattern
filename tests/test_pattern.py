@@ -277,7 +277,7 @@ def test_union_str_joins_the_branches():
 
 
 def test_long_unions_are_summarized():
-    pattern = (ipv4.cidr("10.0.0.0/8") - ipv4.cidr("10.1.0.0/16")).pattern
+    pattern = (ipv4.cidr("10.0.0.0/8") - ipv4.cidr("10.1.0.0/16")).bits.pattern
     assert repr(pattern) == "<Pattern: 8 branches, width=32, size=16711680>"
 
 
@@ -286,12 +286,14 @@ def test_branches_rebuild_every_subset(width):
     """Every subset of a small universe, written out as branches and read back."""
     for mask in range(1 << (1 << width)):
         members = {v for v in range(1 << width) if mask >> v & 1}
-        pattern = IntSet(members, width).pattern
+        pattern = IntSet(members, width=width).pattern
         branches = [Pattern(branch) for branch in pattern.branches]
         assert all(branch.width == width for branch in branches)
         # Branches are disjoint, so their sizes add up to the whole.
         assert sum(branch.size for branch in branches) == len(members)
-        assert functools.reduce(operator.or_, branches, IntSet([], width)) == pattern
+        assert (
+            functools.reduce(operator.or_, branches, IntSet([], width=width)) == pattern
+        )
 
 
 def test_free_bits_dont_branch():
@@ -322,6 +324,6 @@ def test_patterns_pickle():
 
 
 def test_intset_pattern_round_trips():
-    source = IntSet([1, 4, 9, 16, 25], 8)
+    source = IntSet([1, 4, 9, 16, 25], width=8)
     assert set(source.pattern) == set(source)
     assert source.pattern == source

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import functools
 import weakref
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, MutableMapping
 from dataclasses import dataclass
 from typing import ClassVar, TypeVar, TypeVarTuple, final
 
@@ -12,15 +12,11 @@ __all__ = ["BDD"]
 
 T = TypeVar("T")
 Ts = TypeVarTuple("Ts")
+InternKey = tuple[int, "BDD", "BDD"]
 
 
 def weak_cache(fn: Callable[[*Ts], T]) -> Callable[[*Ts], T]:
-    """Like functools.cache, but entries only live as long as the nodes in them.
-
-    A strong cache would keep every node it had seen alive, defeating the weak
-    interning. Results are held weakly too, since eg. `a & BDD.ACCEPT` is `a`, and
-    a strong result would keep its own key alive.
-    """
+    """Like functools.cache, but entries only live as long as their arguments."""
     table = weakref.WeakKeyDictionary()
 
     @functools.wraps(fn)
@@ -44,18 +40,16 @@ def _reference(value: T) -> Callable[[], T | None]:
     return weakref.ref(value) if isinstance(value, BDD) else lambda: value
 
 
-# No __init__: BDD(...) can hand back a node that already exists, and an __init__
-# would overwrite its fields. And no subclasses, which would share BDD's interning.
 @final
 @dataclass(frozen=True, eq=False, repr=False, init=False)
 class BDD:
-    """A predicate on the bits of an integer, as a reduced, ordered decision diagram.
+    """A predicate on the bits of an integer as a reduced, ordered decision diagram.
 
-    `BDD(bit, left, right)` tests `bit`, and follows `left` if it's clear or `right`
-    if it's set. Bits that nothing tests are free. Every path ends at `BDD.ACCEPT`
-    or `BDD.REJECT`, which test nothing and are their own branches. Diagrams are
-    reduced, so `BDD(bit, x, x)` is just `x`, and interned, so equal ones are the
-    same object.
+    `BDD(bit, left, right)` is an expression on the `bit` boolean variable. It resolves
+    to `left` for inputs where the bit is 0 and `right` where it is 1.
+
+    All leaves in the tree must be `BDD.ACCEPT` or `BDD.REJECT`. BDDs are interned
+    and guaranteed to produce the same object for the same expression.
     """
 
     bit: int
@@ -64,9 +58,7 @@ class BDD:
 
     ACCEPT: ClassVar[BDD]
     REJECT: ClassVar[BDD]
-    intern: ClassVar[weakref.WeakValueDictionary[tuple[int, BDD, BDD], BDD]] = (
-        weakref.WeakValueDictionary()
-    )
+    intern: ClassVar[MutableMapping[InternKey, BDD]] = weakref.WeakValueDictionary()
 
     def __new__(cls, bit: int, left: BDD, right: BDD) -> BDD:
         if left is right:
@@ -82,7 +74,7 @@ class BDD:
         return node
 
     def __bool__(self) -> bool:
-        return self is not BDD.REJECT  # every other diagram has a path to ACCEPT
+        return self is not BDD.REJECT
 
     @weak_cache
     def __invert__(self) -> BDD:
@@ -90,8 +82,8 @@ class BDD:
             return BDD.REJECT if self else BDD.ACCEPT
         return BDD(self.bit, ~self.left, ~self.right)
 
-    # & and | turn away anything that isn't a BDD before it gets to their caches,
-    # which can only hold things that can be weakly referenced.
+    # operators are weakly cached, but need to be able to reject
+    # inputs of invalid types which can't be weakly referenced
     def __and__(self, other: BDD) -> BDD:
         if not isinstance(other, BDD):
             return NotImplemented
@@ -147,7 +139,6 @@ def _leaf() -> BDD:
     return leaf
 
 
-# The leaves test nothing, so they sit below every bit and are their own branches.
 BDD.ACCEPT, BDD.REJECT = _leaf(), _leaf()
 
 

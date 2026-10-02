@@ -1,14 +1,15 @@
-"""Hypothesis strategies that draw from IntSets. Needs `bitpattern[hypothesis]`.
+"""A hypothesis strategy that draws from IntSets and BDDSets.
 
-Members are drawn by index, so nothing gets enumerated. Index order is value
-order for non-negative floats, so shrinking the index shrinks the float too.
+Needs `pip install 'bitpattern[hypothesis]'`. Members are drawn by index, so nothing
+gets enumerated, and index order is value order for non-negative floats, so
+shrinking the index shrinks the float too.
 """
 
 from __future__ import annotations
 
-from typing import TypeVar
+from typing import TypeVar, overload
 
-from .codecs import Codec
+from .codecs import BDDSet
 from .sets import IntSet
 
 try:
@@ -18,17 +19,17 @@ except ImportError as e:
         "bitpattern.strategies needs hypothesis: pip install 'bitpattern[hypothesis]'"
     ) from e
 
-__all__ = ["from_codec", "from_intset"]
+__all__ = ["from_set"]
 
 T = TypeVar("T")
 
 
-def from_intset(source: IntSet) -> st.SearchStrategy[int]:
+@overload
+def from_set(source: BDDSet[T]) -> st.SearchStrategy[T]: ...
+@overload
+def from_set(source: IntSet) -> st.SearchStrategy[int]: ...
+def from_set(source: BDDSet[T] | IntSet) -> st.SearchStrategy[T | int]:
+    """Members of `source`. Unlike `st.sampled_from`, this never copies the set."""
     if not source:
         return st.nothing()
     return st.integers(0, source.size - 1).map(source.__getitem__)
-
-
-def from_codec(codec: Codec[T], source: IntSet | None = None) -> st.SearchStrategy[T]:
-    """Decoded members of `source`, or of every value the codec can encode."""
-    return from_intset(codec.all if source is None else source).map(codec.decode)

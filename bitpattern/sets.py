@@ -19,11 +19,11 @@ __all__ = ["IntSet"]
 
 
 class IntSet(AbstractSet[int], Sequence[int]):
-    """An immutable set of non-negative integers below `2 ** width`.
+    """A sequential, immutable set of integers in `[0, 2 ** width)`.
 
-    It's also a sequence of its members in order, so it can be indexed and sliced.
-    Free high bits don't have nodes, so a diagram can't say how wide its set is.
-    The set keeps track of that instead.
+    IntSet is backed by BDDs and can efficiently operate on very large sets.
+    XXX pull in some of the prose from the readme about caveats for large
+    data structures and len, and IntSet performance.
     """
 
     __slots__ = ("bdd", "width")
@@ -31,7 +31,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
     bdd: BDD
     width: int
 
-    def __init__(self, iterable: Iterable[int] = (), width: int = 0) -> None:
+    def __init__(self, iterable: Iterable[int] = (), *, width: int = 0) -> None:
         values = list(iterable)
         if values and (lowest := min(values)) < 0:
             raise ValueError(f"IntSets can't hold negative numbers, got {lowest}")
@@ -48,8 +48,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
         return self
 
     @classmethod
-    def range(cls, start: int, stop: int, width: int | None = None) -> Self:
-        """The integers in `range(start, stop)`, in one node per bit."""
+    def range(cls, start: int, stop: int, *, width: int | None = None) -> Self:
         if start < 0:
             raise ValueError(f"IntSets can't hold negative numbers, got {start}")
         if width is None:
@@ -65,7 +64,6 @@ class IntSet(AbstractSet[int], Sequence[int]):
         return self.bdd & less_than(1 << self.width, width)
 
     def _align(self, other: Iterable[int]) -> tuple[BDD, BDD, int]:
-        # Not type(self)(other), since Pattern's constructor takes text.
         if not isinstance(other, IntSet):
             other = IntSet(other)
         width = max(self.width, other.width)
@@ -86,7 +84,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
         return type(self).from_bdd(self._extended(width), width)
 
     @property
-    def pattern(self) -> Pattern:
+    def pattern(self) -> Pattern:  # XXX: remove this, layering violation
         from .pattern import Pattern  # circular: Pattern is an IntSet
 
         return Pattern.from_bdd(self.bdd, self.width)
@@ -100,13 +98,12 @@ class IntSet(AbstractSet[int], Sequence[int]):
         return self.size
 
     def __bool__(self) -> bool:
-        # Otherwise bool() uses len(), which can overflow.
         return bool(self.bdd)
 
     def __contains__(self, value: object) -> bool:
         if not isinstance(value, int) or value < 0 or value.bit_length() > self.width:
             return False
-        node = self.bdd
+        node = self.bdd  # XXX: if things like `iterate` are free functions in BDD, contains probably can be too.
         while node.bit >= 0:
             node = node.right if value >> node.bit & 1 else node.left
         return bool(node)
@@ -115,7 +112,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
         return iterate(self.bdd, self.width)
 
     def __reversed__(self) -> Iterator[int]:
-        # Sequence's goes through len(), which can overflow.
+        # Sequence's goes through len() which can overflow.
         return map(self.__getitem__, reversed(range(self.size)))
 
     @overload
@@ -144,7 +141,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
     def count(self, value: object) -> int:
         return int(value in self)
 
-    def choice(self, rng: random.Random | None = None) -> int:
+    def choice(self, *, rng: random.Random | None = None) -> int:
         """A uniformly random member, like random.choice() but at any size."""
         if not self:
             raise IndexError("can't choose from an empty set")
@@ -178,9 +175,8 @@ class IntSet(AbstractSet[int], Sequence[int]):
         """Everything below `2 ** width` that isn't a member."""
         return type(self).from_bdd(~self.bdd, self.width)
 
-    # Only compare with other IntSets. Being equal to a frozenset would mean hashing
-    # like one, which is O(members). The orderings follow suit, so that a <= b <= a
-    # still means a == b.
+    # Only compare with other IntSets. Being equal to eg. a frozenset would mean
+    # hashing like one, which is O(members).
     def __le__(self, other: object) -> bool:
         if not isinstance(other, IntSet):
             return NotImplemented
@@ -204,6 +200,8 @@ class IntSet(AbstractSet[int], Sequence[int]):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, IntSet):
             return NotImplemented
+        if self.width == other.width:
+            return self.bdd is other.bdd
         return self._canonical() == other._canonical()
 
     def __hash__(self) -> int:
