@@ -21,9 +21,52 @@ __all__ = ["IntSet"]
 class IntSet(AbstractSet[int], Sequence[int]):
     """A sequential, immutable set of integers in `[0, 2 ** width)`.
 
-    IntSet is backed by BDDs and can efficiently operate on very large sets.
-    XXX pull in some of the prose from the readme about caveats for large
-    data structures and len, and IntSet performance.
+    IntSet is backed by BDDs and can efficiently operate on very large sets. It's a
+    `collections.abc.Set`, and also a `Sequence` of its members in sorted order.
+    Slicing gives back a set.
+
+    >>> s = IntSet.range(3, 17)
+    >>> s
+    IntSet([3, 4, 5, 6, ..., 15, 16], size=14, width=5)
+    >>> s[2], s.index(10), s[2:5]
+    (5, 7, IntSet([5, 6, 7], width=5))
+    >>> s & IntSet([1, 2, 3, 4])
+    IntSet([3, 4], width=5)
+    >>> IntSet.range(0, 2**100, width=128).size
+    1267650600228229401496703205376
+
+    Python isn't really designed for data structures larger than memory. In
+    particular many operations will fail if `__len__` returns a number >= 2**63.
+    When working with very large sets:
+
+    - Use `s.size` instead of `len(s)`
+    - Use `s.choice()` instead of `random.choice(s)` or `random.sample(s, k)`
+    - Use `s[0]` and `s[-1]` instead of `min(s)` and `max(s)`, which look at
+      every member
+    - Use `bitpattern.strategies` instead of hypothesis's `sampled_from(s)`
+
+    Most operations are O(w) in the width, however many members there are. `&`,
+    `|`, `-` and `^` are O(|a| * |b|) in the number of nodes in each diagram, and
+    `~` is O(|a|). A diagram has at most `size * w` nodes, and usually far fewer,
+    eg. any `Pattern(text)` has at most one node per bit.
+
+    An IntSet is a diagram and a width. Its members are the integers below
+    `2 ** width` whose bits satisfy the diagram. Free bits don't need nodes, so the
+    diagram doesn't know the width. For instance `IntSet([0], width=1)` is "bit 0
+    is clear", which read at width 4 would be every even number. Sets of different
+    widths are widened to match before they're combined, which adds that bound to
+    the diagram explicitly.
+
+    The number of members under each node is cached, so `size` is a lookup, and
+    `s[i]` and `choice()` walk a single path down the diagram. At each node they
+    go left or right by comparing `i` to the left branch's count, the same way an
+    order statistic tree does.
+
+    Diagrams are canonical, so two sets of the same width are equal exactly when
+    their diagrams are the same object. Sets of different widths compare and hash
+    by trimming to the narrowest width that fits their members. IntSets are only
+    equal to other IntSets, since being equal to eg. a frozenset would mean hashing
+    like one, which looks at every member.
     """
 
     __slots__ = ("bdd", "width")

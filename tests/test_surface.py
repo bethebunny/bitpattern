@@ -1,6 +1,7 @@
 """The public names, reprs, and the README."""
 
 import doctest
+import importlib
 import random
 from pathlib import Path
 
@@ -55,6 +56,20 @@ def test_readme_examples_run():
         optionflags=doctest.IGNORE_EXCEPTION_DETAIL,
     )
     assert attempted >= 15
+    assert not failures
+
+
+@pytest.mark.parametrize(
+    "module",
+    [
+        "bitpattern.bdd",
+        "bitpattern.intset",
+        "bitpattern.pattern",
+    ],
+)
+def test_docstring_examples_run(module):
+    failures, attempted = doctest.testmod(importlib.import_module(module))
+    assert attempted
     assert not failures
 
 

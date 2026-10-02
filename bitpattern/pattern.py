@@ -99,9 +99,30 @@ def group(bits: str) -> str:
 class Pattern(IntSet):
     """An IntSet that reads and writes itself as a bit pattern, like `*1.*.*.0000`.
 
+    Patterns are written most significant bit first, in groups of 4 separated by
+    `.`. `0` and `1` are fixed bits, `?` can be either, and `*` is shorthand for
+    enough `?` to fill out its group. Only the leading group can be shorter than
+    4 bits, so a pattern can be any width.
+
+    >>> p = Pattern("*1.0000")
+    >>> p
+    Pattern('???1.0000')
+    >>> p.width, p.size, p.free
+    (8, 8, 3)
+    >>> ~Pattern("00??")
+    Pattern('01??') | Pattern('1???')
+
     Patterns only spell out a single branch. Unions come from the set operators,
     and repr as the expression that builds them. Branches come from the diagram
     rather than the text, so `Pattern("0000") | Pattern("0001")` is `Pattern("000?")`.
+    The same set always has the same branches, and they never overlap, but they
+    aren't always the fewest patterns that would cover it.
+
+    >>> Pattern("1?1") | Pattern("?1?")
+    Pattern('01?') | Pattern('101') | Pattern('11?')
+
+    A branch needs a node for each fixed bit and none for free bits, so a pattern's
+    diagram stays small however many members it has.
     """
 
     __slots__ = ()
