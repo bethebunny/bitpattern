@@ -182,8 +182,9 @@ IntSet([0, 2], width=2)
 
 Here's how `IntSet` compares to other ways of storing a set. `n` and `m` are set
 sizes, `w` is the width (number of bits of the largest member), and `|a|` is the number of nodes in `a`'s diagram.
-`|a|` is at most `n * w`, and is usually much smaller. Notably, any set that is expressible
-via the Pattern language has `|a| <= 2w`. For most use cases `w` is a constant and may be read as `O(1)`.
+`|a|` is at most `n * w`, and is usually much smaller. Notably, a set written as a single
+pattern has `|a| <= w`, since only its fixed bits need nodes. For most use cases `w` is a
+constant and may be read as `O(1)`.
 
 | | sorted `list` | `set` | balanced tree | `IntSet` |
 | --- | --- | --- | --- | --- |
