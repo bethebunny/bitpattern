@@ -38,7 +38,7 @@ class Float(Codec[float]):
     def decode(self, bits: int) -> float:
         return struct.unpack(self.format, bits.to_bytes(self.width // 8))[0]
 
-    def _field(self, sign: str, exponent: str, mantissa: str) -> BDDSet[float]:
+    def _glob(self, *, sign: str, exponent: str, mantissa: str) -> BDDSet[float]:
         bits = sign + exponent * self.exponent + mantissa * self.mantissa
         return BDDSet(self, IntSet.from_bdd(build(bits), self.width))
 
@@ -47,16 +47,16 @@ class Float(Codec[float]):
 
     @cached_property
     def sign_clear(self) -> BDDSet[float]:
-        return self._field("0", "?", "?")
+        return self._glob(sign="0", exponent="?", mantissa="?")
 
     @cached_property
     def sign_set(self) -> BDDSet[float]:
-        return self._field("1", "?", "?")
+        return self._glob(sign="1", exponent="?", mantissa="?")
 
     @cached_property
     def zeros(self) -> BDDSet[float]:
         """Both `-0.0` and `+0.0`."""
-        return self._field("?", "0", "0")
+        return self._glob(sign="?", exponent="0", mantissa="0")
 
     @cached_property
     def positive(self) -> BDDSet[float]:
@@ -73,19 +73,19 @@ class Float(Codec[float]):
 
     @cached_property
     def subnormal(self) -> BDDSet[float]:
-        return self._field("?", "0", "?") - self.zeros
+        return self._glob(sign="?", exponent="0", mantissa="?") - self.zeros
 
     @cached_property
     def infinities(self) -> BDDSet[float]:
-        return self._field("?", "1", "0")
+        return self._glob(sign="?", exponent="1", mantissa="0")
 
     @cached_property
     def nan(self) -> BDDSet[float]:
-        return self._field("?", "1", "?") - self.infinities
+        return self._glob(sign="?", exponent="1", mantissa="?") - self.infinities
 
     @cached_property
     def finite(self) -> BDDSet[float]:
-        return self.all - self._field("?", "1", "?")
+        return self.all - self._glob(sign="?", exponent="1", mantissa="?")
 
     def _key(self, bits: int) -> int:
         """Reorder bits so that unsigned order is float order. Negative floats get
