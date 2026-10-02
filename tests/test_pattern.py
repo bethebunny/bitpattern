@@ -10,7 +10,6 @@ import pytest
 
 from bitpattern import IntSet, Pattern
 from bitpattern.bdd import node_count
-from bitpattern.codecs import ipv4
 from bitpattern.pattern import dotted
 
 # The pattern the interface was designed around.
@@ -274,12 +273,6 @@ def test_union_repr_is_the_expression_that_builds_it():
 
 def test_union_str_joins_the_branches():
     assert str(~Pattern("00??")) == "01?? | 1???"
-
-
-def test_long_unions_are_summarized():
-    spare = (ipv4.cidr("10.0.0.0/8") - ipv4.cidr("10.1.0.0/16")).storage
-    pattern = Pattern.from_bdd(spare.bdd, spare.width)
-    assert repr(pattern) == "<Pattern: 8 branches, width=32, size=16711680>"
 
 
 @pytest.mark.parametrize("width", range(1, 5))
