@@ -9,8 +9,8 @@ strategies are in `bitpattern.strategies`, and the diagrams themselves are in
 `bitpattern.bdd`.
 """
 
+from .intset import IntSet
 from .pattern import Pattern
-from .sets import IntSet
 
 __version__ = "0.1.0"
 

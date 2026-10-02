@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TypeVar, overload
 
 from .codecs import BDDSet
-from .sets import IntSet
+from .intset import IntSet
 
 try:
     from hypothesis import strategies as st

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from .bdd import BDD, render_count, weak_cache
-from .sets import IntSet
+from .intset import IntSet
 
 __all__ = ["Pattern", "parse"]
 

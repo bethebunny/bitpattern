@@ -14,8 +14,8 @@ from bitpattern.bdd import (
     nth,
     size,
 )
+from bitpattern.intset import IntSet
 from bitpattern.pattern import branch_count
-from bitpattern.sets import IntSet
 
 WIDTH = 3
 UNIVERSE = range(1 << WIDTH)

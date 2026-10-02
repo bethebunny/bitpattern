@@ -12,8 +12,8 @@ from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from bitpattern.bdd import BDD, less_than, node_count
+from bitpattern.intset import IntSet
 from bitpattern.pattern import Pattern
-from bitpattern.sets import IntSet
 
 # Every subset of a three-bit universe, which is few enough to check exhaustively.
 WIDTH = 3
