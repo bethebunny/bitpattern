@@ -23,10 +23,12 @@ the _largest member_ of the set. #bits is called the `width` of the set.
 >>> p = Pattern("*1.*.*.0000.1111.?01?")
 >>> p
 Pattern('???1.????.????.0000.1111.?01?')
->>> p.width, p.size
-(24, 8192)
->>> p[0], p[-1]
-(1048818, 16773371)
+>>> p.width
+24
+>>> p.size
+8192
+>>> p[0]
+1048818
 >>> 0x1230FA in p
 True
 >>> import random
@@ -127,16 +129,17 @@ non-negative integers below `2 ** width`. It's a `collections.abc.Set`, and also
 `Sequence` of its members in sorted order. Slicing gives back a set.
 
 An `IntSet` is a reduced, ordered binary decision diagram, or BDD ([Bryant, 1986]).
-The BDD abstraction is also provided in `bitpattern.bdd`.
-
+The BDD abstraction is also provided directly, as `bitpattern.BDD`.
 
 ```python
 >>> from bitpattern import IntSet
 >>> s = IntSet.range(3, 17)
 >>> s
 IntSet([3, 4, 5, 6, ..., 15, 16], size=14, width=5)
->>> s[2], s.index(10), s[2:5]
-(5, 7, IntSet([5, 6, 7], width=5))
+>>> s[2]
+5
+>>> s[2:5]
+IntSet([5, 6, 7], width=5)
 >>> s & IntSet([1, 2, 3, 4])
 IntSet([3, 4], width=5)
 >>> ~IntSet([1, 3], width=2)
