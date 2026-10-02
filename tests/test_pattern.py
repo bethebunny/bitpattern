@@ -11,7 +11,7 @@ import pytest
 from bitpattern import IntSet, Pattern
 from bitpattern.bdd import node_count
 from bitpattern.codecs import ipv4
-from bitpattern.pattern import group
+from bitpattern.pattern import dotted
 
 # The pattern the interface was designed around.
 TARGET = "*1.*.*.0000.1111.?01?"
@@ -131,7 +131,7 @@ def test_agrees_with_matching_bit_by_bit(width):
     universe = range(1 << width)
     for combination in itertools.product("01?", repeat=width):
         bits = "".join(combination)
-        pattern = Pattern(group(bits))
+        pattern = Pattern(dotted(bits))
         expected = [value for value in universe if matches(bits, value)]
 
         assert pattern.bits == bits
@@ -162,7 +162,7 @@ def test_str_is_the_expanded_spelling(text, canonical):
 @pytest.mark.parametrize("width", range(1, 7))
 def test_str_round_trips(width):
     for combination in itertools.product("01?", repeat=width):
-        pattern = Pattern(group("".join(combination)))
+        pattern = Pattern(dotted("".join(combination)))
         assert Pattern(str(pattern)) == pattern
 
 

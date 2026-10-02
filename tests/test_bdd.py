@@ -15,7 +15,7 @@ from bitpattern.bdd import (
     size,
 )
 from bitpattern.intset import IntSet
-from bitpattern.pattern import branch_count
+from bitpattern.pattern import path_count
 
 WIDTH = 3
 UNIVERSE = range(1 << WIDTH)
@@ -260,7 +260,7 @@ def test_nodes_are_not_sequences(node):
         lambda x: x - BDD.ACCEPT,
         size,
         node_count,
-        branch_count,
+        path_count,
     ],
     ids=[
         "invert",
@@ -270,7 +270,7 @@ def test_nodes_are_not_sequences(node):
         "sub",
         "size",
         "node_count",
-        "branch_count",
+        "path_count",
     ],
 )
 def test_memoising_doesnt_keep_nodes_alive(operate):
@@ -302,4 +302,4 @@ def test_shared_diagrams_stay_polynomial():
     assert even & odd is BDD.REJECT
     assert even | odd is BDD.ACCEPT
     assert size(even) == 2**63
-    assert branch_count(even) == 2**63
+    assert path_count(even) == 2**63

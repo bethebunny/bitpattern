@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from functools import cached_property
 
 from ..intset import IntSet
-from ..pattern import build
+from ..pattern import diagram
 from .codec import BDDSet, Codec
 
 __all__ = ["Float", "float16", "float32", "float64"]
@@ -40,7 +40,7 @@ class Float(Codec[float]):
 
     def _glob(self, *, sign: str, exponent: str, mantissa: str) -> BDDSet[float]:
         bits = sign + exponent * self.exponent + mantissa * self.mantissa
-        return BDDSet(self, IntSet.from_bdd(build(bits), self.width))
+        return BDDSet(self, IntSet.from_bdd(diagram(bits), self.width))
 
     @cached_property
     def sign_clear(self) -> BDDSet[float]:

@@ -1,62 +1,49 @@
-"""Pattern, an IntSet written as bits, like `*1.*.*.0000.1111.?01?`."""
+"""Pattern, an IntSet written as bits, like `*1.*.*.0000.1111.?01?`.
+
+Text like `*1.0000` expands to bits like `???10000`, one character per bit, and the
+bits build a diagram. `expand` and `dotted` convert between text and bits, and
+`diagram` and `paths` between bits and diagrams.
+"""
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 
 from .bdd import BDD, render_count, weak_cache
 from .intset import IntSet
 
-__all__ = ["Pattern", "parse"]
-
-QUARTET = 4
+__all__ = ["Pattern"]
 
 
-def parse(text: str) -> str:
-    """Expand a pattern into its bits, most significant first.
-
-    Groups of bits are separated by `.`. `0` and `1` are bits, `?` is a free bit,
-    and `*` frees the rest of its group. Groups are 4 bits, except the leading one
-    can be shorter.
-    """
-    text = text.strip()
+def expand(text: str) -> str:
+    """A pattern's bits, one character per bit, eg. `*1.0000` is `???10000`."""
     if "|" in text:
         left, _, right = (part.strip() for part in text.partition("|"))
         raise ValueError(
             f"patterns can't contain '|', use Pattern({left!r}) | Pattern({right!r})"
         )
-    groups = text.split(".")
-    return "".join(
-        expand(group, leading=not at, text=text) for at, group in enumerate(groups)
-    )
+    bits = ""
+    for at, group in enumerate(text.strip().split(".")):
+        head, glob, tail = group.partition("*")
+        expanded = head + "?" * (4 - len(head) - len(tail)) + tail if glob else group
+        if not re.fullmatch("[01?]{1,4}" if at == 0 else "[01?]{4}", expanded):
+            raise ValueError(
+                f"bad group {group!r} in {text!r}. Groups are 4 bits of 0, 1 or ?, "
+                "with * filling out the rest, and only the leading one can be shorter."
+            )
+        bits += expanded
+    return bits
 
 
-def expand(group: str, leading: bool, text: str) -> str:
-    """Expand one group into its bits, filling in any `*`."""
-
-    def invalid(reason: str) -> ValueError:
-        kind = "leading group" if leading else "group"
-        return ValueError(f"{kind} {group!r} in {text!r} {reason}")
-
-    head, glob, tail = group.partition("*")
-    bits = len(head) + len(tail)
-    if not group:
-        raise invalid("is empty")
-    if "*" in tail:
-        raise invalid("has more than one '*'")
-    if unknown := set(head + tail) - set("01?"):
-        raise invalid(f"has unexpected characters {''.join(sorted(unknown))!r}")
-    if bits > QUARTET:
-        raise invalid(f"has {bits} bits, more than {QUARTET}")
-    if glob:
-        return head + "?" * (QUARTET - bits) + tail
-    if bits < QUARTET and not leading:
-        raise invalid(f"has {bits} bits, but only the leading group can be short")
-    return group
+def dotted(bits: str) -> str:
+    """Bits written as pattern text, eg. `???10000` is `???1.0000`."""
+    head, tail = bits[:-4], bits[-4:]
+    return f"{dotted(head)}.{tail}" if head else tail
 
 
-def build(bits: str) -> BDD:
-    """The diagram for an expanded pattern. Free bits don't need any nodes."""
+def diagram(bits: str) -> BDD:
+    """The diagram matching `bits`. Free bits don't need any nodes."""
     node = BDD.ACCEPT
     for bit, char in enumerate(reversed(bits)):
         match char:
@@ -67,33 +54,22 @@ def build(bits: str) -> BDD:
     return node
 
 
-def cover(bdd: BDD, width: int) -> Iterator[str]:
-    """A diagram's branches as expanded patterns. Canonical, but not always minimal."""
-
-    def walk(node: BDD, bit: int, prefix: str) -> Iterator[str]:
-        prefix += "?" * (bit - node.bit)  # bits above the node are free
-        if node is BDD.ACCEPT:
-            yield prefix
-        elif node:
-            yield from walk(node.left, node.bit - 1, prefix + "0")
-            yield from walk(node.right, node.bit - 1, prefix + "1")
-
-    return walk(bdd, width - 1, "")
+def paths(node: BDD, width: int) -> Iterator[str]:
+    """The bits of each path from `node` to ACCEPT, which never overlap."""
+    free = "?" * (width - 1 - node.bit)  # the bits above the node
+    if node is BDD.ACCEPT:
+        yield free
+    elif node:
+        yield from (free + "0" + path for path in paths(node.left, node.bit))
+        yield from (free + "1" + path for path in paths(node.right, node.bit))
 
 
 @weak_cache
-def branch_count(node: BDD) -> int:
-    """How many branches `cover` would yield, ie. how many paths reach ACCEPT."""
-    if node.bit < 0:
+def path_count(node: BDD) -> int:
+    """How many paths `paths` would give, without walking them."""
+    if node.leaf:
         return int(node is BDD.ACCEPT)
-    return branch_count(node.left) + branch_count(node.right)
-
-
-def group(bits: str) -> str:
-    """Write bits as dotted quartets, with the leading one short if need be."""
-    if len(bits) <= QUARTET:
-        return bits
-    return f"{group(bits[:-QUARTET])}.{bits[-QUARTET:]}"
+    return path_count(node.left) + path_count(node.right)
 
 
 class Pattern(IntSet):
@@ -126,20 +102,20 @@ class Pattern(IntSet):
     __slots__ = ()
 
     def __init__(self, text: str) -> None:
-        bits = parse(text)
-        self.bdd, self.width = build(bits), len(bits)
+        bits = expand(text)
+        self.bdd, self.width = diagram(bits), len(bits)
 
     @property
     def branches(self) -> tuple[str, ...]:
         """Disjoint single-branch patterns that make up this one."""
-        return tuple(map(group, cover(self.bdd, self.width)))
+        return tuple(map(dotted, paths(self.bdd, self.width)))
 
     @property
     def bits(self) -> str:
         """The expanded bits of a single-branch pattern."""
-        if (branches := branch_count(self.bdd)) != 1:
-            raise ValueError(f"pattern has {branches} branches, not 1")
-        return next(cover(self.bdd, self.width))
+        if (count := path_count(self.bdd)) != 1:
+            raise ValueError(f"pattern has {count} branches, not 1")
+        return next(paths(self.bdd, self.width))
 
     @property
     def free(self) -> int:
@@ -152,14 +128,14 @@ class Pattern(IntSet):
     def __repr__(self) -> str:
         if not self.width:  # there's no way to write a zero-width pattern
             return f"<Pattern: width=0, size={self.size}>"
-        if not (branches := branch_count(self.bdd)):
-            return f"~Pattern({group('?' * self.width)!r})"
+        if not (count := path_count(self.bdd)):
+            return f"~Pattern({dotted('?' * self.width)!r})"
         # Unions repr as the expression that builds them, unless that's too long.
-        if branches <= 8:
+        if count <= 8:
             text = " | ".join(f"Pattern({branch!r})" for branch in self.branches)
             if len(text) <= 200:
                 return text
         return (
-            f"<Pattern: {render_count(branches)} branches, "
+            f"<Pattern: {render_count(count)} branches, "
             f"width={self.width}, size={render_count(self.size)}>"
         )
