@@ -76,14 +76,14 @@ def brute_force_range(low, high) -> set[int]:
     ],
 )
 def test_named_sets_match_the_decoded_values(name, predicate):
-    assert set(getattr(float16, name).bits) == patterns(predicate)
+    assert set(getattr(float16, name).storage) == patterns(predicate)
 
 
 def test_sign_halves_partition_everything():
-    assert set((float16.sign_clear | float16.sign_set).bits) == set(UNIVERSE)
+    assert set((float16.sign_clear | float16.sign_set).storage) == set(UNIVERSE)
     assert float16.sign_clear.isdisjoint(float16.sign_set)
     everything = float16.finite | float16.nan | float16.infinities
-    assert set(everything.bits) == set(UNIVERSE)
+    assert set(everything.storage) == set(UNIVERSE)
 
 
 def test_nan_isnt_positive_or_negative():
@@ -145,7 +145,7 @@ def test_minus_zero_has_the_highest_bits():
 @pytest.mark.parametrize("low", BOUNDS)
 def test_float_range_agrees_with_brute_force(low):
     for high in BOUNDS:
-        assert set(float16.range(low, high).bits) == brute_force_range(low, high)
+        assert set(float16.range(low, high).storage) == brute_force_range(low, high)
 
 
 def test_float_range_is_half_open():
@@ -173,7 +173,7 @@ def test_wide_float_ranges_stay_small():
     """A range is one node per bit, however many floats are in it."""
     wide = float64.range(-1e300, 1e300)
     assert wide.size > 2**63
-    assert len(str(wide.bits.bdd)) < 10_000
+    assert len(str(wide.storage.bdd)) < 10_000
 
 
 def test_float64_range_ends():
@@ -292,7 +292,7 @@ def test_bdd_sets_compare_and_hash_by_codec_and_bits():
     one = float16.range(1.0, 1.0009765625)  # the next float16 after 1.0
     assert one == float16.set([1.0]) and hash(one) == hash(float16.set([1.0]))
     assert float16.set([1.0]) != float32.set([1.0])
-    assert float16.set([1.0]) != float16.set([1.0]).bits
+    assert float16.set([1.0]) != float16.set([1.0]).storage
 
 
 def test_bdd_set_reprs():
@@ -311,8 +311,8 @@ def test_big_bdd_sets_dont_go_through_len():
 
 
 def test_codec_sets_are_bdd_sets():
-    assert type(float64.nan) is BDDSet and type(float64.nan.bits) is IntSet
-    assert type(float64.pattern("*" + ".*" * 15).bits) is Pattern
+    assert type(float64.nan) is BDDSet and type(float64.nan.storage) is IntSet
+    assert type(float64.pattern("*" + ".*" * 15).storage) is Pattern
 
 
 def test_cidr():

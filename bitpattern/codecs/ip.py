@@ -65,7 +65,7 @@ class IP(Codec[Address], Generic[Address, Network]):
 
         if source.codec != self:
             raise TypeError(f"{source.codec} addresses aren't {self} addresses")
-        yield from walk(source.bits.bdd, self.width - 1, 0)
+        yield from walk(source.storage.bdd, self.width - 1, 0)
 
 
 ipv4 = IP(32, "ipv4", ipaddress.IPv4Address, ipaddress.IPv4Network)

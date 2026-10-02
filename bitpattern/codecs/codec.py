@@ -43,12 +43,15 @@ class Codec(Generic[T]):
 
     @cached_property
     def none(self) -> BDDSet[T]:
+        """The empty set."""
         return BDDSet(self, IntSet.from_bdd(BDD.REJECT, self.width))
 
-    def set(self, values: Iterable[T]) -> BDDSet[T]:
+    def set(self, values: Iterable[T] = ()) -> BDDSet[T]:
+        """Constructs a BDDSet from the input values."""
         return BDDSet(self, IntSet(map(self.encode, values), width=self.width))
 
     def pattern(self, text: str) -> BDDSet[T]:
+        """Constructs a BDDSet of values matching the pattern."""
         pattern = Pattern(text)
         if pattern.width != self.width:
             raise ValueError(f"pattern is {pattern.width} bits, not {self.width}")
@@ -64,42 +67,42 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
     """
 
     codec: Codec[T]
-    bits: IntSet
+    storage: IntSet
 
     def __post_init__(self) -> None:
-        if self.bits.width != self.codec.width:
+        if self.storage.width != self.codec.width:
             raise ValueError(
-                f"{self.codec} needs {self.codec.width} bits, not {self.bits.width}"
+                f"{self.codec} needs {self.codec.width} bits, not {self.storage.width}"
             )
 
-    def _bits(self, other: object) -> IntSet:
-        # Raise rather than return NotImplemented, since IntSet's reflected
-        # operators would try to enumerate the set.
+    def _storage(self, other: object) -> IntSet:
         if not isinstance(other, BDDSet) or other.codec != self.codec:
+            # Raise rather than return NotImplemented, since IntSet's reflected
+            # operators would try to enumerate the set.
             raise TypeError(f"{self.codec} sets only combine with each other")
-        return other.bits
+        return other.storage
 
     @property
     def size(self) -> int:
-        return self.bits.size
+        return self.storage.size
 
     def __len__(self) -> int:
-        return len(self.bits)
+        return len(self.storage)
 
     def __bool__(self) -> bool:
-        return bool(self.bits)
+        return bool(self.storage)
 
     def __contains__(self, value: object) -> bool:
         try:
-            return self.codec.encode(value) in self.bits
+            return self.codec.encode(value) in self.storage
         except ValueError:  # not something this codec can encode
             return False
 
     def __iter__(self) -> Iterator[T]:
-        return map(self.codec.decode, self.bits)
+        return map(self.codec.decode, self.storage)
 
     def __reversed__(self) -> Iterator[T]:
-        return map(self.codec.decode, reversed(self.bits))
+        return map(self.codec.decode, reversed(self.storage))
 
     @overload
     def __getitem__(self, item: int) -> T: ...
@@ -107,62 +110,59 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
     def __getitem__(self, item: slice) -> BDDSet[T]: ...
     def __getitem__(self, item: int | slice) -> T | BDDSet[T]:
         if isinstance(item, slice):
-            return BDDSet(self.codec, self.bits[item])
-        return self.codec.decode(self.bits[item])
+            return BDDSet(self.codec, self.storage[item])
+        return self.codec.decode(self.storage[item])
 
     def index(self, value: object, start: int = 0, stop: int | None = None) -> int:
-        try:
-            return self.bits.index(self.codec.encode(value), start, stop)
-        except ValueError:
-            raise ValueError(f"{value!r} is not in the set") from None
+        return self.storage.index(self.codec.encode(value), start, stop)
 
     def count(self, value: object) -> int:
         return int(value in self)
 
     def choice(self, *, rng: random.Random | None = None) -> T:
-        """A uniformly random value."""
-        return self.codec.decode(self.bits.choice(rng=rng))
+        """random.choice(self), but supports sets larger than 2**63."""
+        return self.codec.decode(self.storage.choice(rng=rng))
 
     def __and__(self, other: AbstractSet[T]) -> BDDSet[T]:
-        return BDDSet(self.codec, self.bits & self._bits(other))
+        return BDDSet(self.codec, self.storage & self._storage(other))
 
     def __or__(self, other: AbstractSet[T]) -> BDDSet[T]:
-        return BDDSet(self.codec, self.bits | self._bits(other))
+        return BDDSet(self.codec, self.storage | self._storage(other))
 
     def __sub__(self, other: AbstractSet[T]) -> BDDSet[T]:
-        return BDDSet(self.codec, self.bits - self._bits(other))
+        return BDDSet(self.codec, self.storage - self._storage(other))
 
     def __xor__(self, other: AbstractSet[T]) -> BDDSet[T]:
-        return BDDSet(self.codec, self.bits ^ self._bits(other))
+        return BDDSet(self.codec, self.storage ^ self._storage(other))
 
     __rand__ = __and__
     __ror__ = __or__
     __rxor__ = __xor__
 
     def __rsub__(self, other: AbstractSet[T]) -> BDDSet[T]:
-        return BDDSet(self.codec, self._bits(other) - self.bits)
+        return BDDSet(self.codec, self._storage(other) - self.storage)
 
     def __invert__(self) -> BDDSet[T]:
         """Every other bit pattern this codec has."""
-        return BDDSet(self.codec, ~self.bits)
+        return BDDSet(self.codec, ~self.storage)
 
     def __le__(self, other: object) -> bool:
-        return self.bits <= self._bits(other)
+        return self.storage <= self._storage(other)
 
     def __lt__(self, other: object) -> bool:
-        return self.bits < self._bits(other)
+        return self.storage < self._storage(other)
 
     def __ge__(self, other: object) -> bool:
-        return self.bits >= self._bits(other)
+        return self.storage >= self._storage(other)
 
     def __gt__(self, other: object) -> bool:
-        return self.bits > self._bits(other)
+        return self.storage > self._storage(other)
 
     def isdisjoint(self, other: Iterable[T]) -> bool:
-        return self.bits.isdisjoint(self._bits(other))
+        return self.storage.isdisjoint(self._storage(other))
 
     def __repr__(self) -> str:
-        # Like IntSet's, but with the codec, and values rather than bits.
+        # Render small sets directly. Larger sets print a summary.
         if (size := self.size) <= 10:
             return f"BDDSet({self.codec}, {list(self)})"
         head = ", ".join(map(repr, itertools.islice(self, 4)))

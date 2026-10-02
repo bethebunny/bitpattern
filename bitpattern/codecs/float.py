@@ -94,7 +94,7 @@ class Float(Codec[float]):
         return bits ^ mask if bits & sign else bits | sign
 
     def range(self, low: float, high: float) -> BDDSet[float]:
-        """Floats in `[low, high)`. NaNs aren't ordered, so they're never in a range."""
+        """Floats in `[low, high)`."""
         if math.isnan(low) or math.isnan(high):
             raise ValueError("NaN isn't ordered, so it can't bound a range")
         sign, mask = 1 << (self.width - 1), (1 << self.width) - 1

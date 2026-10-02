@@ -277,7 +277,7 @@ def test_union_str_joins_the_branches():
 
 
 def test_long_unions_are_summarized():
-    pattern = (ipv4.cidr("10.0.0.0/8") - ipv4.cidr("10.1.0.0/16")).bits.pattern
+    pattern = (ipv4.cidr("10.0.0.0/8") - ipv4.cidr("10.1.0.0/16")).storage.pattern
     assert repr(pattern) == "<Pattern: 8 branches, width=32, size=16711680>"
 
 

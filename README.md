@@ -82,7 +82,7 @@ False
 ```
 
 These are `BDDSet`s, which are sets of values backed by the `IntSet` of their bits,
-eg. `supported.bits`.
+eg. `supported.storage`.
 
 This becomes particularly useful for use cases like [hypothesis](https://hypothesis.works/).
 
