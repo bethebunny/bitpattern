@@ -1,21 +1,5 @@
 """Implements `BDD`, a reduced, ordered binary decision diagram.
 
-Most users should never have to think about this module. It exists to back
-`IntSet`, which reads a diagram as the set of integers whose bits satisfy it.
-It's public for building new kinds of sets, and for looking at how a set is
-represented, eg. `IntSet.range(3, 17).bdd`.
-
-There are a few main tools in this module:
-
-- `BDD` itself, with its leaves `BDD.ACCEPT` and `BDD.REJECT`. Diagrams combine
-  with `&`, `|`, `-` and `~`.
-- `count`, `nth` and `iterate`, which treat a diagram as the integers below
-  `2 ** width` that satisfy it. Bits above a diagram's top node are free, so it
-  doesn't know its own width, and these all take one.
-- `pin` and `less_than`, which build the diagrams for a single integer and for
-  everything below a bound.
-- `weak_cache`, which memoises functions of diagrams without keeping them alive.
-
 Diagrams and their algorithms are from Bryant's 1986 paper, [Graph-Based
 Algorithms for Boolean Function Manipulation](https://doi.org/10.1109/TC.1986.1676819).
 """
@@ -78,26 +62,12 @@ class BDD:
     BDD.ACCEPT
 
     Invariants:
-        A node tests a higher bit than its children.
+        - **A node tests a higher bit than its children.**
             Every path tests bits in the same order, most significant first, so
             `&` and `|` can walk two diagrams together a bit at a time.
-        A node's branches are never the same.
-            `BDD(bit, x, x)` is just `x`, since the bit doesn't matter. Along with
-            interning, this makes diagrams canonical. Two diagrams of the same
-            predicate are the same object, so they compare with `is`, and the
-            only diagram nothing satisfies is `REJECT`, which is what `bool()`
-            checks.
-        Leaves have `bit == -1`.
-            Bits above a node are free, and for a leaf that's all of them, so eg.
-            `count` doesn't need to treat leaves differently. Leaves are also
-            their own branches, so `left` and `right` are always diagrams.
-
-    Nodes are interned in a weak table, and operations on them are memoised with
-    `weak_cache`, so neither keeps a diagram alive once nothing else is using it.
-
-    `&` and `|` use Bryant's apply algorithm, which walks both diagrams together
-    and memoises each pair of nodes it visits. That makes them O(|a| * |b|) in
-    the number of nodes, and usually much less.
+        - `BDD` instances are always reduced by construction.
+        - `BDD` instances are interned. Constructing the same diagram will always
+            yield exactly the same object.
     """
 
     bit: int
@@ -171,7 +141,7 @@ class BDD:
         (a0, a1), (b0, b1) = cofactors(self, bit), cofactors(other, bit)
         return BDD(bit, a0 | b0, a1 | b1)
 
-    # Leaves unpickle by name, and nodes through the constructor so they get
+    # Leaves pickle by name, and nodes through the constructor so they get
     # re-interned.
     def __reduce__(self) -> str | tuple[type[BDD], tuple[int, BDD, BDD]]:
         if self.leaf:

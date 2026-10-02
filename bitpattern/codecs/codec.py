@@ -28,7 +28,7 @@ class Codec(Generic[T]):
     encodings. A codec instance is also a namespace for important sets of that type,
     like `float64.subnormal` or `ipv4.cidr("10.0.0.0/8")`.
 
-    To write a codec, subclass Codec and implement `encode` and `decode`.
+    Codec subclasses implement `encode` and `decode`:
 
     >>> class Ascii(Codec[str]):
     ...     def encode(self, value: object) -> int:
@@ -38,14 +38,13 @@ class Codec(Generic[T]):
     ...
     ...     def decode(self, bits: int) -> str:
     ...         return chr(bits)
-    >>> chars = Ascii(7, "ascii")
-    >>> chars.pattern("1?0.0001")  # case only changes bit 5
+    >>> ascii = Ascii(7, "ascii")
+    >>> ascii.pattern("1?0.0001")  # case only changes bit 5
     BDDSet(ascii, ['A', 'a'])
 
-    `encode` should raise ValueError for anything it can't encode, which `in`
-    treats as not a member. A codec doesn't have to decode every bit pattern of its
-    width, but `all` and `~` include the ones it can't, and iterating over those
-    will fail.
+    If a type has illegal bit patterns then `encode` should raise a `ValueError`.
+    In this case, the Codec should override `all` to return the legal pattern
+    domain for the type.
     """
 
     width: int
@@ -85,10 +84,7 @@ class Codec(Generic[T]):
 
 @dataclass(frozen=True, repr=False)
 class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
-    """A set of a codec's values, kept as the IntSet of their bits.
-
-    It's also a sequence of the values, in the order of their bits. Set operations
-    work on the bits, so none of them enumerate anything.
+    """An ordered set of a codec's values kept as the IntSet of their bits.
 
     >>> from bitpattern.codecs import float64
     >>> normal = float64.finite - float64.subnormal - float64.zeros
@@ -98,16 +94,27 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
     2.2250738585072014e-308
     >>> 1.0 in normal
     True
-    >>> "1.0" in normal
+    >>> float("inf") in normal
     False
 
-    `storage` is the IntSet of the encodings. Very large BDDSets have the same
-    caveats as very large IntSets, so use `size` and `choice()` instead of `len()`
-    and `random.choice()`.
+    Python isn't really designed for data structures larger than memory. In
+    particular many operations will fail if `__len__` returns a number >= 2**63.
+    When working with very large sets:
+
+    - Use `s.size` instead of `len(s)`
+    - Use `s.choice()` instead of `random.choice(s)` or `random.sample(s, k)`
+    - Use `s[0]` and `s[-1]` instead of `min(s)` and `max(s)`, which look at
+      every member
+    - Use `bitpattern.strategies` instead of hypothesis's `sampled_from(s)`
+
+    Most operations are O(w) in the width, however many members there are. `&`,
+    `|`, `-` and `^` are O(|a| * |b|) in the number of nodes in each diagram, and
+    `~` is O(|a|). A diagram has at most `size * w` nodes, and usually far fewer,
+    eg. any `codec.pattern(pattern)` has `nodes <= len(pattern)`.
 
     Set operators and comparisons only work between sets of the same codec, and
-    raise TypeError for anything else, including plain sets. Make those into
-    BDDSets first with `codec.set(values)`.
+    raise TypeError for anything else, including plain sets. Convert this set
+    via `set(bddset)` or the other via `codec.set(other)` for comparison.
     """
 
     codec: Codec[T]

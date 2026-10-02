@@ -42,9 +42,6 @@ class Float(Codec[float]):
         bits = sign + exponent * self.exponent + mantissa * self.mantissa
         return BDDSet(self, IntSet.from_bdd(build(bits), self.width))
 
-    # The sign bit splits every bit pattern in half, NaNs included. positive and
-    # negative are narrower, since a NaN has a sign but isn't positive or negative.
-
     @cached_property
     def sign_clear(self) -> BDDSet[float]:
         return self._glob(sign="0", exponent="?", mantissa="?")
@@ -88,8 +85,7 @@ class Float(Codec[float]):
         return self.all - self._glob(sign="?", exponent="1", mantissa="?")
 
     def _key(self, bits: int) -> int:
-        """Reorder bits so that unsigned order is float order. Negative floats get
-        flipped, which reverses them, and positive floats get moved above them."""
+        # Reorder bits so that unsigned order is float order.
         sign, mask = 1 << (self.width - 1), (1 << self.width) - 1
         return bits ^ mask if bits & sign else bits | sign
 
@@ -99,7 +95,7 @@ class Float(Codec[float]):
             raise ValueError("NaN isn't ordered, so it can't bound a range")
         sign, mask = 1 << (self.width - 1), (1 << self.width) - 1
         start, stop = self._key(self.encode(low)), self._key(self.encode(high))
-        # Keys below sign are the negative floats, flipped, and the rest are positive.
+        # Keys below sign are the negative floats (reversed) and the rest are positive.
         negative = IntSet.range(
             mask - min(stop, sign) + 1, mask - start + 1, width=self.width
         )

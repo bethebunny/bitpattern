@@ -58,17 +58,6 @@ class IntSet(AbstractSet[int], Sequence[int]):
     is clear", which read at width 4 would be every even number. Sets of different
     widths are widened to match before they're combined, which adds that bound to
     the diagram explicitly.
-
-    The number of members under each node is cached, so `size` is a lookup, and
-    `s[i]` and `choice()` walk a single path down the diagram. At each node they
-    go left or right by comparing `i` to the left branch's count, the same way an
-    order statistic tree does.
-
-    Diagrams are canonical, so two sets of the same width are equal exactly when
-    their diagrams are the same object. Sets of different widths compare and hash
-    by trimming to the narrowest width that fits their members. IntSets are only
-    equal to other IntSets, since being equal to eg. a frozenset would mean hashing
-    like one, which looks at every member.
     """
 
     __slots__ = ("bdd", "width")
