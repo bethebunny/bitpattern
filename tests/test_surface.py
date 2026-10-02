@@ -65,6 +65,7 @@ def test_readme_examples_run():
         "bitpattern.bdd",
         "bitpattern.intset",
         "bitpattern.pattern",
+        "bitpattern.codecs.codec",
     ],
 )
 def test_docstring_examples_run(module):

@@ -21,7 +21,32 @@ T = TypeVar("T")
 
 @dataclass(frozen=True, repr=False)
 class Codec(Generic[T]):
-    """A fixed-width encoding of values as non-negative integers."""
+    """A fixed-width encoding of values as non-negative integers.
+
+    A codec equips IntSets with a type. Its sets are BDDSets, which keep the
+    IntSet of their values' encodings, so patterns describe the layout of those
+    encodings. A codec instance is also a namespace for important sets of that type,
+    like `float64.subnormal` or `ipv4.cidr("10.0.0.0/8")`.
+
+    To write a codec, subclass Codec and implement `encode` and `decode`.
+
+    >>> class Ascii(Codec[str]):
+    ...     def encode(self, value: object) -> int:
+    ...         if isinstance(value, str) and len(value) == 1 and value.isascii():
+    ...             return ord(value)
+    ...         raise ValueError(f"{value!r} isn't an ASCII character")
+    ...
+    ...     def decode(self, bits: int) -> str:
+    ...         return chr(bits)
+    >>> chars = Ascii(7, "ascii")
+    >>> chars.pattern("1?0.0001")  # case only changes bit 5
+    BDDSet(ascii, ['A', 'a'])
+
+    `encode` should raise ValueError for anything it can't encode, which `in`
+    treats as not a member. A codec doesn't have to decode every bit pattern of its
+    width, but `all` and `~` include the ones it can't, and iterating over those
+    will fail.
+    """
 
     width: int
     name: str
@@ -64,6 +89,23 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
 
     It's also a sequence of the values, in the order of their bits. Set operations
     work on the bits, so none of them enumerate anything.
+
+    >>> from bitpattern.codecs import float64
+    >>> normal = float64.finite - float64.subnormal - float64.zeros
+    >>> normal.size
+    18428729675200069632
+    >>> normal[0], normal.index(1.0)
+    (2.2250738585072014e-308, 4602678819172646912)
+    >>> 1.0 in normal, float("inf") in normal, "1.0" in normal
+    (True, False, False)
+
+    `storage` is the IntSet of the encodings. Very large BDDSets have the same
+    caveats as very large IntSets, so use `size` and `choice()` instead of `len()`
+    and `random.choice()`.
+
+    Set operators and comparisons only work between sets of the same codec, and
+    raise TypeError for anything else, including plain sets. Make those into
+    BDDSets first with `codec.set(values)`.
     """
 
     codec: Codec[T]
