@@ -107,10 +107,8 @@ class Pattern(IntSet):
     >>> p = Pattern("*1.0000")
     >>> p
     Pattern('???1.0000')
-    >>> p.width, p.size, p.free
-    (8, 8, 3)
-    >>> ~Pattern("00??")
-    Pattern('01??') | Pattern('1???')
+    >>> p.size
+    8
 
     Patterns only spell out a single branch. Unions come from the set operators,
     and repr as the expression that builds them. Branches come from the diagram

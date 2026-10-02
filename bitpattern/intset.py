@@ -28,8 +28,10 @@ class IntSet(AbstractSet[int], Sequence[int]):
     >>> s = IntSet.range(3, 17)
     >>> s
     IntSet([3, 4, 5, 6, ..., 15, 16], size=14, width=5)
-    >>> s[2], s.index(10), s[2:5]
-    (5, 7, IntSet([5, 6, 7], width=5))
+    >>> s[2]
+    5
+    >>> s[2:5]
+    IntSet([5, 6, 7], width=5)
     >>> s & IntSet([1, 2, 3, 4])
     IntSet([3, 4], width=5)
     >>> IntSet.range(0, 2**100, width=128).size

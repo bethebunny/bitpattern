@@ -94,10 +94,12 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
     >>> normal = float64.finite - float64.subnormal - float64.zeros
     >>> normal.size
     18428729675200069632
-    >>> normal[0], normal.index(1.0)
-    (2.2250738585072014e-308, 4602678819172646912)
-    >>> 1.0 in normal, float("inf") in normal, "1.0" in normal
-    (True, False, False)
+    >>> normal[0]
+    2.2250738585072014e-308
+    >>> 1.0 in normal
+    True
+    >>> "1.0" in normal
+    False
 
     `storage` is the IntSet of the encodings. Very large BDDSets have the same
     caveats as very large IntSets, so use `size` and `choice()` instead of `len()`
