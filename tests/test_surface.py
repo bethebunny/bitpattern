@@ -10,7 +10,7 @@ import pytest
 import bitpattern
 from bitpattern import IntSet, Pattern, bdd
 from bitpattern.bdd import BDD, node_count, render_count
-from bitpattern.codecs import float16, float32, float64, ipv4, ipv6
+from bitpattern.codecs import BDDSet, Codec, float16, float32, float64, ipv4, ipv6
 
 README = Path(__file__).parent.parent / "README.md"
 
@@ -24,15 +24,19 @@ class TextConstructed(IntSet):
         super().__init__([1, 2], width=4)
 
 
-def test_top_level_is_just_the_sets():
-    assert set(bitpattern.__all__) == {"IntSet", "Pattern"}
+def test_top_level_names():
+    exported = {name: getattr(bitpattern, name) for name in bitpattern.__all__}
+    assert exported == {
+        "BDD": BDD,
+        "BDDSet": BDDSet,
+        "Codec": Codec,
+        "IntSet": IntSet,
+        "Pattern": Pattern,
+    }
 
 
-@pytest.mark.parametrize(
-    "name",
-    ["BDD", "BDDSet", "Codec", "float64", "ipv4"],
-)
-def test_engine_and_codecs_arent_top_level(name):
+@pytest.mark.parametrize("name", ["float64", "ipv4"])
+def test_codecs_arent_top_level(name):
     assert not hasattr(bitpattern, name)
 
 
