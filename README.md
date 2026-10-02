@@ -63,7 +63,7 @@ Patterns start to really shine when expressing structured sets. Consider for exa
 64 bit floats. How many finite normal floats are there? Can we sample them directly?
 These sets are huge and noncontiguous, so you can't express them in traditional data structures.
 
-bitpattern allows equipping a bit pattern set with a structured type via a Codec
+bitpattern allows equipping a bit pattern set with a structured type via a [Codec](#codecs)
 that encodes/decodes. This allows them to be used directly with structured types like floats.
 
 ```python
@@ -108,18 +108,40 @@ from bitpattern.strategies import from_set
 def test_kernel_matches_reference(x: float): ...
 ```
 
-## IP addresses
+## Codecs
 
-`bitpattern.codecs` also has `ipv4` and `ipv6`, and `networks()` finds the fewest CIDR
-blocks that make up a set of addresses.
+A `Codec` encodes values of a type as fixed-width integers, and decodes them back.
+Its sets are `BDDSet`s, so patterns match the bits of the encoding. To write one,
+subclass `Codec` and implement `encode` and `decode`:
 
 ```python
->>> from bitpattern.codecs import ipv4
->>> spare = ipv4.cidr("10.0.0.0/8") - ipv4.cidr("10.1.0.0/16")
->>> [str(n) for n in ipv4.networks(spare)][:3]
-['10.0.0.0/16', '10.2.0.0/15', '10.4.0.0/14']
+>>> from bitpattern import Codec
+>>> class Ascii(Codec[str]):
+...     def encode(self, value: object) -> int:
+...         if isinstance(value, str) and len(value) == 1 and value.isascii():
+...             return ord(value)
+...         raise ValueError(f"{value!r} isn't an ASCII character")
+...
+...     def decode(self, bits: int) -> str:
+...         return chr(bits)
+>>> ascii = Ascii(7, "ascii")
+>>> ascii.set("hello")
+BDDSet(ascii, ['e', 'h', 'l', 'o'])
+>>> ascii.pattern("1?0.0001")  # case only changes bit 5
+BDDSet(ascii, ['A', 'a'])
 
 ```
+
+`encode` should raise `ValueError` for anything it can't encode. If some bit patterns
+aren't values, override `all` with the ones that are, so that `~` leaves the others out.
+
+`bitpattern.codecs` includes:
+
+- `float16`, `float32` and `float64`, which are IEEE 754 floats as their raw bits.
+  They have sets like `finite`, `nan`, `infinities`, `subnormal` and `zeros`, and
+  `range(low, high)`.
+- `ipv4` and `ipv6`, with `cidr("10.0.0.0/8")` and `range(low, high)`.
+  `networks(addresses)` finds the fewest CIDR blocks that make up a set of addresses.
 
 ## IntSet
 
