@@ -5,13 +5,23 @@ import itertools
 import math
 import operator
 import random
+from functools import cached_property
 
 import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from bitpattern import IntSet, Pattern
-from bitpattern.codecs import BDDSet, Float, float16, float32, float64, ipv4, ipv6
+from bitpattern.codecs import (
+    BDDSet,
+    Codec,
+    Float,
+    float16,
+    float32,
+    float64,
+    ipv4,
+    ipv6,
+)
 
 UNIVERSE = range(1 << float16.width)
 DECODED = [float16.decode(bits) for bits in UNIVERSE]
@@ -271,6 +281,28 @@ def test_bdd_sets_combine_with_the_same_codec():
     assert ~float16.all == float16.none
     assert float16.range(1.5, 2.0) <= a and not a <= b
     assert a.isdisjoint(float16.range(2.0, 3.0))
+
+
+class Digit(Codec[int]):
+    """0 to 9, which leaves 6 of its 16 bit patterns unused."""
+
+    def encode(self, value: object) -> int:
+        if isinstance(value, int) and 0 <= value <= 9:
+            return value
+        raise ValueError(f"{value!r} isn't a digit")
+
+    def decode(self, bits: int) -> int:
+        return bits
+
+    @cached_property
+    def all(self) -> BDDSet[int]:
+        return self.set(range(10))
+
+
+def test_invert_stays_inside_the_codecs_values():
+    digit = Digit(4, "digit")
+    assert ~digit.set([0, 1]) == digit.set(range(2, 10))
+    assert ~digit.none == digit.all
 
 
 @pytest.mark.parametrize(

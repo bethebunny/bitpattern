@@ -63,7 +63,7 @@ class Codec(Generic[T]):
 
     @cached_property
     def all(self) -> BDDSet[T]:
-        """Every bit pattern of this width, whether or not it decodes to a value."""
+        """Every value. Unless a codec overrides it, that's every bit pattern."""
         return BDDSet(self, IntSet.from_bdd(BDD.ACCEPT, self.width))
 
     @cached_property
@@ -187,8 +187,8 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
         return BDDSet(self.codec, self._storage(other) - self.storage)
 
     def __invert__(self) -> BDDSet[T]:
-        """Every other bit pattern this codec has."""
-        return BDDSet(self.codec, ~self.storage)
+        """Every other value in `codec.all`."""
+        return self.codec.all - self
 
     def __le__(self, other: object) -> bool:
         return self.storage <= self._storage(other)
