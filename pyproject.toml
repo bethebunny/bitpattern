@@ -1,7 +1,7 @@
 [project]
 name = "bitpattern"
 dynamic = ["version"]
-description = "Bit patterns and integer sets backed by binary decision diagrams"
+description = "Very large sets of floats, IP addresses and other structured data, backed by binary decision diagrams"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -15,6 +15,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Mathematics",
     "Topic :: Software Development :: Testing",
     "Typing :: Typed",
