@@ -41,6 +41,9 @@ path = "bitpattern/__init__.py"
 [tool.hatch.build.targets.wheel]
 packages = ["bitpattern"]
 
+[tool.hatch.build.targets.sdist]
+exclude = [".jj"]  # hatchling only skips .git
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
