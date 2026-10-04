@@ -147,14 +147,88 @@ aren't values, override `all` with the ones that are, so that `~` leaves the oth
 set of tuples from a set for each field, and costs about as many nodes as they do
 together, however many tuples it holds. `project` goes back the other way.
 
+Here's a quick tour, with sampling seeded so it's repeatable:
+
 ```python
->>> from bitpattern.codecs import Tuple, ipv4, uint16
+>>> import random, uuid
+>>> from datetime import date, datetime
+>>> from enum import Flag
+>>> from bitpattern.codecs import (
+...     Flags, Tuple, char, dates, datetimes, float8_e4m3fn, ipv4, mac, uint16, uuid128
+... )
+>>> rng = random.Random(0)
+
+>>> # Tuples: every (address, port) on a private network's unprivileged ports
 >>> sockets = Tuple(ipv4, uint16)
->>> internal = sockets.product(ipv4.cidr("10.0.0.0/8"), uint16.range(1024, 65536))
->>> internal.size
-1082331758592
->>> internal[0]
-(IPv4Address('10.0.0.0'), 1024)
+>>> private = sockets.product(
+...     ipv4.cidr("10.0.0.0/8") | ipv4.cidr("192.168.0.0/16"),
+...     uint16.range(1024, 65536),
+... )
+>>> private.size
+1086559617024
+>>> ("10.1.2.3", 8080) in private
+True
+>>> private.choice(rng=rng)
+(IPv4Address('10.100.105.211'), 22477)
+>>> sockets.project(private, 1) == uint16.range(1024, 65536)
+True
+
+>>> # fp8: the whole format, and how floats round into it
+>>> float8_e4m3fn.finite.size
+254
+>>> float8_e4m3fn.positive[-1]
+448.0
+>>> float8_e4m3fn.decode(float8_e4m3fn.encode(0.3))
+0.3125
+>>> list(float8_e4m3fn.range(1.0, 2.0))
+[1.0, 1.125, 1.25, 1.375, 1.5, 1.625, 1.75, 1.875]
+
+>>> # Unicode characters
+>>> "É" in char.category("Lu")
+True
+>>> "".join(char.category("Sm") & char.range("\0", "\x80"))
+'+<=>|~'
+>>> char.range("a", "{") == char.category("Ll") & char.range("\0", "\x80")
+True
+
+>>> # Random MAC addresses are the locally administered unicast ones
+>>> (mac.local & mac.unicast).size
+70368744177664
+>>> (mac.local & mac.unicast).choice(rng=rng)
+'16:2e:6b:aa:94:55'
+
+>>> # UUIDs
+>>> uuid128.version(4).size == 2**122
+True
+>>> uuid.uuid4() in uuid128.version(4)
+True
+>>> uuid128.version(7).choice(rng=rng)
+UUID('f8cb83e0-b8b9-798b-b728-b4fa42485e3a')
+
+>>> # Dates and datetimes
+>>> dates.range(date(2024, 1, 1), date(2025, 1, 1)).size
+366
+>>> datetimes.range(datetime(2024, 1, 1), datetime(2024, 1, 2)).size
+86400000000
+
+>>> # Tuples of anything: a year of UUIDv7 events
+>>> events = Tuple(uuid128, datetimes)
+>>> year = events.product(
+...     uuid128.version(7), datetimes.range(datetime(2024, 1, 1), datetime(2025, 1, 1))
+... )
+>>> year.choice(rng=rng)
+(UUID('3e1a790b-610b-7b0c-ad79-9e3519a6aec7'), datetime.datetime(2024, 6, 15, 10, 18, 47, 668228))
+
+>>> # Flags
+>>> class Permission(Flag):
+...     READ = 4
+...     WRITE = 2
+...     EXECUTE = 1
+>>> permissions = Flags(Permission)
+>>> list(permissions.having(Permission.READ))
+[<Permission.READ: 4>, <Permission.READ|EXECUTE: 5>, <Permission.READ|WRITE: 6>, <Permission.READ|WRITE|EXECUTE: 7>]
+>>> permissions.pattern("?1?") == permissions.having(Permission.WRITE)
+True
 
 ```
 
