@@ -10,9 +10,11 @@ from bitpattern.bdd import (
     accepts,
     cofactors,
     count,
+    exists,
     iterate,
     node_count,
     nth,
+    shift,
     size,
 )
 from bitpattern.intset import IntSet
@@ -306,3 +308,30 @@ def test_shared_diagrams_stay_polynomial():
     assert even | odd is BDD.ACCEPT
     assert size(even) == 2**63
     assert path_count(even) == 2**63
+
+
+@pytest.mark.parametrize("mask", MASKS)
+def test_shift_moves_every_bit(mask):
+    node = diagram(mask)
+    up = shift(node, 2)
+    assert set(iterate(up, WIDTH + 2)) == {
+        value << 2 | low for value in subset(mask) for low in range(4)
+    }
+    assert shift(up, -2) is node
+
+
+@pytest.mark.parametrize("low, high", [(0, 1), (1, 2), (2, 3), (0, 2), (1, 3), (0, 3)])
+@pytest.mark.parametrize("mask", SAMPLE, ids=hex)
+def test_exists_forgets_a_range_of_bits(mask, low, high):
+    forgotten = (1 << high) - (1 << low)
+    settings = [bits for bits in UNIVERSE if not bits & ~forgotten]
+    expected = {
+        value & ~forgotten | bits for value in subset(mask) for bits in settings
+    }
+    assert set(iterate(exists(diagram(mask), low, high), WIDTH)) == expected
+
+
+def test_exists_over_nothing_changes_nothing():
+    even, _ = parity(8)
+    assert exists(even, 3, 3) is even
+    assert exists(even, 0, 8) is BDD.ACCEPT

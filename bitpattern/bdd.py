@@ -222,6 +222,37 @@ def iterate(node: BDD, width: int) -> Iterator[int]:
             yield 1 << bit | value
 
 
+def shift(node: BDD, by: int) -> BDD:
+    """`node` with every bit it tests moved up by `by`, or down if that's negative."""
+    moved: dict[BDD, BDD] = {}
+
+    def move(node: BDD) -> BDD:
+        if node.leaf:
+            return node
+        if (result := moved.get(node)) is None:
+            result = moved[node] = BDD(node.bit + by, move(node.left), move(node.right))
+        return result
+
+    return move(node)
+
+
+def exists(node: BDD, low: int, high: int) -> BDD:
+    """`node` with the bits in `[low, high)` quantified out, ie. it accepts an integer
+    if some setting of those bits would."""
+    quantified: dict[BDD, BDD] = {}
+
+    def quantify(node: BDD) -> BDD:
+        if node.bit < low:
+            return node
+        if (result := quantified.get(node)) is None:
+            left, right = quantify(node.left), quantify(node.right)
+            result = left | right if node.bit < high else BDD(node.bit, left, right)
+            quantified[node] = result
+        return result
+
+    return quantify(node)
+
+
 @weak_cache
 def node_count(node: BDD) -> int:
     """How many nodes there are under `node`, not counting the leaves."""
