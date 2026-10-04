@@ -6,7 +6,7 @@ infinities are `float16.pattern("?111.11??.*.*")`.
 """
 
 from .codec import BDDSet, Codec
-from .float import Float, float16, float32, float64
+from .float import Float, bfloat16, float16, float32, float64
 from .ip import IP, ipv4, ipv6
 
 __all__ = [
@@ -14,6 +14,7 @@ __all__ = [
     "BDDSet",
     "Codec",
     "Float",
+    "bfloat16",
     "float16",
     "float32",
     "float64",

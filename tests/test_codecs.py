@@ -1,11 +1,14 @@
-"""Codecs and BDDSets, with float16 brute-forced over all 65536 of its bit patterns."""
+"""Codecs and BDDSets, with the 16-bit floats brute-forced over all 65536 of their bit
+patterns."""
 
+import bisect
 import ipaddress
 import itertools
 import math
 import operator
 import random
-from functools import cached_property
+from fractions import Fraction
+from functools import cache, cached_property
 
 import pytest
 from hypothesis import assume, given, settings
@@ -16,6 +19,7 @@ from bitpattern.codecs import (
     BDDSet,
     Codec,
     Float,
+    bfloat16,
     float16,
     float32,
     float64,
@@ -64,10 +68,40 @@ def patterns(predicate) -> set[int]:
     return {bits for bits, value in zip(UNIVERSE, DECODED) if predicate(value)}
 
 
-def brute_force_range(low, high) -> set[int]:
-    """Every float16 bit pattern in `[low, high)`, by checking each one."""
-    start, stop = float16._key(float16.encode(low)), float16._key(float16.encode(high))
-    return {bits for bits in UNIVERSE if start <= float16._key(bits) < stop}
+@cache
+def keys(codec: Float) -> list[int]:
+    """`codec._key` of every bit pattern of a 16-bit float codec."""
+    return [codec._key(bits) for bits in UNIVERSE]
+
+
+def brute_force_range(codec: Float, low, high) -> set[int]:
+    """Every bit pattern of a 16-bit float codec in `[low, high)`, checking each one."""
+    start, stop = codec._key(codec.encode(low)), codec._key(codec.encode(high))
+    return {bits for bits, key in zip(UNIVERSE, keys(codec)) if start <= key < stop}
+
+
+@cache
+def magnitudes(codec: Float) -> list[float]:
+    """Every finite, non-negative value of a 16-bit float codec. They count up in
+    value with their bits, so the list is sorted, and indexed by bit pattern."""
+    return [codec.decode(bits) for bits in range(codec.encode(math.inf))]
+
+
+def nearest(codec: Float, value: float) -> float | None:
+    """`value` rounded to a 16-bit float codec by brute force: the closest value, with
+    ties going to the even bit pattern. None if it rounds up past the largest."""
+    finite = magnitudes(codec)
+    at = bisect.bisect_left(finite, abs(value))
+    if at < len(finite) and finite[at] == abs(value):
+        return value
+    # Past the largest value, infinity takes the place of the next one up.
+    below = finite[at - 1]
+    above = finite[at] if at < len(finite) else 2 * below - finite[-2]
+    down = Fraction(abs(value)) - Fraction(below)
+    up = Fraction(above) - Fraction(abs(value))
+    if down < up or (down == up and (at - 1) % 2 == 0):
+        return math.copysign(below, value)
+    return math.copysign(above, value) if at < len(finite) else None
 
 
 @pytest.mark.parametrize(
@@ -104,7 +138,7 @@ def test_nan_isnt_positive_or_negative():
     assert not float16.nan.isdisjoint(float16.sign_set)
 
 
-@pytest.mark.parametrize("codec", [float16, float32, float64])
+@pytest.mark.parametrize("codec", [float16, bfloat16, float32, float64])
 def test_named_set_sizes(codec):
     half, mantissa = 1 << (codec.width - 1), 1 << codec.mantissa
     assert codec.all.size == 1 << codec.width
@@ -152,10 +186,13 @@ def test_minus_zero_has_the_highest_bits():
     assert math.copysign(1, values[-1]) < 0 and values[-1] == 0.0
 
 
+@pytest.mark.parametrize("codec", [float16, bfloat16])
 @pytest.mark.parametrize("low", BOUNDS)
-def test_float_range_agrees_with_brute_force(low):
+def test_float_range_agrees_with_brute_force(codec, low):
     for high in BOUNDS:
-        assert set(float16.range(low, high).storage) == brute_force_range(low, high)
+        assert set(codec.range(low, high).storage) == brute_force_range(
+            codec, low, high
+        )
 
 
 def test_float_range_is_half_open():
@@ -193,7 +230,7 @@ def test_float64_range_ends():
     assert unit[-1] == math.nextafter(1.0, 0.0)
 
 
-@pytest.mark.parametrize("codec", [float16, float32, float64])
+@pytest.mark.parametrize("codec", [float16, bfloat16, float32, float64])
 def test_floats_round_trip(codec):
     for value in (0.0, 1.0, -1.0, 2.0, 0.5, math.inf, -math.inf):
         assert codec.decode(codec.encode(value)) == value
@@ -204,6 +241,45 @@ def test_floats_round_trip(codec):
 @settings(max_examples=200, deadline=None)
 def test_float64_round_trips_any_value(value):
     assert float64.decode(float64.encode(value)) == value
+
+
+def test_bfloat16_round_trips_every_bit_pattern():
+    for bits in UNIVERSE:
+        value = bfloat16.decode(bits)
+        assert math.isnan(value) or bfloat16.encode(value) == bits
+
+
+@pytest.mark.parametrize("codec", [float16, bfloat16])
+@given(value=st.floats(allow_nan=False, allow_infinity=False))
+@settings(max_examples=300, deadline=None)
+def test_encode_rounds_to_the_nearest_value(codec, value):
+    expected = nearest(codec, value)
+    if expected is None:
+        with pytest.raises(ValueError):
+            codec.encode(value)
+    else:
+        rounded = codec.decode(codec.encode(value))
+        assert rounded == expected
+        assert math.copysign(1, rounded) == math.copysign(1, expected)
+
+
+@pytest.mark.parametrize("codec", [float16, bfloat16])
+@given(data=st.data())
+@settings(max_examples=300, deadline=None)
+def test_encode_rounds_values_by_a_midpoint(codec, data):
+    """Values a step either side of a tie are where rounding twice goes wrong."""
+    finite = magnitudes(codec)
+    at = data.draw(st.integers(1, len(finite) - 1))
+    midpoint = (finite[at - 1] + finite[at]) / 2
+    side = data.draw(st.sampled_from([0.0, midpoint, math.inf]))
+    value = data.draw(st.sampled_from([1, -1])) * math.nextafter(midpoint, side)
+    assert codec.decode(codec.encode(value)) == nearest(codec, value)
+
+
+def test_bfloat16_rounds_once():
+    """Through a float32, this would land exactly on the midpoint, then tie down to 1."""
+    assert bfloat16.decode(bfloat16.encode(1 + 2**-8 + 2**-30)) == 1 + 2**-7
+    assert bfloat16.decode(bfloat16.encode(1 + 2**-8)) == 1  # a real tie goes to even
 
 
 @pytest.mark.parametrize("value", ["x", None, 1e10])  # 1e10 is too big for a float16
@@ -480,7 +556,7 @@ def test_set_algebra_across_blocks():
     assert (private & ipv4.cidr("10.1.0.0/16")).size == 2**16
 
 
-@pytest.mark.parametrize("codec", [float16, float32, float64, ipv4, ipv6])
+@pytest.mark.parametrize("codec", [float16, bfloat16, float32, float64, ipv4, ipv6])
 def test_all_and_none(codec):
     assert codec.all.size == 1 << codec.width
     assert codec.none.size == 0
