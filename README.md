@@ -132,6 +132,8 @@ aren't values, override `all` with the ones that are, so that `~` leaves the oth
 - `mac`, MAC addresses as strings like `01:23:45:67:89:ab`, with `multicast`,
   `unicast`, `local`, `universal` and `broadcast`, and `oui(prefix)` for the
   addresses under an OUI.
+- `uuid128`, `uuid.UUID`s as their 128 bits, with `version(n)` for RFC 9562's
+  versions 1 to 8, `rfc9562` for its variant, and `nil` and `max`.
 
 `Tuple` puts codecs side by side, the first field's bits on top. `product` builds a
 set of tuples from a set for each field, and costs about as many nodes as they do

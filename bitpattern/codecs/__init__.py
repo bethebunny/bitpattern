@@ -24,6 +24,7 @@ from .int import (
 from .ip import IP, ipv4, ipv6
 from .mac import MAC, mac
 from .tuple import Tuple
+from .uuid import UUIDCodec, uuid128
 
 __all__ = [
     "IP",
@@ -33,6 +34,7 @@ __all__ = [
     "Float",
     "Int",
     "Tuple",
+    "UUIDCodec",
     "bfloat16",
     "float16",
     "float32",
@@ -50,4 +52,5 @@ __all__ = [
     "uint32",
     "uint64",
     "uint128",
+    "uuid128",
 ]
