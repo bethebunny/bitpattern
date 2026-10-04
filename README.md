@@ -127,6 +127,9 @@ aren't values, override `all` with the ones that are, so that `~` leaves the oth
 - `int8`, `int16`, `int32`, `int64` and `int128`, and `uint8` through `uint128`, which
   are integers as their raw bits, in two's complement if they're signed. They have
   `min`, `max` and `range(low, high)`.
+- `char`, one-character strings as their code points, for every Unicode scalar
+  value, with `range(low, high)` and `category(name)` for general categories like
+  `"Lu"` or `"L"`.
 - `ipv4` and `ipv6`, with `cidr("10.0.0.0/8")` and `range(low, high)`.
   `networks(addresses)` finds the fewest CIDR blocks that make up a set of addresses.
 - `mac`, MAC addresses as strings like `01:23:45:67:89:ab`, with `multicast`,

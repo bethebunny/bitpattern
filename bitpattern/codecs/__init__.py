@@ -6,6 +6,7 @@ raw bits, so patterns match the bit layout. For instance the float16 NaNs and
 infinities are `float16.pattern("?111.11??.*.*")`.
 """
 
+from .char import Char, char
 from .codec import BDDSet, Codec
 from .enum import Flags, Members
 from .float import Float, bfloat16, float16, float32, float64
@@ -32,6 +33,7 @@ __all__ = [
     "IP",
     "MAC",
     "BDDSet",
+    "Char",
     "Codec",
     "Date",
     "Datetime",
@@ -42,6 +44,7 @@ __all__ = [
     "Tuple",
     "UUIDCodec",
     "bfloat16",
+    "char",
     "dates",
     "datetimes",
     "float16",
