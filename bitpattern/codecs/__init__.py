@@ -22,6 +22,7 @@ from .int import (
     uint128,
 )
 from .ip import IP, ipv4, ipv6
+from .tuple import Tuple
 
 __all__ = [
     "IP",
@@ -29,6 +30,7 @@ __all__ = [
     "Codec",
     "Float",
     "Int",
+    "Tuple",
     "bfloat16",
     "float16",
     "float32",

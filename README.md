@@ -130,6 +130,21 @@ aren't values, override `all` with the ones that are, so that `~` leaves the oth
 - `ipv4` and `ipv6`, with `cidr("10.0.0.0/8")` and `range(low, high)`.
   `networks(addresses)` finds the fewest CIDR blocks that make up a set of addresses.
 
+`Tuple` puts codecs side by side, the first field's bits on top. `product` builds a
+set of tuples from a set for each field, and costs about as many nodes as they do
+together, however many tuples it holds. `project` goes back the other way.
+
+```python
+>>> from bitpattern.codecs import Tuple, ipv4, uint16
+>>> sockets = Tuple(ipv4, uint16)
+>>> internal = sockets.product(ipv4.cidr("10.0.0.0/8"), uint16.range(1024, 65536))
+>>> internal.size
+1082331758592
+>>> internal[0]
+(IPv4Address('10.0.0.0'), 1024)
+
+```
+
 ## IntSet
 
 `IntSet` is the backing abstraction for BDDSets and patterns, and is provided directly.
