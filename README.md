@@ -124,6 +124,9 @@ aren't values, override `all` with the ones that are, so that `~` leaves the oth
 - `float16`, `float32` and `float64`, which are IEEE 754 floats as their raw bits, and
   `bfloat16`, the top half of a `float32`. They have sets like `finite`, `nan`,
   `infinities`, `subnormal` and `zeros`, and `range(low, high)`.
+- `int8`, `int16`, `int32`, `int64` and `int128`, and `uint8` through `uint128`, which
+  are integers as their raw bits, in two's complement if they're signed. They have
+  `min`, `max` and `range(low, high)`.
 - `ipv4` and `ipv6`, with `cidr("10.0.0.0/8")` and `range(low, high)`.
   `networks(addresses)` finds the fewest CIDR blocks that make up a set of addresses.
 

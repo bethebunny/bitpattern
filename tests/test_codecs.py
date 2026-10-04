@@ -23,8 +23,13 @@ from bitpattern.codecs import (
     float16,
     float32,
     float64,
+    int8,
+    int64,
+    int128,
     ipv4,
     ipv6,
+    uint8,
+    uint128,
 )
 
 UNIVERSE = range(1 << float16.width)
@@ -556,7 +561,9 @@ def test_set_algebra_across_blocks():
     assert (private & ipv4.cidr("10.1.0.0/16")).size == 2**16
 
 
-@pytest.mark.parametrize("codec", [float16, bfloat16, float32, float64, ipv4, ipv6])
+@pytest.mark.parametrize(
+    "codec", [float16, bfloat16, float32, float64, int8, uint128, ipv4, ipv6]
+)
 def test_all_and_none(codec):
     assert codec.all.size == 1 << codec.width
     assert codec.none.size == 0
@@ -571,3 +578,75 @@ def test_choice_defaults_to_the_random_module():
 def test_choice_from_an_empty_set_raises():
     with pytest.raises(IndexError):
         float16.none.choice()
+
+
+INT_BOUNDS = (-1000, -129, -128, -127, -1, 0, 1, 126, 127, 128, 255, 256, 1000)
+
+
+class Index:
+    """Not an int, but has a lossless conversion to one, like numpy's integers."""
+
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def __index__(self) -> int:
+        return self.value
+
+
+def test_int_bounds():
+    assert (int8.min, int8.max) == (-128, 127)
+    assert (uint8.min, uint8.max) == (0, 255)
+    assert (int128.min, int128.max) == (-(2**127), 2**127 - 1)
+    assert (uint128.min, uint128.max) == (0, 2**128 - 1)
+
+
+@pytest.mark.parametrize("codec", [int8, uint8])
+def test_ints_use_every_bit_pattern_once(codec):
+    values = range(codec.min, codec.max + 1)
+    assert sorted(map(codec.encode, values)) == list(range(1 << codec.width))
+    assert [codec.decode(codec.encode(value)) for value in values] == list(values)
+
+
+def test_signed_ints_are_twos_complement():
+    assert [int8.encode(value) for value in (0, 1, 127, -128, -1)] == [
+        0,
+        1,
+        127,
+        128,
+        255,
+    ]
+    assert int8.pattern("1*.*") == int8.range(int8.min, 0)  # the sign bit
+
+
+def test_ints_count_up_from_zero_then_from_min():
+    assert list(int8.range(-3, 3)) == [0, 1, 2, -3, -2, -1]
+    assert list(uint8.range(253, 300)) == [253, 254, 255]
+
+
+@pytest.mark.parametrize("codec", [int8, uint8])
+@pytest.mark.parametrize("low", INT_BOUNDS)
+def test_int_range_agrees_with_brute_force(codec, low):
+    values = range(codec.min, codec.max + 1)
+    for high in INT_BOUNDS:
+        assert set(codec.range(low, high)) == {v for v in values if low <= v < high}
+
+
+def test_wide_int_ranges():
+    assert uint128.range(0, 2**100).size == 2**100
+    assert int64.range(-(2**40), 2**40).size == 2**41
+    assert int128.range(int128.min, int128.max + 1) == int128.all
+
+
+@pytest.mark.parametrize(
+    "codec, value",
+    [(int8, 128), (int8, -129), (uint8, -1), (uint8, 256), (int8, 1.0), (int8, "1")],
+)
+def test_ints_refuse_what_they_cant_encode(codec, value):
+    with pytest.raises(ValueError):
+        codec.encode(value)
+    assert value not in codec.all
+
+
+def test_ints_take_anything_with_an_index():
+    assert int8.encode(Index(-1)) == 255
+    assert Index(5) in uint8.range(0, 10)
