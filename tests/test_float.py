@@ -1,10 +1,11 @@
-"""Float codecs, with the 16-bit formats brute-forced over all 65536 of their bit
+"""Float codecs, with the 8- and 16-bit formats brute-forced over all of their bit
 patterns."""
 
 import bisect
 import itertools
 import math
 import random
+import sys
 from fractions import Fraction
 from functools import cache
 
@@ -12,69 +13,83 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from bitpattern import Pattern
 from bitpattern.codecs import Float, bfloat16, float16, float32, float64
+from bitpattern.codecs.float import float8_e4m3fn, float8_e5m2
 
-UNIVERSE = range(1 << float16.width)
-
-
-DECODED = [float16.decode(bits) for bits in UNIVERSE]
+FLOAT8 = [float8_e5m2, float8_e4m3fn]
 
 
-SMALLEST_NORMAL = 2.0**-14  # float16 has a 5-bit exponent, with a bias of 15
+BRUTE_FORCED = [*FLOAT8, float16, bfloat16]  # small enough to check every bit pattern
 
 
 SMALL = float16.range(1.0, 1.01)  # the 10 float16s from 1.0
 
 
-BOUNDS = (
-    -math.inf,
-    -65504.0,
-    -1.0,
-    -SMALLEST_NORMAL,
-    -5.960464477539063e-08,
-    -0.0,
-    0.0,
-    5.960464477539063e-08,
-    SMALLEST_NORMAL,
-    1.0,
-    2.0,
-    65504.0,
-    math.inf,
-)
+@cache
+def decoded(codec: Float) -> list[float]:
+    """The value of every bit pattern of a small float codec, indexed by bits."""
+    return [codec.decode(bits) for bits in range(1 << codec.width)]
 
 
-def patterns(predicate) -> set[int]:
-    """Every float16 bit pattern whose value satisfies `predicate`."""
-    return {bits for bits, value in zip(UNIVERSE, DECODED) if predicate(value)}
+def patterns(codec: Float, predicate) -> set[int]:
+    """Every bit pattern of a small float codec whose value satisfies `predicate`."""
+    return {bits for bits, value in enumerate(decoded(codec)) if predicate(value)}
+
+
+def by_definition(codec: Float, bits: int) -> float:
+    """`bits` read as a finite float: a sign, an exponent with a bias, and a fraction
+    with an implicit leading 1 unless the exponent is 0."""
+    sign = -1.0 if bits >> (codec.width - 1) else 1.0
+    exponent = (bits >> codec.mantissa) % (1 << codec.exponent)
+    fraction = bits % (1 << codec.mantissa) / (1 << codec.mantissa)
+    bias = (1 << (codec.exponent - 1)) - 1
+    if not exponent:
+        return sign * fraction * 2.0 ** (1 - bias)
+    return sign * (1 + fraction) * 2.0 ** (exponent - bias)
+
+
+def signed(value: float) -> tuple[float, float]:
+    """`value` with its sign, which orders -0.0 before 0.0 like ranges do."""
+    return value, math.copysign(1, value)
 
 
 @cache
-def keys(codec: Float) -> list[int]:
-    """`codec._key` of every bit pattern of a 16-bit float codec."""
-    return [codec._key(bits) for bits in UNIVERSE]
+def orders(codec: Float) -> list[tuple[float, float]]:
+    """`signed` of every bit pattern of a small float codec."""
+    return [signed(value) for value in decoded(codec)]
 
 
 def brute_force_range(codec: Float, low, high) -> set[int]:
-    """Every bit pattern of a 16-bit float codec in `[low, high)`, checking each one."""
-    start, stop = codec._key(codec.encode(low)), codec._key(codec.encode(high))
-    return {bits for bits, key in zip(UNIVERSE, keys(codec)) if start <= key < stop}
+    """Every bit pattern of a small float codec in `[low, high)`, checking each one."""
+    start, stop = signed(low), signed(high)
+    return {bits for bits, order in enumerate(orders(codec)) if start <= order < stop}
 
 
 @cache
 def magnitudes(codec: Float) -> list[float]:
-    """Every finite, non-negative value of a 16-bit float codec. They count up in
-    value with their bits, so the list is sorted, and indexed by bit pattern."""
-    return [codec.decode(bits) for bits in range(codec.encode(math.inf))]
+    """Every finite, non-negative value of a small float codec. They count up in
+    value with their bits until the first infinity or NaN, so the list is sorted,
+    and indexed by bit pattern."""
+    return list(itertools.takewhile(math.isfinite, decoded(codec)))
+
+
+def bounds(codec: Float) -> list[float]:
+    """Values of a small float codec to bound its ranges with, from -inf to inf."""
+    finite = magnitudes(codec)
+    smallest_normal = finite[1 << codec.mantissa]
+    positive = [finite[1], smallest_normal, 1.0, 2.0, finite[-1], math.inf]
+    return [-value for value in reversed(positive)] + [-0.0, 0.0] + positive
 
 
 def nearest(codec: Float, value: float) -> float | None:
-    """`value` rounded to a 16-bit float codec by brute force: the closest value, with
+    """`value` rounded to a small float codec by brute force: the closest value, with
     ties going to the even bit pattern. None if it rounds up past the largest."""
     finite = magnitudes(codec)
     at = bisect.bisect_left(finite, abs(value))
     if at < len(finite) and finite[at] == abs(value):
         return value
-    # Past the largest value, infinity takes the place of the next one up.
+    # Past the largest value, infinity or NaN takes the place of the next one up.
     below = finite[at - 1]
     above = finite[at] if at < len(finite) else 2 * below - finite[-2]
     down = Fraction(abs(value)) - Fraction(below)
@@ -84,6 +99,37 @@ def nearest(codec: Float, value: float) -> float | None:
     return math.copysign(above, value) if at < len(finite) else None
 
 
+def assert_rounds_to_nearest(codec: Float, value: float) -> None:
+    """`codec` rounds `value` like `nearest`, and refuses it if that's None."""
+    expected = nearest(codec, value)
+    if expected is None:
+        with pytest.raises(ValueError):
+            codec.encode(value)
+    else:
+        rounded = codec.decode(codec.encode(value))
+        assert rounded == expected
+        assert math.copysign(1, rounded) == math.copysign(1, expected)
+
+
+@pytest.mark.parametrize(
+    "codec, special",
+    [
+        (float8_e5m2, Pattern("?111.11??")),
+        (float8_e4m3fn, Pattern("?111.1111")),  # only NaNs, since it has no infinities
+        (float16, Pattern("?111.11??.????.????")),
+        (bfloat16, Pattern("?111.1111.1???.????")),
+    ],
+)
+def test_decode_agrees_with_the_definition(codec, special):
+    """struct decodes the 16-bit formats, so they check the definition itself."""
+    for bits, value in enumerate(decoded(codec)):
+        if bits in special:
+            assert not math.isfinite(value)
+        else:
+            assert signed(value) == signed(by_definition(codec, bits))
+
+
+@pytest.mark.parametrize("codec", BRUTE_FORCED)
 @pytest.mark.parametrize(
     "name, predicate",
     [
@@ -96,29 +142,38 @@ def nearest(codec: Float, value: float) -> float | None:
         ("nonnegative", lambda v: v >= 0),
         ("sign_clear", lambda v: math.copysign(1, v) > 0),
         ("sign_set", lambda v: math.copysign(1, v) < 0),
-        ("subnormal", lambda v: v != 0 and abs(v) < SMALLEST_NORMAL),
     ],
 )
-def test_named_sets_match_the_decoded_values(name, predicate):
-    assert set(getattr(float16, name).storage) == patterns(predicate)
+def test_named_sets_match_the_decoded_values(codec, name, predicate):
+    assert set(getattr(codec, name).storage) == patterns(codec, predicate)
 
 
-def test_sign_halves_partition_everything():
-    assert set((float16.sign_clear | float16.sign_set).storage) == set(UNIVERSE)
-    assert float16.sign_clear.isdisjoint(float16.sign_set)
-    everything = float16.finite | float16.nan | float16.infinities
-    assert set(everything.storage) == set(UNIVERSE)
+@pytest.mark.parametrize("codec", BRUTE_FORCED)
+def test_subnormals_are_the_values_below_the_smallest_normal(codec):
+    smallest_normal = 2.0 ** (2 - 2 ** (codec.exponent - 1))  # 2**(1 - bias)
+    below = patterns(codec, lambda v: v != 0 and abs(v) < smallest_normal)
+    assert set(codec.subnormal.storage) == below
 
 
-def test_nan_isnt_positive_or_negative():
+@pytest.mark.parametrize("codec", BRUTE_FORCED)
+def test_sign_halves_partition_everything(codec):
+    universe = set(range(1 << codec.width))
+    assert set((codec.sign_clear | codec.sign_set).storage) == universe
+    assert codec.sign_clear.isdisjoint(codec.sign_set)
+    everything = codec.finite | codec.nan | codec.infinities
+    assert set(everything.storage) == universe
+
+
+@pytest.mark.parametrize("codec", BRUTE_FORCED)
+def test_nan_isnt_positive_or_negative(codec):
     """NaNs have a sign bit, but no order."""
-    assert float16.nan.isdisjoint(float16.positive)
-    assert float16.nan.isdisjoint(float16.negative)
-    assert not float16.nan.isdisjoint(float16.sign_clear)
-    assert not float16.nan.isdisjoint(float16.sign_set)
+    assert codec.nan.isdisjoint(codec.positive)
+    assert codec.nan.isdisjoint(codec.negative)
+    assert not codec.nan.isdisjoint(codec.sign_clear)
+    assert not codec.nan.isdisjoint(codec.sign_set)
 
 
-@pytest.mark.parametrize("codec", [float16, bfloat16, float32, float64])
+@pytest.mark.parametrize("codec", [float8_e5m2, float16, bfloat16, float32, float64])
 def test_named_set_sizes(codec):
     half, mantissa = 1 << (codec.width - 1), 1 << codec.mantissa
     assert codec.all.size == 1 << codec.width
@@ -138,12 +193,20 @@ def test_float64_sizes():
     assert float64.positive.size == 2**63 - 2**52
 
 
+def test_float8_e4m3fn_sizes():
+    assert float8_e4m3fn.nan.size == 2
+    assert float8_e4m3fn.infinities.size == 0
+    assert float8_e4m3fn.finite.size == 254
+    assert float8_e4m3fn.subnormal.size == 14
+    assert float8_e4m3fn.positive.size == 126 == float8_e4m3fn.negative.size
+
+
 def test_named_sets_are_cached():
     assert float64.nan is float64.nan
 
 
 def test_key_sorts_bits_by_value():
-    ordered = sorted(patterns(lambda v: not math.isnan(v)), key=float16._key)
+    ordered = sorted(patterns(float16, lambda v: not math.isnan(v)), key=float16._key)
     values = [float16.decode(bits) for bits in ordered]
     assert all(a <= b for a, b in itertools.pairwise(values))
     assert values[0] == -math.inf and values[-1] == math.inf
@@ -166,10 +229,9 @@ def test_minus_zero_has_the_highest_bits():
     assert math.copysign(1, values[-1]) < 0 and values[-1] == 0.0
 
 
-@pytest.mark.parametrize("codec", [float16, bfloat16])
-@pytest.mark.parametrize("low", BOUNDS)
-def test_float_range_agrees_with_brute_force(codec, low):
-    for high in BOUNDS:
+@pytest.mark.parametrize("codec", BRUTE_FORCED)
+def test_float_range_agrees_with_brute_force(codec):
+    for low, high in itertools.product(bounds(codec), repeat=2):
         assert set(codec.range(low, high).storage) == brute_force_range(
             codec, low, high
         )
@@ -189,11 +251,19 @@ def test_float_range_never_includes_nan():
     assert math.inf not in spread
 
 
-def test_nan_cant_bound_a_range():
+def test_infinities_bound_float8_e4m3fn_ranges():
+    """There aren't any infinities, but a range can still run to one."""
+    assert float8_e4m3fn.range(-math.inf, math.inf) == float8_e4m3fn.finite
+    assert float8_e4m3fn.range(1.0, math.inf)[-1] == 448.0
+    assert float8_e4m3fn.range(math.inf, math.inf) == float8_e4m3fn.none
+
+
+@pytest.mark.parametrize("codec", [float16, float8_e4m3fn])
+def test_nan_cant_bound_a_range(codec):
     with pytest.raises(ValueError):
-        float16.range(math.nan, 1.0)
+        codec.range(math.nan, 1.0)
     with pytest.raises(ValueError):
-        float16.range(0.0, math.nan)
+        codec.range(0.0, math.nan)
 
 
 def test_wide_float_ranges_stay_small():
@@ -210,7 +280,7 @@ def test_float64_range_ends():
     assert unit[-1] == math.nextafter(1.0, 0.0)
 
 
-@pytest.mark.parametrize("codec", [float16, bfloat16, float32, float64])
+@pytest.mark.parametrize("codec", [float8_e5m2, float16, bfloat16, float32, float64])
 def test_floats_round_trip(codec):
     for value in (0.0, 1.0, -1.0, 2.0, 0.5, math.inf, -math.inf):
         assert codec.decode(codec.encode(value)) == value
@@ -223,24 +293,40 @@ def test_float64_round_trips_any_value(value):
     assert float64.decode(float64.encode(value)) == value
 
 
-def test_bfloat16_round_trips_every_bit_pattern():
-    for bits in UNIVERSE:
-        value = bfloat16.decode(bits)
-        assert math.isnan(value) or bfloat16.encode(value) == bits
+@pytest.mark.parametrize("codec", BRUTE_FORCED)
+def test_every_bit_pattern_round_trips(codec):
+    for bits, value in enumerate(decoded(codec)):
+        assert math.isnan(value) or codec.encode(value) == bits
 
 
-@pytest.mark.parametrize("codec", [float16, bfloat16])
+def test_float8_e4m3fn_nans_round_trip_too():
+    """There's one NaN of each sign, so every bit pattern round trips."""
+    encoded = [float8_e4m3fn.encode(value) for value in decoded(float8_e4m3fn)]
+    assert encoded == list(range(256))
+
+
+@pytest.mark.parametrize("codec", BRUTE_FORCED)
 @given(value=st.floats(allow_nan=False, allow_infinity=False))
 @settings(max_examples=300, deadline=None)
 def test_encode_rounds_to_the_nearest_value(codec, value):
-    expected = nearest(codec, value)
-    if expected is None:
-        with pytest.raises(ValueError):
-            codec.encode(value)
-    else:
-        rounded = codec.decode(codec.encode(value))
-        assert rounded == expected
-        assert math.copysign(1, rounded) == math.copysign(1, expected)
+    assert_rounds_to_nearest(codec, value)
+
+
+@pytest.mark.parametrize("codec", FLOAT8)
+def test_float8_rounding_agrees_with_brute_force(codec):
+    """Every value and every midpoint, with a step either side of each midpoint."""
+    finite = magnitudes(codec)
+    past = 2 * finite[-1] - finite[-2]  # the next step after the largest value
+    for below, above in itertools.pairwise([*finite, past]):
+        midpoint = (below + above) / 2
+        for value in (
+            below,
+            math.nextafter(midpoint, 0.0),
+            midpoint,
+            math.nextafter(midpoint, math.inf),
+        ):
+            assert_rounds_to_nearest(codec, value)
+            assert_rounds_to_nearest(codec, -value)
 
 
 @pytest.mark.parametrize("codec", [float16, bfloat16])
@@ -262,10 +348,47 @@ def test_bfloat16_rounds_once():
     assert bfloat16.decode(bfloat16.encode(1 + 2**-8)) == 1  # a real tie goes to even
 
 
+def test_float8_e5m2_values():
+    assert float8_e5m2.decode(0b0_11110_11) == 57344.0  # the largest
+    assert float8_e5m2.positive[0] == 2.0**-16  # the smallest subnormal
+    assert float8_e5m2.decode(0b0_00001_00) == 2.0**-14  # the smallest normal
+    assert float8_e5m2.encode(1.0) == 0b0_01111_00
+    assert float8_e5m2.encode(-math.inf) == 0b1_11111_00
+    assert float8_e5m2.encode(61439.0) == 0b0_11110_11  # just short of halfway to inf
+
+
+def test_float8_e4m3fn_values():
+    assert float8_e4m3fn.positive[-1] == 448.0  # the largest
+    assert float8_e4m3fn.positive[0] == 2.0**-9  # the smallest subnormal
+    assert float8_e4m3fn.decode(0b0_0001_000) == 2.0**-6  # the smallest normal
+    assert float8_e4m3fn.decode(0b0_1111_000) == 256.0  # the top exponent is normal
+    assert float8_e4m3fn.encode(1.0) == 0b0_0111_000
+    assert float8_e4m3fn.encode(-math.nan) == 0b1_1111_111
+    # A tie between 448 and the NaN goes to 448, whose mantissa is even.
+    assert float8_e4m3fn.encode(464.0) == 0b0_1111_110
+
+
 @pytest.mark.parametrize("value", ["x", None, 1e10])  # 1e10 is too big for a float16
 def test_encode_refuses_what_it_cant_encode(value):
     with pytest.raises(ValueError):
         float16.encode(value)
+
+
+@pytest.mark.parametrize(
+    "codec, value",
+    [
+        (float8_e5m2, 61440.0),  # rounds to the next step up, which is infinity
+        (float8_e4m3fn, math.inf),
+        (float8_e4m3fn, -math.inf),
+        (float8_e4m3fn, math.nextafter(464.0, math.inf)),  # just past the NaN tie
+        (float8_e4m3fn, sys.float_info.max),  # rounding it up overflows a double
+        (float8_e4m3fn, "x"),
+    ],
+)
+def test_float8_refuses_what_it_cant_encode(codec, value):
+    with pytest.raises(ValueError):
+        codec.encode(value)
+    assert value not in codec.all
 
 
 def test_float_choice_is_always_a_member():
