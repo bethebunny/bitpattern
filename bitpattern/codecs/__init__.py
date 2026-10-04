@@ -22,10 +22,12 @@ from .int import (
     uint128,
 )
 from .ip import IP, ipv4, ipv6
+from .mac import MAC, mac
 from .tuple import Tuple
 
 __all__ = [
     "IP",
+    "MAC",
     "BDDSet",
     "Codec",
     "Float",
@@ -42,6 +44,7 @@ __all__ = [
     "int128",
     "ipv4",
     "ipv6",
+    "mac",
     "uint8",
     "uint16",
     "uint32",

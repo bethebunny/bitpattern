@@ -129,6 +129,9 @@ aren't values, override `all` with the ones that are, so that `~` leaves the oth
   `min`, `max` and `range(low, high)`.
 - `ipv4` and `ipv6`, with `cidr("10.0.0.0/8")` and `range(low, high)`.
   `networks(addresses)` finds the fewest CIDR blocks that make up a set of addresses.
+- `mac`, MAC addresses as strings like `01:23:45:67:89:ab`, with `multicast`,
+  `unicast`, `local`, `universal` and `broadcast`, and `oui(prefix)` for the
+  addresses under an OUI.
 
 `Tuple` puts codecs side by side, the first field's bits on top. `product` builds a
 set of tuples from a set for each field, and costs about as many nodes as they do
