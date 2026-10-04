@@ -7,6 +7,7 @@ infinities are `float16.pattern("?111.11??.*.*")`.
 """
 
 from .codec import BDDSet, Codec
+from .enum import Flags, Members
 from .float import Float, bfloat16, float16, float32, float64
 from .int import (
     Int,
@@ -34,8 +35,10 @@ __all__ = [
     "Codec",
     "Date",
     "Datetime",
+    "Flags",
     "Float",
     "Int",
+    "Members",
     "Tuple",
     "UUIDCodec",
     "bfloat16",

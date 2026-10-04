@@ -137,6 +137,8 @@ aren't values, override `all` with the ones that are, so that `~` leaves the oth
 - `dates` and `datetimes`, which count `datetime.date`s in days and naive
   `datetime.datetime`s in microseconds, so they sort in time, with
   `range(low, high)`.
+- `Members(SomeEnum)`, an Enum's members by their index, and `Flags(SomeFlag)`, a
+  Flag's combinations as their own bits, with `having(flags)` and `lacking(flags)`.
 
 `Tuple` puts codecs side by side, the first field's bits on top. `product` builds a
 set of tuples from a set for each field, and costs about as many nodes as they do
