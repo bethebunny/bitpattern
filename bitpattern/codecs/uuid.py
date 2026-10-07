@@ -8,13 +8,13 @@ from uuid import UUID
 
 from ..intset import IntSet
 from ..pattern import diagram
-from .codec import BDDSet, Codec
+from .codec import BDDSet, OrderedCodec
 
 __all__ = ["UUIDCodec", "uuid128"]
 
 
 @dataclass(frozen=True, repr=False)
-class UUIDCodec(Codec[UUID]):
+class UUIDCodec(OrderedCodec[UUID]):
     """`uuid.UUID`s, as the bits of `UUID.int`, which is also how UUIDs sort.
 
     A UUID is written `xxxxxxxx-xxxx-Mxxx-Nxxx-xxxxxxxxxxxx`, one hex digit per
@@ -50,16 +50,6 @@ class UUIDCodec(Codec[UUID]):
         if not 1 <= n <= 8:
             raise ValueError(f"UUID versions go from 1 to 8, not {n}")
         return self._rfc(f"{n:04b}")
-
-    @cached_property
-    def nil(self) -> BDDSet[UUID]:
-        """`00000000-0000-0000-0000-000000000000`, which isn't in `rfc9562`."""
-        return self.set([UUID(int=0)])
-
-    @cached_property
-    def max(self) -> BDDSet[UUID]:
-        """`ffffffff-ffff-ffff-ffff-ffffffffffff`, which isn't in `rfc9562`."""
-        return self.set([UUID(int=(1 << self.width) - 1)])
 
 
 uuid128 = UUIDCodec(128, "uuid128")

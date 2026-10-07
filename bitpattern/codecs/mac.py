@@ -8,7 +8,7 @@ from functools import cached_property
 
 from ..intset import IntSet
 from ..pattern import diagram
-from .codec import BDDSet, Codec
+from .codec import BDDSet, OrderedCodec
 
 __all__ = ["MAC", "mac"]
 
@@ -26,7 +26,7 @@ OUI = re.compile(
 
 
 @dataclass(frozen=True, repr=False)
-class MAC(Codec[str]):
+class MAC(OrderedCodec[str]):
     """48-bit MAC addresses (EUI-48), like `01:23:45:67:89:ab`.
 
     The first octet is the top eight bits, so addresses sort the same as their strings.

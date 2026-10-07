@@ -17,7 +17,7 @@ from ..bdd import BDD, exists, render_count, shift
 from ..intset import IntSet
 from ..pattern import Pattern
 
-__all__ = ["BDDSet", "Codec", "Tuple", "product", "project"]
+__all__ = ["BDDSet", "Codec", "OrderedCodec", "Tuple", "product", "project"]
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -89,6 +89,35 @@ class Codec(Generic[T]):
         if pattern.width != self.width:
             raise ValueError(f"pattern is {pattern.width} bits, not {self.width}")
         return BDDSet(self, pattern)
+
+
+class OrderedCodec(Codec[T]):
+    """A codec whose values have an order, with `min`, `max` and `range`.
+
+    The defaults assume the encodings sort the same as the values, so sets iterate in
+    order and a range of values is a range of bits. Codecs whose encodings sort some
+    other way, like `Int` and `Float`, override them.
+    """
+
+    @property
+    def min(self) -> T:
+        """The smallest value."""
+        return self.all[0]
+
+    @property
+    def max(self) -> T:
+        """The largest value."""
+        return self.all[-1]
+
+    def _bound(self, value: T) -> int:
+        """Where a range bounded by `value` starts or stops."""
+        return self.encode(value)
+
+    def range(self, start: T | None = None, stop: T | None = None) -> BDDSet[T]:
+        """Values in `[start, stop)`. Leaving either bound out leaves that end open."""
+        low = 0 if start is None else self._bound(start)
+        high = 1 << self.width if stop is None else self._bound(stop)
+        return BDDSet(self, IntSet.range(low, high, width=self.width)) & self.all
 
 
 @dataclass(frozen=True, repr=False)

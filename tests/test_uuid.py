@@ -132,20 +132,18 @@ def test_version_choice_makes_uuids_of_that_version(n):
         assert value.version == n and value.variant == uuid.RFC_4122
 
 
-def test_nil_and_max_are_the_first_and_last_uuids():
-    assert uuid128.nil == uuid128.all[:1]
-    assert uuid128.max == uuid128.all[-1:]
-    assert repr(uuid128.nil) == (
-        "BDDSet(uuid128, [UUID('00000000-0000-0000-0000-000000000000')])"
-    )
-    assert repr(uuid128.max) == (
-        "BDDSet(uuid128, [UUID('ffffffff-ffff-ffff-ffff-ffffffffffff')])"
-    )
+def test_min_and_max_are_the_nil_and_max_uuids():
+    assert uuid128.min == uuid.UUID("00000000-0000-0000-0000-000000000000")
+    assert uuid128.max == uuid.UUID("ffffffff-ffff-ffff-ffff-ffffffffffff")
+    assert uuid128.min not in uuid128.rfc9562
+    assert uuid128.max not in uuid128.rfc9562
 
 
-def test_nil_and_max_arent_in_the_rfc_variant():
-    assert uuid128.nil.isdisjoint(uuid128.rfc9562)
-    assert uuid128.max.isdisjoint(uuid128.rfc9562)
+def test_uuid_ranges_go_in_uuid_order():
+    start = uuid.UUID("12345678-1234-4234-8234-123456789abc")
+    assert uuid128.range(start)[0] == start
+    assert uuid128.range(start).size == 2**128 - start.int
+    assert uuid128.range(stop=start).size == start.int
 
 
 def test_version_4_runs_from_its_smallest_uuid_to_its_largest():

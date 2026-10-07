@@ -147,6 +147,14 @@ def test_oui_refuses_anything_but_three_octets(prefix):
         mac.oui(prefix)
 
 
+def test_macs_are_ordered_like_their_strings():
+    assert (mac.min, mac.max) == ("00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff")
+    top = mac.range("ff:ff:ff:ff:ff:fe")
+    assert list(top) == ["ff:ff:ff:ff:ff:fe", "ff:ff:ff:ff:ff:ff"]
+    assert mac.range(stop="00:00:00:00:01:00").size == 256
+    assert mac.range("00:1a:2b:00:00:00", "00:1a:2c:00:00:00") == mac.oui("00:1a:2b")
+
+
 def test_mac_sets_repr_as_addresses():
     assert repr(mac) == "mac"
     assert repr(mac.broadcast) == "BDDSet(mac, ['ff:ff:ff:ff:ff:ff'])"

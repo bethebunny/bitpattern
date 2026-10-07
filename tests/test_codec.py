@@ -11,7 +11,7 @@ import pytest
 from bitpattern import IntSet, Pattern
 from bitpattern.codecs import (
     BDDSet,
-    Codec,
+    OrderedCodec,
     bfloat16,
     float16,
     float32,
@@ -78,7 +78,7 @@ def test_bdd_sets_combine_with_the_same_codec():
     assert a.isdisjoint(float16.range(2.0, 3.0))
 
 
-class Digit(Codec[int]):
+class Digit(OrderedCodec[int]):
     """0 to 9, which leaves 6 of its 16 bit patterns unused."""
 
     def encode(self, value: object) -> int:
@@ -92,6 +92,16 @@ class Digit(Codec[int]):
     @cached_property
     def all(self) -> BDDSet[int]:
         return self.set(range(10))
+
+
+def test_ordered_codecs_have_a_min_a_max_and_ranges():
+    digit = Digit(4, "digit")
+    assert (digit.min, digit.max) == (0, 9)
+    assert list(digit.range(3, 6)) == [3, 4, 5]
+    assert list(digit.range(7)) == [7, 8, 9]
+    assert list(digit.range(stop=2)) == [0, 1]
+    assert digit.range() == digit.all
+    assert digit.range(6, 3) == digit.none
 
 
 def test_invert_stays_inside_the_codecs_values():

@@ -131,3 +131,10 @@ def test_category_refuses_unknown_names(name):
 
 def test_categories_are_cached():
     assert category_points("Lu", char.width) is category_points("Lu", char.width)
+
+
+def test_char_ranges_can_leave_an_end_open():
+    assert char.range() == char.all
+    assert char.range(stop="\x80") == char.range("\0", "\x80")
+    assert list(char.range("\U0010fffe")) == ["\U0010fffe", "\U0010ffff"]
+    assert (char.min, char.max) == ("\0", "\U0010ffff")

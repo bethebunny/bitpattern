@@ -133,6 +133,16 @@ def test_subset_matches_ipaddress(chosen):
     assert (ipv4.cidr(a) <= ipv4.cidr(b)) == networks[0].subnet_of(networks[1])
 
 
+def test_ip_ranges_can_leave_an_end_open():
+    assert ipv4.range() == ipv4.all
+    assert [str(a) for a in ipv4.range("255.255.255.254")] == [
+        "255.255.255.254",
+        "255.255.255.255",
+    ]
+    assert ipv4.range(stop="0.0.1.0") == ipv4.cidr("0.0.0.0/24")
+    assert (str(ipv6.min), str(ipv6.max)) == ("::", "ffff:" * 7 + "ffff")
+
+
 def test_ip_range():
     assert [str(a) for a in ipv4.range("10.0.0.5", "10.0.0.9")] == [
         "10.0.0.5",

@@ -187,3 +187,11 @@ def test_datetimes_drop_fold():
     assert later == later.replace(fold=0)
     assert datetimes.encode(later) == datetimes.encode(later.replace(fold=0))
     assert datetimes.decode(datetimes.encode(later)).fold == 0
+
+
+def test_open_ranges_reach_the_ends_of_time():
+    assert date.max in dates.range(date(9999, 1, 1))
+    assert list(dates.range(stop=date(1, 1, 3))) == [date(1, 1, 1), date(1, 1, 2)]
+    assert datetimes.range() == datetimes.all
+    assert (dates.min, dates.max) == (date.min, date.max)
+    assert (datetimes.min, datetimes.max) == (datetime.min, datetime.max)

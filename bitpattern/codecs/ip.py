@@ -9,7 +9,7 @@ from typing import Generic, TypeVar
 
 from ..bdd import BDD, cofactors
 from ..intset import IntSet
-from .codec import BDDSet, Codec
+from .codec import BDDSet, OrderedCodec
 
 __all__ = ["IP", "ipv4", "ipv6"]
 
@@ -18,7 +18,7 @@ Network = TypeVar("Network", ipaddress.IPv4Network, ipaddress.IPv6Network)
 
 
 @dataclass(frozen=True, repr=False)
-class IP(Codec[Address], Generic[Address, Network]):
+class IP(OrderedCodec[Address], Generic[Address, Network]):
     """IPv4 or IPv6 addresses."""
 
     # The family's own classes, since ipaddress.ip_address() guesses the family
@@ -40,11 +40,16 @@ class IP(Codec[Address], Generic[Address, Network]):
         )
 
     def range(
-        self, low: Address | str | int, high: Address | str | int
+        self,
+        start: Address | str | int | None = None,
+        stop: Address | str | int | None = None,
     ) -> BDDSet[Address]:
-        """Addresses in `[low, high)`."""
-        return BDDSet(
-            self, IntSet.range(self.encode(low), self.encode(high), width=self.width)
+        """Addresses in `[start, stop)`, as addresses or anything that makes one, eg.
+        "10.0.0.1". Leaving either bound out leaves that end open."""
+        address = self.address_type
+        return super().range(
+            None if start is None else address(start),
+            None if stop is None else address(stop),
         )
 
     def networks(self, source: BDDSet[Address]) -> Iterator[Network]:

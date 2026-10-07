@@ -118,6 +118,8 @@ BDDSet(ascii, ['A', 'a'])
 
 `encode` should raise `ValueError` for anything it can't encode. If some bit patterns
 aren't values, override `all` with the ones that are, so that `~` leaves the others out.
+If the encodings sort the same as the values, subclass `OrderedCodec` instead, which
+adds `min`, `max` and `range(start, stop)`.
 
 `bitpattern.codecs` includes:
 
@@ -128,20 +130,21 @@ aren't values, override `all` with the ones that are, so that `~` leaves the oth
   are integers as their raw bits, in two's complement if they're signed. They have
   `min`, `max` and `range(low, high)`.
 - `char`, one-character strings as their code points, for every Unicode scalar
-  value, with `range(low, high)` and `category(name)` for general categories like
-  `"Lu"` or `"L"`.
-- `ipv4` and `ipv6`, with `cidr("10.0.0.0/8")` and `range(low, high)`.
+  value, with `category(name)` for general categories like `"Lu"` or `"L"`.
+- `ipv4` and `ipv6`, with `cidr("10.0.0.0/8")`.
   `networks(addresses)` finds the fewest CIDR blocks that make up a set of addresses.
 - `mac`, MAC addresses as strings like `01:23:45:67:89:ab`, with `multicast`,
   `unicast`, `local`, `universal` and `broadcast`, and `oui(prefix)` for the
   addresses under an OUI.
 - `uuid128`, `uuid.UUID`s as their 128 bits, with `version(n)` for RFC 9562's
-  versions 1 to 8, `rfc9562` for its variant, and `nil` and `max`.
+  versions 1 to 8 and `rfc9562` for its variant.
 - `dates` and `datetimes`, which count `datetime.date`s in days and naive
-  `datetime.datetime`s in microseconds, so they sort in time, with
-  `range(low, high)`.
+  `datetime.datetime`s in microseconds, so they sort in time.
 - `Members(SomeEnum)`, an Enum's members by their index, and `Flags(SomeFlag)`, a
   Flag's combinations as their own bits, with `having(flags)` and `lacking(flags)`.
+
+The characters, addresses, UUIDs, dates and datetimes are ordered. They have `min`,
+`max` and `range(start, stop)`, where leaving a bound out leaves that end open.
 
 `a * b` is the set of pairs from two sets, and `product(a, b, c)` makes longer
 tuples, like `itertools.product`. Their codec is a `Tuple`, which puts codecs side

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import cached_property
 
 from ..intset import IntSet
-from .codec import BDDSet, Codec
+from .codec import BDDSet, OrderedCodec
 
 __all__ = ["Date", "Datetime", "dates", "datetimes"]
 
@@ -15,7 +15,7 @@ MICROSECOND = dt.timedelta(microseconds=1)
 
 
 @dataclass(frozen=True, repr=False)
-class Date(Codec[dt.date]):
+class Date(OrderedCodec[dt.date]):
     """Dates as their proleptic Gregorian ordinal, where `date.min` is 1.
 
     Ordinals count up a day at a time, so ranges are contiguous and iteration goes
@@ -43,15 +43,9 @@ class Date(Codec[dt.date]):
         # Bits can match ordinal 0, or ordinals past date.max, which aren't dates.
         return super().pattern(text) & self.all
 
-    def range(self, low: dt.date, high: dt.date) -> BDDSet[dt.date]:
-        """Dates in `[low, high)`."""
-        return BDDSet(
-            self, IntSet.range(self.encode(low), self.encode(high), width=self.width)
-        )
-
 
 @dataclass(frozen=True, repr=False)
-class Datetime(Codec[dt.datetime]):
+class Datetime(OrderedCodec[dt.datetime]):
     """Naive datetimes as microseconds since `datetime.min`.
 
     Microseconds count up with time, so ranges are contiguous and iteration goes
@@ -80,12 +74,6 @@ class Datetime(Codec[dt.datetime]):
     def pattern(self, text: str) -> BDDSet[dt.datetime]:
         # Bits can match microseconds past datetime.max, which aren't datetimes.
         return super().pattern(text) & self.all
-
-    def range(self, low: dt.datetime, high: dt.datetime) -> BDDSet[dt.datetime]:
-        """Datetimes in `[low, high)`."""
-        return BDDSet(
-            self, IntSet.range(self.encode(low), self.encode(high), width=self.width)
-        )
 
 
 # The fewest bits that hold date.max and datetime.max.

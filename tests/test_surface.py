@@ -10,7 +10,16 @@ import pytest
 import bitpattern
 from bitpattern import IntSet, Pattern, bdd
 from bitpattern.bdd import BDD, node_count, render_count
-from bitpattern.codecs import BDDSet, Codec, float16, float32, float64, ipv4, ipv6
+from bitpattern.codecs import (
+    BDDSet,
+    Codec,
+    OrderedCodec,
+    float16,
+    float32,
+    float64,
+    ipv4,
+    ipv6,
+)
 
 README = Path(__file__).parent.parent / "README.md"
 
@@ -31,6 +40,7 @@ def test_top_level_names():
         "BDDSet": BDDSet,
         "Codec": Codec,
         "IntSet": IntSet,
+        "OrderedCodec": OrderedCodec,
         "Pattern": Pattern,
     }
 

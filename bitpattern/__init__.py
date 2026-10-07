@@ -10,10 +10,10 @@ strategies are in `bitpattern.strategies`, and the diagrams themselves are in
 """
 
 from .bdd import BDD
-from .codecs import BDDSet, Codec
+from .codecs import BDDSet, Codec, OrderedCodec
 from .intset import IntSet
 from .pattern import Pattern
 
 __version__ = "0.1.0"
 
-__all__ = ["BDD", "BDDSet", "Codec", "IntSet", "Pattern"]
+__all__ = ["BDD", "BDDSet", "Codec", "IntSet", "OrderedCodec", "Pattern"]

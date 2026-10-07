@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from functools import cache, cached_property, reduce
 
 from ..intset import IntSet
-from .codec import BDDSet, Codec
+from .codec import BDDSet, OrderedCodec
 
 __all__ = ["Char", "char"]
 
@@ -41,7 +41,7 @@ def category_points(name: str, width: int) -> IntSet:
 
 
 @dataclass(frozen=True, repr=False)
-class Char(Codec[str]):
+class Char(OrderedCodec[str]):
     """One-character strings, as their code points.
 
     Only Unicode scalar values are characters. That leaves out the surrogates,
@@ -72,10 +72,10 @@ class Char(Codec[str]):
         # Bits can match surrogates, or points past U+10FFFF, which aren't characters.
         return super().pattern(text) & self.all
 
-    def range(self, low: str, high: str) -> BDDSet[str]:
-        """Characters in `[low, high)`."""
-        points = IntSet.range(ord(low), ord(high), width=self.width)
-        return BDDSet(self, points) & self.all
+    def _bound(self, value: str) -> int:
+        # Any one-character string can bound a range, surrogates included, since
+        # strings sort by code point.
+        return ord(value)
 
     def category(self, name: str) -> BDDSet[str]:
         """Characters in a general category like "Lu", or a major class like "L".
