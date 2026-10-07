@@ -117,7 +117,8 @@ BDDSet(ascii, ['A', 'a'])
 ```
 
 `encode` should raise `ValueError` for anything it can't encode. If some bit patterns
-aren't values, override `all` with the ones that are, so that `~` leaves the others out.
+aren't values, override `all` with the ones that are, so that `~` and `pattern` leave
+the others out.
 If the encodings sort the same as the values, subclass `OrderedCodec` instead, which
 adds `min`, `max` and `range(start, stop)`.
 

@@ -104,6 +104,10 @@ def test_ordered_codecs_have_a_min_a_max_and_ranges():
     assert digit.range(6, 3) == digit.none
 
 
+def test_patterns_stay_inside_the_codecs_values():
+    assert list(Digit(4, "digit").pattern("1*")) == [8, 9]
+
+
 def test_invert_stays_inside_the_codecs_values():
     digit = Digit(4, "digit")
     assert ~digit.set([0, 1]) == digit.set(range(2, 10))

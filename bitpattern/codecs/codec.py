@@ -53,7 +53,7 @@ class Codec(Generic[T]):
 
     If a type has illegal bit patterns then `encode` should raise a `ValueError`.
     In this case, the Codec should override `all` to return the legal pattern
-    domain for the type.
+    domain for the type, and `~` and `pattern` stay inside it.
     """
 
     width: int
@@ -84,11 +84,12 @@ class Codec(Generic[T]):
         return BDDSet(self, IntSet(map(self.encode, values), width=self.width))
 
     def pattern(self, text: str) -> BDDSet[T]:
-        """Constructs a BDDSet of values matching the pattern."""
+        """Constructs a BDDSet of values matching the pattern. Bit patterns that
+        aren't values, ie. aren't in `all`, are left out."""
         pattern = Pattern(text)
         if pattern.width != self.width:
             raise ValueError(f"pattern is {pattern.width} bits, not {self.width}")
-        return BDDSet(self, pattern)
+        return BDDSet(self, pattern) & self.all
 
 
 class OrderedCodec(Codec[T]):

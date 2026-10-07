@@ -68,10 +68,6 @@ class Char(OrderedCodec[str]):
         surrogates = IntSet.range(0xD800, 0xE000, width=self.width)
         return BDDSet(self, points - surrogates)
 
-    def pattern(self, text: str) -> BDDSet[str]:
-        # Bits can match surrogates, or points past U+10FFFF, which aren't characters.
-        return super().pattern(text) & self.all
-
     def _bound(self, value: str) -> int:
         # Any one-character string can bound a range, surrogates included, since
         # strings sort by code point.

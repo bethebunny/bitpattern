@@ -105,6 +105,10 @@ def test_aliases_arent_separate_members():
     assert Members(Color).all.size == 3
 
 
+def test_member_patterns_leave_out_unused_indices():
+    assert list(Members(Color).pattern("1?")) == [Color.BLUE]  # and not index 3
+
+
 @pytest.mark.parametrize("count", range(1, 18))
 def test_members_take_as_few_bits_as_number_them(count):
     width = Members(Enum("Counted", [f"M{at}" for at in range(count)])).width

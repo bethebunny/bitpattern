@@ -39,10 +39,6 @@ class Date(OrderedCodec[dt.date]):
         stop = self.encode(dt.date.max) + 1
         return BDDSet(self, IntSet.range(1, stop, width=self.width))
 
-    def pattern(self, text: str) -> BDDSet[dt.date]:
-        # Bits can match ordinal 0, or ordinals past date.max, which aren't dates.
-        return super().pattern(text) & self.all
-
 
 @dataclass(frozen=True, repr=False)
 class Datetime(OrderedCodec[dt.datetime]):
@@ -70,10 +66,6 @@ class Datetime(OrderedCodec[dt.datetime]):
         """Every naive datetime. Bits past `datetime.max` aren't datetimes."""
         stop = self.encode(dt.datetime.max) + 1
         return BDDSet(self, IntSet.range(0, stop, width=self.width))
-
-    def pattern(self, text: str) -> BDDSet[dt.datetime]:
-        # Bits can match microseconds past datetime.max, which aren't datetimes.
-        return super().pattern(text) & self.all
 
 
 # The fewest bits that hold date.max and datetime.max.
