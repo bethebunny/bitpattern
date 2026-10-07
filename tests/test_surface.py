@@ -71,7 +71,6 @@ def test_readme_examples_run():
         "bitpattern.pattern",
         "bitpattern.codecs.codec",
         "bitpattern.codecs.enum",
-        "bitpattern.codecs.tuple",
     ],
 )
 def test_docstring_examples_run(module):

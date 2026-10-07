@@ -10,8 +10,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from bitpattern.bdd import node_count
-from bitpattern.codecs import BDDSet, Codec, float16, int8, ipv4, uint8, uint16
-from bitpattern.codecs.tuple import Tuple
+from bitpattern.codecs import BDDSet, Codec, Tuple, float16, int8, ipv4, uint8, uint16
 
 PAIR = Tuple(uint8, int8)
 LEFTS = [uint8.range(10, 20), uint8.set([0, 255]), uint8.none, uint8.all]
