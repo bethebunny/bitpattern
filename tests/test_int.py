@@ -74,3 +74,10 @@ def test_ints_refuse_what_they_cant_encode(codec, value):
 def test_ints_take_anything_with_an_index():
     assert int8.encode(Index(-1)) == 255
     assert Index(5) in uint8.range(0, 10)
+
+
+def test_int_ranges_can_leave_an_end_open():
+    assert int8.range() == int8.all
+    assert int8.range(stop=0) == int8.pattern("1*.*")
+    assert int8.range(100) == int8.range(100, 128)
+    assert list(uint8.range(254)) == [254, 255]

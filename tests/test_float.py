@@ -407,3 +407,25 @@ def test_float_choice_reaches_the_whole_set():
 
 def test_a_custom_float_format():
     assert Float(width=16, name="float16", exponent=5, format=">e") == float16
+
+
+def test_float_ranges_can_leave_an_end_open():
+    assert float16.range() == float16.all - float16.nan
+    assert math.inf in float16.range(1.0)
+    assert -math.inf in float16.range(stop=0.0)
+    assert float8_e4m3fn.range() == float8_e4m3fn.finite
+    assert 448.0 in float8_e4m3fn.range(1.0)
+
+
+@pytest.mark.parametrize(
+    "codec, largest",
+    [
+        (float16, 65504.0),
+        (bfloat16, 3.3895313892515355e38),
+        (float64, sys.float_info.max),
+        (float8_e5m2, 57344.0),
+        (float8_e4m3fn, 448.0),
+    ],
+)
+def test_float_min_and_max_are_the_finite_ends(codec, largest):
+    assert (codec.min, codec.max) == (-largest, largest)

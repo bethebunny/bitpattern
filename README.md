@@ -125,10 +125,9 @@ adds `min`, `max` and `range(start, stop)`.
 
 - `float16`, `float32` and `float64`, which are IEEE 754 floats as their raw bits, and
   the ML formats `bfloat16`, `float8_e5m2` and `float8_e4m3fn`. They have sets like
-  `finite`, `nan`, `infinities`, `subnormal` and `zeros`, and `range(low, high)`.
+  `finite`, `nan`, `infinities`, `subnormal` and `zeros`.
 - `int8`, `int16`, `int32`, `int64` and `int128`, and `uint8` through `uint128`, which
-  are integers as their raw bits, in two's complement if they're signed. They have
-  `min`, `max` and `range(low, high)`.
+  are integers as their raw bits, in two's complement if they're signed.
 - `char`, one-character strings as their code points, for every Unicode scalar
   value, with `category(name)` for general categories like `"Lu"` or `"L"`.
 - `ipv4` and `ipv6`, with `cidr("10.0.0.0/8")`.
@@ -143,8 +142,8 @@ adds `min`, `max` and `range(start, stop)`.
 - `Members(SomeEnum)`, an Enum's members by their index, and `Flags(SomeFlag)`, a
   Flag's combinations as their own bits, with `having(flags)` and `lacking(flags)`.
 
-The characters, addresses, UUIDs, dates and datetimes are ordered. They have `min`,
-`max` and `range(start, stop)`, where leaving a bound out leaves that end open.
+All of these but the enums and flags are ordered. They have `min`, `max` and
+`range(start, stop)`, where leaving a bound out leaves that end open.
 
 `a * b` is the set of pairs from two sets, and `product(a, b, c)` makes longer
 tuples, like `itertools.product`. Their codec is a `Tuple`, which puts codecs side

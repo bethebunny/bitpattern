@@ -9,7 +9,7 @@ from functools import cached_property
 
 from ..intset import IntSet
 from ..pattern import diagram
-from .codec import BDDSet, Codec
+from .codec import BDDSet, OrderedCodec
 
 __all__ = [
     "Float",
@@ -24,7 +24,7 @@ __all__ = [
 
 
 @dataclass(frozen=True, repr=False)
-class Float(Codec[float]):
+class Float(OrderedCodec[float]):
     """An IEEE 754 binary format: a sign bit, then the exponent, then the mantissa.
 
     Non-negative floats sort in the same order as their bits, so indexing them
@@ -128,19 +128,31 @@ class Float(Codec[float]):
         """The key where a range bounded by `value` starts or stops."""
         return self._key(self.encode(value))
 
-    def range(self, low: float, high: float) -> BDDSet[float]:
-        """Floats in `[low, high)`."""
-        if math.isnan(low) or math.isnan(high):
+    @property
+    def min(self) -> float:
+        """The most negative finite float, like `np.finfo`'s."""
+        return (self.finite & self.negative)[-1]
+
+    @property
+    def max(self) -> float:
+        """The largest finite float, like `np.finfo`'s."""
+        return (self.finite & self.positive)[-1]
+
+    def range(
+        self, start: float | None = None, stop: float | None = None
+    ) -> BDDSet[float]:
+        """Floats in `[start, stop)`, which never has NaN. Leaving out `start` starts
+        from -inf, and leaving out `stop` goes up to +inf and takes it in too."""
+        if any(bound is not None and math.isnan(bound) for bound in (start, stop)):
             raise ValueError("NaN isn't ordered, so it can't bound a range")
         sign, mask = 1 << (self.width - 1), (1 << self.width) - 1
-        start, stop = self._bound(low), self._bound(high)
+        low = self._bound(-math.inf if start is None else start)
+        high = self._bound(self.positive[-1]) + 1 if stop is None else self._bound(stop)
         # Keys below sign are the negative floats (reversed) and the rest are positive.
         negative = IntSet.range(
-            mask - min(stop, sign) + 1, mask - start + 1, width=self.width
+            mask - min(high, sign) + 1, mask - low + 1, width=self.width
         )
-        nonnegative = IntSet.range(
-            max(start, sign) - sign, stop - sign, width=self.width
-        )
+        nonnegative = IntSet.range(max(low, sign) - sign, high - sign, width=self.width)
         return BDDSet(self, negative | nonnegative)
 
 

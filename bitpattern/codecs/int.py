@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import SupportsIndex
 
 from ..intset import IntSet
-from .codec import BDDSet, Codec
+from .codec import BDDSet, OrderedCodec
 
 __all__ = [
     "Int",
@@ -25,7 +25,7 @@ __all__ = [
 
 
 @dataclass(frozen=True, repr=False)
-class Int(Codec[int]):
+class Int(OrderedCodec[int]):
     """Fixed-width integers, in two's complement if they're signed.
 
     Non-negative integers sort in the same order as their bits, so indexing counts up
@@ -53,9 +53,11 @@ class Int(Codec[int]):
     def decode(self, bits: int) -> int:
         return bits - (1 << self.width) if bits > self.max else bits
 
-    def range(self, low: int, high: int) -> BDDSet[int]:
-        """Integers in `[low, high)`."""
-        low, high = max(low, self.min), min(high, self.max + 1)
+    def range(self, start: int | None = None, stop: int | None = None) -> BDDSet[int]:
+        """Integers in `[start, stop)`, from the ones this codec has. Leaving either
+        bound out leaves that end open."""
+        low = self.min if start is None else max(start, self.min)
+        high = self.max + 1 if stop is None else min(stop, self.max + 1)
         # Negative integers are encoded above the rest, offset by 2**width.
         offset = 1 << self.width
         negative = IntSet.range(low + offset, min(high, 0) + offset, width=self.width)
