@@ -11,15 +11,21 @@ from collections.abc import Iterable, Iterator, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, Generic, TypeVar, TypeVarTuple, overload
+from typing import Any, Generic, Literal, TypeVar, TypeVarTuple, overload
 
 from ..bdd import BDD, exists, render_count, shift
 from ..intset import IntSet
 from ..pattern import Pattern
 
-__all__ = ["BDDSet", "Codec", "Tuple"]
+__all__ = ["BDDSet", "Codec", "Tuple", "product", "project"]
 
 T = TypeVar("T")
+U = TypeVar("U")
+A = TypeVar("A")
+B = TypeVar("B")
+C = TypeVar("C")
+D = TypeVar("D")
+Ts = TypeVarTuple("Ts")
 
 
 @dataclass(frozen=True, repr=False)
@@ -212,6 +218,12 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
     def __gt__(self, other: object) -> bool:
         return self.storage > self._storage(other)
 
+    def __mul__(self, other: BDDSet[U]) -> BDDSet[tuple[T, U]]:
+        """Pairs from this set and `other`, ie. `product(self, other)`."""
+        if not isinstance(other, BDDSet):
+            return NotImplemented
+        return product(self, other)
+
     def isdisjoint(self, other: Iterable[T]) -> bool:
         return self.storage.isdisjoint(self._storage(other))
 
@@ -226,30 +238,22 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
         )
 
 
-A = TypeVar("A")
-B = TypeVar("B")
-C = TypeVar("C")
-D = TypeVar("D")
-Ts = TypeVarTuple("Ts")
-
-
 @dataclass(frozen=True, repr=False, init=False)
 class Tuple(Codec[tuple[*Ts]]):
     """Tuples with a value from each field's codec, with the first field's bits on top.
 
     Sets of tuples iterate in order of their first field, then their second, and so
-    on. `product` builds a set from a set for each field, and costs about as many
-    nodes as they do together, however many tuples it holds. `project` goes the other
-    way.
+    on. `a * b` is the pairs from two sets, and `product(a, b, c)` makes longer
+    tuples, like `itertools.product`. A product costs about as many nodes as its sets
+    do together, however many tuples it holds. `project` goes the other way.
 
     >>> from bitpattern.codecs import ipv4, uint16
-    >>> sockets = Tuple(ipv4, uint16)
-    >>> private = sockets.product(ipv4.cidr("10.0.0.0/8"), uint16.range(1024, 65536))
+    >>> private = ipv4.cidr("10.0.0.0/8") * uint16.range(1024, 65536)
     >>> private.size
     1082331758592
     >>> private[0]
     (IPv4Address('10.0.0.0'), 1024)
-    >>> sockets.project(private, 1) == uint16.range(1024, 65536)
+    >>> project(private, 1) == uint16.range(1024, 65536)
     True
     """
 
@@ -297,27 +301,62 @@ class Tuple(Codec[tuple[*Ts]]):
     @cached_property
     def all(self) -> BDDSet[tuple[*Ts]]:
         """Every tuple of the fields' values."""
-        return self.product(*(field.all for field in self.fields))
+        return product(*(field.all for field in self.fields))
 
-    def product(self, *sets: BDDSet[Any]) -> BDDSet[tuple[*Ts]]:
-        """The tuples whose fields are in `sets`, one set for each field."""
-        if [source.codec for source in sets] != list(self.fields):
-            fields = ", ".join(map(repr, self.fields))
-            raise TypeError(f"{self} needs a set for each of its fields, {fields}")
-        # Each field's diagram sits above the next one's, so `&` just chains them.
-        shifted = (
-            shift(source.storage.bdd, offset)
-            for source, offset in zip(sets, self._offsets)
-        )
-        bdd = functools.reduce(operator.and_, shifted, BDD.ACCEPT)
-        return BDDSet(self, IntSet.from_bdd(bdd, self.width))
 
-    def project(self, source: BDDSet[tuple[*Ts]], index: int) -> BDDSet[Any]:
-        """The values `source` has in its field at `index`."""
-        if source.codec != self:
-            raise TypeError(f"{source.codec} sets aren't {self} sets")
-        field, low = self.fields[index], self._offsets[index]
-        # Forget the fields above and below this one, then move it down to bit 0.
-        bdd = exists(source.storage.bdd, low + field.width, self.width)
-        bdd = shift(exists(bdd, 0, low), -low)
-        return BDDSet(field, IntSet.from_bdd(bdd, field.width))
+@overload
+def product(a: BDDSet[A], /) -> BDDSet[tuple[A]]: ...
+@overload
+def product(a: BDDSet[A], b: BDDSet[B], /) -> BDDSet[tuple[A, B]]: ...
+@overload
+def product(a: BDDSet[A], b: BDDSet[B], c: BDDSet[C], /) -> BDDSet[tuple[A, B, C]]: ...
+@overload
+def product(
+    a: BDDSet[A], b: BDDSet[B], c: BDDSet[C], d: BDDSet[D], /
+) -> BDDSet[tuple[A, B, C, D]]: ...
+@overload
+def product(*sets: BDDSet[Any]) -> BDDSet[tuple[Any, ...]]: ...
+def product(*sets: BDDSet[Any]) -> BDDSet[tuple[Any, ...]]:
+    """The tuples with a value from each of `sets`, like `itertools.product`."""
+    codec = Tuple(*(source.codec for source in sets))
+    # Each set's diagram sits above the next one's, so `&` just chains them.
+    shifted = (
+        shift(source.storage.bdd, offset)
+        for source, offset in zip(sets, codec._offsets)
+    )
+    bdd = functools.reduce(operator.and_, shifted, BDD.ACCEPT)
+    return BDDSet(codec, IntSet.from_bdd(bdd, codec.width))
+
+
+# Types can't index into a tuple of any length, so each index gets its own overload.
+@overload
+def project(
+    source: BDDSet[tuple[A, *tuple[Any, ...]]], index: Literal[0]
+) -> BDDSet[A]: ...
+@overload
+def project(
+    source: BDDSet[tuple[Any, A, *tuple[Any, ...]]], index: Literal[1]
+) -> BDDSet[A]: ...
+@overload
+def project(
+    source: BDDSet[tuple[Any, Any, A, *tuple[Any, ...]]], index: Literal[2]
+) -> BDDSet[A]: ...
+@overload
+def project(
+    source: BDDSet[tuple[Any, Any, Any, A, *tuple[Any, ...]]], index: Literal[3]
+) -> BDDSet[A]: ...
+@overload
+def project(
+    source: BDDSet[tuple[*tuple[Any, ...], A]], index: Literal[-1]
+) -> BDDSet[A]: ...
+@overload
+def project(source: BDDSet[tuple[Any, ...]], index: int) -> BDDSet[Any]: ...
+def project(source: BDDSet[tuple[Any, ...]], index: int) -> BDDSet[Any]:
+    """The values that tuples in `source` have at `index`."""
+    if not isinstance(codec := source.codec, Tuple):
+        raise TypeError(f"{codec} sets aren't sets of tuples")
+    field, low = codec.fields[index], codec._offsets[index]
+    # Forget the fields above and below this one, then move it down to bit 0.
+    bdd = exists(source.storage.bdd, low + field.width, codec.width)
+    bdd = shift(exists(bdd, 0, low), -low)
+    return BDDSet(field, IntSet.from_bdd(bdd, field.width))

@@ -143,9 +143,11 @@ aren't values, override `all` with the ones that are, so that `~` leaves the oth
 - `Members(SomeEnum)`, an Enum's members by their index, and `Flags(SomeFlag)`, a
   Flag's combinations as their own bits, with `having(flags)` and `lacking(flags)`.
 
-`Tuple` puts codecs side by side, the first field's bits on top. `product` builds a
-set of tuples from a set for each field, and costs about as many nodes as they do
-together, however many tuples it holds. `project` goes back the other way.
+`a * b` is the set of pairs from two sets, and `product(a, b, c)` makes longer
+tuples, like `itertools.product`. Their codec is a `Tuple`, which puts codecs side
+by side, the first field's bits on top. A product costs about as many nodes as its
+sets do together, however many tuples it holds, and `project` gets a field's set
+back.
 
 Here's a quick tour, with sampling seeded so it's repeatable:
 
@@ -154,23 +156,21 @@ Here's a quick tour, with sampling seeded so it's repeatable:
 >>> from datetime import date, datetime
 >>> from enum import Flag
 >>> from bitpattern.codecs import (
-...     Flags, Tuple, char, dates, datetimes, float8_e4m3fn, ipv4, mac, uint16, uuid128
+...     Flags, char, dates, datetimes, float8_e4m3fn, ipv4, mac, product, project,
+...     uint16, uuid128,
 ... )
 >>> rng = random.Random(0)
 
 >>> # Tuples: every (address, port) on a private network's unprivileged ports
->>> sockets = Tuple(ipv4, uint16)
->>> private = sockets.product(
-...     ipv4.cidr("10.0.0.0/8") | ipv4.cidr("192.168.0.0/16"),
-...     uint16.range(1024, 65536),
-... )
+>>> networks = ipv4.cidr("10.0.0.0/8") | ipv4.cidr("192.168.0.0/16")
+>>> private = networks * uint16.range(1024, 65536)
 >>> private.size
 1086559617024
 >>> ("10.1.2.3", 8080) in private
 True
 >>> private.choice(rng=rng)
 (IPv4Address('10.100.105.211'), 22477)
->>> sockets.project(private, 1) == uint16.range(1024, 65536)
+>>> project(private, 1) == uint16.range(1024, 65536)
 True
 
 >>> # fp8: the whole format, and how floats round into it
@@ -211,13 +211,11 @@ UUID('f8cb83e0-b8b9-798b-b728-b4fa42485e3a')
 >>> datetimes.range(datetime(2024, 1, 1), datetime(2024, 1, 2)).size
 86400000000
 
->>> # Tuples of anything: a year of UUIDv7 events
->>> events = Tuple(uuid128, datetimes)
->>> year = events.product(
-...     uuid128.version(7), datetimes.range(datetime(2024, 1, 1), datetime(2025, 1, 1))
-... )
->>> year.choice(rng=rng)
-(UUID('3e1a790b-610b-7b0c-ad79-9e3519a6aec7'), datetime.datetime(2024, 6, 15, 10, 18, 47, 668228))
+>>> # Tuples of anything: a year of UUIDv7 events from random MAC addresses
+>>> year = datetimes.range(datetime(2024, 1, 1), datetime(2025, 1, 1))
+>>> events = product(uuid128.version(7), year, mac.local & mac.unicast)
+>>> events.choice(rng=rng)
+(UUID('87c088c2-719e-7f82-acdb-109dda3a1e99'), datetime.datetime(2024, 7, 4, 5, 51, 31, 716165), '9e:b3:67:a9:c3:78')
 
 >>> # Flags
 >>> class Permission(Flag):
