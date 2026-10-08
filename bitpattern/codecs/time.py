@@ -42,14 +42,14 @@ class Date(OrderedCodec[dt.date]):
         return BDDSet(self, IntSet.range(1, stop, width=self.width))
 
 
-@dataclass(frozen=True, repr=False)
+@dataclass(frozen=True, repr=False, init=False)
 class Datetime(OrderedCodec[dt.datetime]):
     """Datetimes as microseconds since `datetime.min`, so they sort in time.
 
     Aware datetimes count from `datetime.min` in UTC, so sets hold instants, the same
     way Python compares them, and noon in UTC is the same member as 7am in New York.
-    They decode into `tz`. With `tz=None` the codec is naive, and counts wall-clock
-    time instead. Naive and aware datetimes don't compare, so each kind of codec
+    They decode into `tz`, eg. `Datetime(ZoneInfo("America/New_York"))`. With
+    `tz=None` the codec is naive, and counts wall-clock time instead. Naive and aware datetimes don't compare, so each kind of codec
     refuses the other.
 
     In a zone with daylight saving, the hour the clocks skip has no instants, so it
@@ -59,6 +59,10 @@ class Datetime(OrderedCodec[dt.datetime]):
     """
 
     tz: dt.tzinfo | None
+
+    def __init__(self, tz: dt.tzinfo | None) -> None:
+        name = "naive_datetimes" if tz is None else f"datetimes[{tz}]"
+        vars(self).update(width=LONGEST.bit_length(), name=name, tz=tz)
 
     @cached_property
     def _epoch(self) -> dt.datetime:
@@ -90,7 +94,6 @@ class Datetime(OrderedCodec[dt.datetime]):
         return BDDSet(self, IntSet.range(low, high + 1, width=self.width))
 
 
-# The fewest bits that hold date.max and datetime.max.
-dates = Date(22, "dates")
-datetimes = Datetime(59, "datetimes", tz=dt.UTC)
-naive_datetimes = Datetime(59, "naive_datetimes", tz=None)
+dates = Date(22, "dates")  # the fewest bits that hold date.max
+datetimes = Datetime(dt.UTC)
+naive_datetimes = Datetime(None)

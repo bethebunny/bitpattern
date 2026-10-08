@@ -140,8 +140,8 @@ adds `min`, `max` and `range(start, stop)`.
   versions 1 to 8 and `rfc9562` for its variant.
 - `dates`, which counts `datetime.date`s in days, and `datetimes`, which counts aware
   `datetime.datetime`s in microseconds, as instants that decode in UTC.
-  `Datetime(59, name, tz=zone)` decodes into another zone, and `naive_datetimes`
-  counts naive datetimes.
+  `Datetime(zone)` decodes into another zone, and `naive_datetimes` counts naive
+  datetimes.
 - `Members(SomeEnum)`, an Enum's members by their index, and `Flags(SomeFlag)`, a
   Flag's combinations as their own bits, with `having(flags)` and `lacking(flags)`.
 

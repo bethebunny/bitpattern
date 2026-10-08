@@ -15,9 +15,9 @@ HOUR = 3600 * 10**6  # in microseconds
 NEW_YORK = ZoneInfo("America/New_York")
 ZONES = [
     datetimes,
-    Datetime(59, "new_york", tz=NEW_YORK),
-    Datetime(59, "kiritimati", tz=timezone(timedelta(hours=14))),
-    Datetime(59, "baker_island", tz=timezone(timedelta(hours=-12))),
+    Datetime(NEW_YORK),
+    Datetime(timezone(timedelta(hours=14))),
+    Datetime(timezone(timedelta(hours=-12))),
 ]
 
 
@@ -274,3 +274,22 @@ def test_aware_codecs_decode_every_instant_at_their_ends(codec):
     )
     assert codec.all.size == codec.encode(last) - codec.encode(first) + 1
     assert codec.range() == codec.all
+
+
+def test_datetime_codecs_are_named_after_their_zone():
+    assert [repr(codec) for codec in ZONES] == [
+        "datetimes[UTC]",
+        "datetimes[America/New_York]",
+        "datetimes[UTC+14:00]",
+        "datetimes[UTC-12:00]",
+    ]
+    assert repr(naive_datetimes) == "naive_datetimes"
+    assert Datetime(UTC) == datetimes and Datetime(None) == naive_datetimes
+    assert Datetime(NEW_YORK).all | ZONES[1].none == ZONES[1].all
+
+
+def test_only_the_right_kind_of_now_is_a_member():
+    """A naive now isn't an instant, the same way it's never equal to an aware one."""
+    assert datetime.now() not in datetimes.all
+    assert datetime.now(UTC) in datetimes.all
+    assert datetime.now() in naive_datetimes.all
