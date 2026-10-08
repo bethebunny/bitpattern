@@ -55,4 +55,4 @@ extend-select = ["ANN"]
 "tests/**" = ["ANN"]
 # Naive datetimes are what the datetime codec encodes.
 "bitpattern/codecs/time.py" = ["DTZ"]
-"tests/test_time.py" = ["DTZ"]
+"tests/codecs/test_time.py" = ["DTZ"]
