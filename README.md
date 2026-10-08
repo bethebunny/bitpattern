@@ -138,8 +138,10 @@ adds `min`, `max` and `range(start, stop)`.
   addresses under an OUI.
 - `uuid128`, `uuid.UUID`s as their 128 bits, with `version(n)` for RFC 9562's
   versions 1 to 8 and `rfc9562` for its variant.
-- `dates` and `datetimes`, which count `datetime.date`s in days and naive
-  `datetime.datetime`s in microseconds, so they sort in time.
+- `dates`, which counts `datetime.date`s in days, and `datetimes`, which counts aware
+  `datetime.datetime`s in microseconds, as instants that decode in UTC.
+  `Datetime(59, name, tz=zone)` decodes into another zone, and `naive_datetimes`
+  counts naive datetimes.
 - `Members(SomeEnum)`, an Enum's members by their index, and `Flags(SomeFlag)`, a
   Flag's combinations as their own bits, with `having(flags)` and `lacking(flags)`.
 
@@ -156,7 +158,7 @@ Here's a quick tour, with sampling seeded so it's repeatable:
 
 ```python
 >>> import random, uuid
->>> from datetime import date, datetime
+>>> from datetime import UTC, date, datetime
 >>> from enum import Flag
 >>> from bitpattern.codecs import (
 ...     Flags, char, dates, datetimes, float8_e4m3fn, ipv4, mac, product, project,
@@ -211,14 +213,15 @@ UUID('f8cb83e0-b8b9-798b-b728-b4fa42485e3a')
 >>> # Dates and datetimes
 >>> dates.range(date(2024, 1, 1), date(2025, 1, 1)).size
 366
->>> datetimes.range(datetime(2024, 1, 1), datetime(2024, 1, 2)).size
+>>> new_year = datetime(2024, 1, 1, tzinfo=UTC)
+>>> datetimes.range(new_year, datetime(2024, 1, 2, tzinfo=UTC)).size
 86400000000
 
 >>> # Tuples of anything: a year of UUIDv7 events from random MAC addresses
->>> year = datetimes.range(datetime(2024, 1, 1), datetime(2025, 1, 1))
+>>> year = datetimes.range(new_year, datetime(2025, 1, 1, tzinfo=UTC))
 >>> events = product(uuid128.version(7), year, mac.local & mac.unicast)
 >>> events.choice(rng=rng)
-(UUID('87c088c2-719e-7f82-acdb-109dda3a1e99'), datetime.datetime(2024, 7, 4, 5, 51, 31, 716165), '9e:b3:67:a9:c3:78')
+(UUID('87c088c2-719e-7f82-acdb-109dda3a1e99'), datetime.datetime(2024, 7, 4, 5, 51, 31, 716165, tzinfo=datetime.timezone.utc), '9e:b3:67:a9:c3:78')
 
 >>> # Flags
 >>> class Permission(Flag):
