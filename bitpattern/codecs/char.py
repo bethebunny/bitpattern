@@ -1,4 +1,4 @@
-"""Unicode characters, as their code points."""
+"""Unicode characters as their code points."""
 
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ __all__ = ["Char", "char"]
 
 @cache
 def category_runs() -> dict[str, list[range]]:
-    """The runs of consecutive code points in each general category, eg. "Lu", and in
-    each major class, eg. "L"."""
+    """Runs of consecutive code points in each general category, eg. "Lu", and major
+    class, eg. "L"."""
     found: dict[str, list[range]] = collections.defaultdict(list)
     start = 0
     characters = map(chr, range(sys.maxunicode + 1))
@@ -42,11 +42,9 @@ def category_points(name: str, width: int) -> IntSet:
 
 @dataclass(frozen=True, repr=False)
 class Char(OrderedCodec[str]):
-    """One-character strings, as their code points.
+    """Unicode scalar values, as one-character strings in code point order.
 
-    Only Unicode scalar values are characters. That leaves out the surrogates,
-    U+D800 to U+DFFF, even though a Python str can hold one. Characters sort by
-    code point, which is the order Python compares strings in.
+    That's every code point except the surrogates, U+D800 to U+DFFF.
     """
 
     def encode(self, value: object) -> int:
@@ -63,23 +61,20 @@ class Char(OrderedCodec[str]):
 
     @cached_property
     def all(self) -> BDDSet[str]:
-        """Every Unicode scalar value, ie. every code point but the surrogates."""
+        """Every code point except the surrogates."""
         points = IntSet.range(0, sys.maxunicode + 1, width=self.width)
         surrogates = IntSet.range(0xD800, 0xE000, width=self.width)
         return BDDSet(self, points - surrogates)
 
     def _bound(self, value: str) -> int:
-        # Any one-character string can bound a range, surrogates included, since
-        # strings sort by code point.
+        # Strings sort by code point, so a surrogate can bound a range too.
         return ord(value)
 
     def category(self, name: str) -> BDDSet[str]:
-        """Characters in a general category like "Lu", or a major class like "L".
+        """Characters in a general category like "Lu" or a major class like "L".
 
-        Categories come from `unicodedata`, so they depend on the running Python's
-        Unicode version, `unicodedata.unidata_version`. Surrogates aren't
-        characters, so "Cs" is empty. Each category takes a moment to build the
-        first time, and is cached after that.
+        Categories come from the running Python's `unicodedata`. "Cs" (surrogates) is
+        always empty. Building a category the first time takes a moment.
         """
         return BDDSet(self, category_points(name, self.width)) & self.all
 
