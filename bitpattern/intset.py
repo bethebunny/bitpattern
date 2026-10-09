@@ -44,17 +44,18 @@ class IntSet(AbstractSet[int], Sequence[int]):
       every member
     - Use `bitpattern.strategies` instead of hypothesis's `sampled_from(s)`
 
-    Most operations are O(w) in the width, however many members there are. `&`,
-    `|`, `-` and `^` are O(|a| * |b|) in the number of nodes in each diagram, and
-    `~` is O(|a|). A diagram has at most `size * w` nodes, and usually far fewer,
-    eg. any `Pattern(text)` has at most one node per bit.
+    For width w and diagrams of |a| and |b| nodes:
+
+    - Most operations are O(w), however many members there are
+    - `&`, `|`, `-` and `^` are O(|a| * |b|)
+    - `~` is O(|a|)
+
+    A diagram has at most `size * w` nodes and usually far fewer, eg. a pattern has
+    at most one node per bit.
 
     An IntSet is a diagram and a width. Its members are the integers below
-    `2 ** width` whose bits satisfy the diagram. Free bits don't need nodes, so the
-    diagram doesn't know the width. For instance `IntSet([0], width=1)` is "bit 0
-    is clear", which read at width 4 would be every even number. Sets of different
-    widths are widened to match before they're combined, which adds that bound to
-    the diagram explicitly.
+    `2 ** width` whose bits satisfy the diagram. Sets of different widths are widened
+    to match before they're combined.
     """
 
     __slots__ = ("bdd", "width")
