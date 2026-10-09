@@ -10,11 +10,11 @@ from bitpattern.bdd import (
     accepts,
     cofactors,
     count,
-    exists,
-    iterate,
+    freed_between,
+    lshift,
+    members,
     node_count,
     nth,
-    shift,
     size,
 )
 from bitpattern.intset import IntSet
@@ -198,28 +198,28 @@ def test_distributivity(a, b, third):
 def test_accept_is_everything():
     assert count(BDD.ACCEPT, 0) == 1
     assert count(BDD.ACCEPT, 4) == 16
-    assert list(iterate(BDD.ACCEPT, 4)) == list(range(16))
+    assert list(members(BDD.ACCEPT, 4)) == list(range(16))
 
 
 def test_reject_is_nothing():
     assert count(BDD.REJECT, 0) == 0
     assert count(BDD.REJECT, 8) == 0
-    assert list(iterate(BDD.REJECT, 8)) == []
+    assert list(members(BDD.REJECT, 8)) == []
 
 
 def test_free_high_bits_multiply_the_count():
     evens = BDD(0, BDD.ACCEPT, BDD.REJECT)
     assert count(evens, 1) == 1
     assert count(evens, 4) == 8
-    assert list(iterate(evens, 4)) == [0, 2, 4, 6, 8, 10, 12, 14]
+    assert list(members(evens, 4)) == [0, 2, 4, 6, 8, 10, 12, 14]
     assert accepts(evens, 2**100) and not accepts(evens, 2**100 + 1)
 
 
-def test_nth_agrees_with_iterate():
+def test_nth_agrees_with_members():
     evens = BDD(0, BDD.ACCEPT, BDD.REJECT)
-    members = list(iterate(evens, 4))
-    assert [nth(evens, 4, i) for i in range(len(members))] == members
-    assert [nth(evens, 4, ~i) for i in range(len(members))] == members[::-1]
+    values = list(members(evens, 4))
+    assert [nth(evens, 4, i) for i in range(len(values))] == values
+    assert [nth(evens, 4, ~i) for i in range(len(values))] == values[::-1]
 
 
 def test_nth_out_of_range():
@@ -229,7 +229,7 @@ def test_nth_out_of_range():
 
 
 def test_zero_width_holds_only_zero():
-    assert list(iterate(BDD.ACCEPT, 0)) == [0]
+    assert list(members(BDD.ACCEPT, 0)) == [0]
     assert nth(BDD.ACCEPT, 0, 0) == 0
 
 
@@ -240,10 +240,10 @@ def test_width_must_cover_the_diagram():
 
 @pytest.mark.parametrize("mask", MASKS)
 def test_matches_the_subset_it_was_built_from(mask):
-    node, members = diagram(mask), sorted(subset(mask))
-    assert list(iterate(node, WIDTH)) == members
-    assert count(node, WIDTH) == len(members)
-    assert [value for value in UNIVERSE if accepts(node, value)] == members
+    node, expected = diagram(mask), sorted(subset(mask))
+    assert list(members(node, WIDTH)) == expected
+    assert count(node, WIDTH) == len(expected)
+    assert [value for value in UNIVERSE if accepts(node, value)] == expected
 
 
 @pytest.mark.parametrize(
@@ -311,27 +311,26 @@ def test_shared_diagrams_stay_polynomial():
 
 
 @pytest.mark.parametrize("mask", MASKS)
-def test_shift_moves_every_bit(mask):
+def test_lshift_moves_every_bit(mask):
     node = diagram(mask)
-    up = shift(node, 2)
-    assert set(iterate(up, WIDTH + 2)) == {
+    up = lshift(node, 2)
+    assert set(members(up, WIDTH + 2)) == {
         value << 2 | low for value in subset(mask) for low in range(4)
     }
-    assert shift(up, -2) is node
+    assert lshift(up, -2) is node
 
 
 @pytest.mark.parametrize("low, high", [(0, 1), (1, 2), (2, 3), (0, 2), (1, 3), (0, 3)])
 @pytest.mark.parametrize("mask", SAMPLE, ids=hex)
-def test_exists_forgets_a_range_of_bits(mask, low, high):
-    forgotten = (1 << high) - (1 << low)
-    settings = [bits for bits in UNIVERSE if not bits & ~forgotten]
-    expected = {
-        value & ~forgotten | bits for value in subset(mask) for bits in settings
-    }
-    assert set(iterate(exists(diagram(mask), low, high), WIDTH)) == expected
+def test_freed_between_frees_a_range_of_bits(mask, low, high):
+    freed = (1 << high) - (1 << low)
+    settings = [bits for bits in UNIVERSE if not bits & ~freed]
+    expected = {value & ~freed | bits for value in subset(mask) for bits in settings}
+    node = freed_between(diagram(mask), low_bit=low, high_bit=high)
+    assert set(members(node, WIDTH)) == expected
 
 
-def test_exists_over_nothing_changes_nothing():
+def test_freeing_nothing_changes_nothing():
     even, _ = parity(8)
-    assert exists(even, 3, 3) is even
-    assert exists(even, 0, 8) is BDD.ACCEPT
+    assert freed_between(even, low_bit=3, high_bit=3) is even
+    assert freed_between(even, low_bit=0, high_bit=8) is BDD.ACCEPT

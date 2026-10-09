@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import Any, Generic, Literal, TypeVar, TypeVarTuple, overload
 
-from ..bdd import BDD, exists, render_count, shift
+from ..bdd import BDD, freed_between, lshift, render_count
 from ..intset import IntSet
 from ..pattern import Pattern
 
@@ -351,7 +351,7 @@ def product(*sets: BDDSet[Any]) -> BDDSet[tuple[Any, ...]]:
     codec = Tuple(*(source.codec for source in sets))
     # Each set's diagram sits above the next one's, so `&` just chains them.
     shifted = (
-        shift(source.storage.bdd, offset)
+        lshift(source.storage.bdd, offset)
         for source, offset in zip(sets, codec._offsets)
     )
     bdd = functools.reduce(operator.and_, shifted, BDD.ACCEPT)
@@ -386,7 +386,9 @@ def project(source: BDDSet[tuple[Any, ...]], index: int) -> BDDSet[Any]:
     if not isinstance(codec := source.codec, Tuple):
         raise TypeError(f"{codec} sets aren't sets of tuples")
     field, low = codec.fields[index], codec._offsets[index]
-    # Forget the fields above and below this one, then move it down to bit 0.
-    bdd = exists(source.storage.bdd, low + field.width, codec.width)
-    bdd = shift(exists(bdd, 0, low), -low)
+    # Free the other fields' bits, then move this field down to bit 0.
+    bdd = freed_between(
+        source.storage.bdd, low_bit=low + field.width, high_bit=codec.width
+    )
+    bdd = lshift(freed_between(bdd, low_bit=0, high_bit=low), -low)
     return BDDSet(field, IntSet.from_bdd(bdd, field.width))

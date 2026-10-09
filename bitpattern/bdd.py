@@ -151,8 +151,8 @@ class BDD:
     def __repr__(self) -> str:
         if self.leaf:
             return "BDD.ACCEPT" if self else "BDD.REJECT"
-        members = render_count(size(self))
-        return f"<BDD bit={self.bit}, {node_count(self)} nodes, {members} members>"
+        total = render_count(size(self))
+        return f"<BDD bit={self.bit}, {node_count(self)} nodes, {total} members>"
 
 
 def _leaf() -> BDD:
@@ -210,20 +210,20 @@ def _nth(node: BDD, n: int) -> int:
     return high | 1 << node.bit | _nth(node.right, n - left_count)
 
 
-def iterate(node: BDD, width: int) -> Iterator[int]:
+def members(node: BDD, width: int) -> Iterator[int]:
     """Every integer below `2 ** width` that satisfies `node`, in order."""
     if node is BDD.ACCEPT:
         yield from range(1 << width)
     elif node:
         bit = width - 1
         low, high = cofactors(node, bit)
-        yield from iterate(low, bit)
-        for value in iterate(high, bit):
+        yield from members(low, bit)
+        for value in members(high, bit):
             yield 1 << bit | value
 
 
-def shift(node: BDD, by: int) -> BDD:
-    """`node` with every bit it tests moved up by `by`, or down if that's negative."""
+def lshift(node: BDD, by: int) -> BDD:
+    """`node` with every tested bit moved up by `by`, or down if `by` is negative."""
     moved: dict[BDD, BDD] = {}
 
     def move(node: BDD) -> BDD:
@@ -236,21 +236,22 @@ def shift(node: BDD, by: int) -> BDD:
     return move(node)
 
 
-def exists(node: BDD, low: int, high: int) -> BDD:
-    """`node` with the bits in `[low, high)` quantified out. It accepts an integer if
-    any setting of those bits would."""
-    quantified: dict[BDD, BDD] = {}
+def freed_between(node: BDD, *, low_bit: int, high_bit: int) -> BDD:
+    """`node` with the bits in `[low_bit, high_bit)` free, ie. `?`. The result accepts
+    an integer when `node` accepts that integer with those bits set some way."""
+    results: dict[BDD, BDD] = {}
 
-    def quantify(node: BDD) -> BDD:
-        if node.bit < low:
+    def freed(node: BDD) -> BDD:
+        if node.bit < low_bit:
             return node
-        if (result := quantified.get(node)) is None:
-            left, right = quantify(node.left), quantify(node.right)
-            result = left | right if node.bit < high else BDD(node.bit, left, right)
-            quantified[node] = result
+        if (result := results.get(node)) is None:
+            left, right = freed(node.left), freed(node.right)
+            # A node testing a freed bit accepts whatever either branch accepts.
+            result = left | right if node.bit < high_bit else BDD(node.bit, left, right)
+            results[node] = result
         return result
 
-    return quantify(node)
+    return freed(node)
 
 
 @weak_cache
@@ -272,7 +273,7 @@ def render_count(total: int) -> str:
     return str(total)
 
 
-def pin(value: int, width: int) -> BDD:
+def exactly(value: int, width: int) -> BDD:
     """Exactly `value`, over `width` bits."""
     node = BDD.ACCEPT
     for bit in range(width):

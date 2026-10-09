@@ -10,7 +10,7 @@ from collections.abc import Iterable, Iterator, Sequence
 from collections.abc import Set as AbstractSet
 from typing import Self, overload
 
-from .bdd import BDD, accepts, count, iterate, less_than, nth, pin, render_count
+from .bdd import BDD, accepts, count, exactly, less_than, members, nth, render_count
 
 __all__ = ["IntSet"]
 
@@ -68,8 +68,8 @@ class IntSet(AbstractSet[int], Sequence[int]):
         if values and (lowest := min(values)) < 0:
             raise ValueError(f"IntSets can't hold negative numbers, got {lowest}")
         self.width = max(width, max(values, default=0).bit_length())
-        pins = (pin(value, self.width) for value in values)
-        self.bdd = functools.reduce(operator.or_, pins, BDD.REJECT)
+        singles = (exactly(value, self.width) for value in values)
+        self.bdd = functools.reduce(operator.or_, singles, BDD.REJECT)
 
     @classmethod
     def from_bdd(cls, bdd: BDD, width: int) -> Self:
@@ -132,7 +132,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
         return accepts(self.bdd, value)
 
     def __iter__(self) -> Iterator[int]:
-        return iterate(self.bdd, self.width)
+        return members(self.bdd, self.width)
 
     def __reversed__(self) -> Iterator[int]:
         # Sequence's goes through len() which can overflow.
