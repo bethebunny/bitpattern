@@ -237,8 +237,8 @@ def shift(node: BDD, by: int) -> BDD:
 
 
 def exists(node: BDD, low: int, high: int) -> BDD:
-    """`node` with the bits in `[low, high)` quantified out, ie. it accepts an integer
-    if some setting of those bits would."""
+    """`node` with the bits in `[low, high)` quantified out. It accepts an integer if
+    any setting of those bits would."""
     quantified: dict[BDD, BDD] = {}
 
     def quantify(node: BDD) -> BDD:
@@ -292,7 +292,7 @@ def less_than(bound: int, width: int) -> BDD:
     node = BDD.REJECT
     for bit in range(width):
         # The highest bit where x and bound differ decides it. Where bound has a 1,
-        # a 0 makes x smaller, and where bound has a 0, a 1 makes x bigger.
+        # a 0 makes x smaller. Where bound has a 0, a 1 makes x bigger.
         if bound >> bit & 1:
             node = BDD(bit, BDD.ACCEPT, node)
         else:
