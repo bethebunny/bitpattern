@@ -1,4 +1,4 @@
-"""IEEE 754 binary floats and formats like them, as their raw bits."""
+"""IEEE 754 binary floats and similar formats as their raw bits."""
 
 from __future__ import annotations
 
@@ -27,13 +27,15 @@ __all__ = [
 class Float(OrderedCodec[float]):
     """An IEEE 754 binary format: a sign bit, then the exponent, then the mantissa.
 
-    Non-negative floats sort in the same order as their bits, so indexing them
-    counts up from `+0.0`. Negative floats count down.
+    Sets iterate in the order of their bits:
+      - `+0.0` up to `inf`, then NaNs with the sign clear
+      - `-0.0` down to `-inf`, then NaNs with the sign set
+    `range`, `min` and `max` use numeric order.
     """
 
     exponent: int
-    # For struct, eg. ">d". bfloat16 is the top half of a ">f", and float8_e5m2 is
-    # the top byte of an ">e".
+    # For struct, eg. ">d". bfloat16 is the top half of a ">f" and float8_e5m2 the
+    # top byte of an ">e".
     format: str
 
     @property
@@ -65,11 +67,11 @@ class Float(OrderedCodec[float]):
         return 2 - (1 << (self.exponent - 1)) - self.mantissa
 
     def _round(self, value: float) -> float:
-        """`value` rounded to this format's precision, with ties going to even."""
+        """`value` rounded to this format's precision, ties to even."""
         if not math.isfinite(value) or not value:
             return value
-        # Normal floats have mantissa + 1 significant bits, and subnormals stop at
-        # 2**_lowest. Too big to fit is left for encode to refuse.
+        # Normal floats have mantissa + 1 significant bits. Subnormals stop at
+        # 2**_lowest. encode refuses anything too big to fit.
         step = max(math.frexp(value)[1] - self.mantissa - 1, self._lowest)
         return math.copysign(math.ldexp(round(math.ldexp(value, -step)), step), value)
 
@@ -100,7 +102,7 @@ class Float(OrderedCodec[float]):
 
     @cached_property
     def nonnegative(self) -> BDDSet[float]:
-        """`value >= 0`, which `-0.0` is too."""
+        """`value >= 0`, including `-0.0`."""
         return self.positive | self.zeros
 
     @cached_property
@@ -141,8 +143,8 @@ class Float(OrderedCodec[float]):
     def range(
         self, start: float | None = None, stop: float | None = None
     ) -> BDDSet[float]:
-        """Floats in `[start, stop)`, which never has NaN. Leaving out `start` starts
-        from -inf, and leaving out `stop` goes up to +inf and takes it in too."""
+        """Floats in `[start, stop)`, never NaN. A bound of `None` includes the
+        infinity at that end."""
         if any(bound is not None and math.isnan(bound) for bound in (start, stop)):
             raise ValueError("NaN isn't ordered, so it can't bound a range")
         sign, mask = 1 << (self.width - 1), (1 << self.width) - 1
@@ -160,9 +162,8 @@ class Float(OrderedCodec[float]):
 class FloatFN(Float):
     """A binary float with NaNs but no infinities, like float8_e4m3fn.
 
-    FN is for finite and NaN. The patterns with every exponent bit set are normal
-    numbers, except the ones with every mantissa bit set too, which are NaN. struct
-    can't pack these, so encode and decode work out the bits themselves.
+    FN is for finite and NaN. Only bit patterns with every exponent and mantissa bit
+    set are NaN. Other patterns with every exponent bit set are normal numbers.
     """
 
     format: str = ""  # unused, since struct has no format for these
@@ -184,7 +185,7 @@ class FloatFN(Float):
             raise ValueError(f"{self} can't encode {value!r}")
         else:
             # Values are whole steps of the smallest subnormal. Subnormals and the
-            # first exponent share that step, and each exponent after doubles it.
+            # first exponent share that step. Each exponent after doubles it.
             steps = int(math.ldexp(magnitude, -self._lowest))
             exponent = max(steps.bit_length() - self.mantissa, 0)
             mantissa = steps >> max(exponent - 1, 0)  # with the implicit leading 1
@@ -216,8 +217,8 @@ class FloatFN(Float):
 
     def _bound(self, value: float) -> int:
         # There's no infinity to encode, but it still bounds a range. The NaNs have
-        # the outermost keys, so -inf bounds just above the negative NaN, and +inf
-        # at the positive NaN.
+        # the outermost keys. -inf bounds just above the negative NaN and +inf at the
+        # positive NaN.
         if math.isinf(value):
             return 1 if value < 0 else (1 << self.width) - 1
         return super()._bound(value)
