@@ -1,5 +1,8 @@
-"""Codec, an encoding of values as integers, BDDSet, the sets of values it makes, and
-Tuple, which puts codecs side by side."""
+"""Codecs and their sets.
+
+A Codec encodes values as integers. A BDDSet is a set of one codec's values. Tuple is
+a codec of tuples, with a codec per field.
+"""
 
 from __future__ import annotations
 
@@ -32,10 +35,9 @@ Ts = TypeVarTuple("Ts")
 class Codec(Generic[T]):
     """A fixed-width encoding of values as non-negative integers.
 
-    A codec equips IntSets with a type. Its sets are BDDSets, which keep the
-    IntSet of their values' encodings, so patterns describe the layout of those
-    encodings. A codec instance is also a namespace for important sets of that type,
-    like `float64.subnormal` or `ipv4.cidr("10.0.0.0/8")`.
+    A codec's sets are BDDSets, ie. IntSets of its encodings. Patterns match the
+    encodings' bits. A codec instance is also a namespace for important sets of that
+    type, like `float64.subnormal` or `ipv4.cidr("10.0.0.0/8")`.
 
     Codec subclasses implement `encode` and `decode`:
 
@@ -53,7 +55,7 @@ class Codec(Generic[T]):
 
     If a type has illegal bit patterns then `encode` should raise a `ValueError`.
     In this case, the Codec should override `all` to return the legal pattern
-    domain for the type, and `~` and `pattern` stay inside it.
+    domain for the type. `~` and `pattern` then stay inside it.
     """
 
     width: int
@@ -71,7 +73,7 @@ class Codec(Generic[T]):
 
     @cached_property
     def all(self) -> BDDSet[T]:
-        """Every value. Unless a codec overrides it, that's every bit pattern."""
+        """Every value. That's every bit pattern unless a codec overrides it."""
         return BDDSet(self, IntSet.from_bdd(BDD.ACCEPT, self.width))
 
     @cached_property
@@ -84,8 +86,8 @@ class Codec(Generic[T]):
         return BDDSet(self, IntSet(map(self.encode, values), width=self.width))
 
     def pattern(self, text: str) -> BDDSet[T]:
-        """Constructs a BDDSet of values matching the pattern. Bit patterns that
-        aren't values, ie. aren't in `all`, are left out."""
+        """Constructs a BDDSet of values matching the pattern. Bit patterns outside
+        `all` are left out."""
         pattern = Pattern(text)
         if pattern.width != self.width:
             raise ValueError(f"pattern is {pattern.width} bits, not {self.width}")
@@ -95,9 +97,8 @@ class Codec(Generic[T]):
 class OrderedCodec(Codec[T]):
     """A codec whose values have an order, with `min`, `max` and `range`.
 
-    The defaults assume the encodings sort the same as the values, so sets iterate in
-    order and a range of values is a range of bits. Codecs whose encodings sort some
-    other way, like `Int` and `Float`, override them.
+    The defaults assume encodings sort the same as their values. Codecs that encode
+    in another order, like `Int` and `Float`, override them.
     """
 
     @property
@@ -115,7 +116,7 @@ class OrderedCodec(Codec[T]):
         return self.encode(value)
 
     def range(self, start: T | None = None, stop: T | None = None) -> BDDSet[T]:
-        """Values in `[start, stop)`. Leaving either bound out leaves that end open."""
+        """Values in `[start, stop)`. A bound of `None` leaves that end open."""
         low = 0 if start is None else self._bound(start)
         high = 1 << self.width if stop is None else self._bound(stop)
         return BDDSet(self, IntSet.range(low, high, width=self.width)) & self.all
@@ -142,18 +143,22 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
 
     - Use `s.size` instead of `len(s)`
     - Use `s.choice()` instead of `random.choice(s)` or `random.sample(s, k)`
-    - Use `s[0]` and `s[-1]` instead of `min(s)` and `max(s)`, which look at
-      every member
+    - Use `s[0]` and `s[-1]` instead of `min(s)` and `max(s)`, where encodings sort
+      like their values (not signed `Int`s or `Float`s)
     - Use `bitpattern.strategies` instead of hypothesis's `sampled_from(s)`
 
-    Most operations are O(w) in the width, however many members there are. `&`,
-    `|`, `-` and `^` are O(|a| * |b|) in the number of nodes in each diagram, and
-    `~` is O(|a|). A diagram has at most `size * w` nodes, and usually far fewer,
-    eg. any `codec.pattern(pattern)` has `nodes <= len(pattern)`.
+    For width w and diagrams of |a| and |b| nodes:
 
-    Set operators and comparisons only work between sets of the same codec, and
-    raise TypeError for anything else, including plain sets. Convert this set
-    via `set(bddset)` or the other via `codec.set(other)` for comparison.
+    - Most operations are O(w), however many members there are
+    - `&`, `|`, `-` and `^` are O(|a| * |b|)
+    - `~` is O(|a|)
+
+    A diagram has at most `size * w` nodes and usually far fewer, eg. a pattern has
+    at most one node per bit.
+
+    Set operators and comparisons only accept sets of the same codec. Anything else
+    raises TypeError, including plain sets. Convert this set via `set(bddset)` or
+    the other via `codec.set(other)` for comparison.
     """
 
     codec: Codec[T]
@@ -167,8 +172,8 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
 
     def _storage(self, other: object) -> IntSet:
         if not isinstance(other, BDDSet) or other.codec != self.codec:
-            # Raise rather than return NotImplemented, since IntSet's reflected
-            # operators would try to enumerate the set.
+            # Raise rather than return NotImplemented. IntSet's reflected operators
+            # would try to enumerate the set.
             raise TypeError(f"{self.codec} sets only combine with each other")
         return other.storage
 
@@ -273,9 +278,8 @@ class Tuple(Codec[tuple[*Ts]]):
     """Tuples with a value from each field's codec, with the first field's bits on top.
 
     Sets of tuples iterate in order of their first field, then their second, and so
-    on. `a * b` is the pairs from two sets, and `product(a, b, c)` makes longer
-    tuples, like `itertools.product`. A product costs about as many nodes as its sets
-    do together, however many tuples it holds. `project` goes the other way.
+    on. `product(a, b, c)` makes them, and `a * b` is `product(a, b)`. A product has
+    about as many nodes as its sets combined. `project` gets the values of one field.
 
     >>> from bitpattern.codecs import ipv4, uint16
     >>> private = ipv4.cidr("10.0.0.0/8") * uint16.range(1024, 65536)
