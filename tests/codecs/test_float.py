@@ -68,9 +68,8 @@ def brute_force_range(codec: Float, low, high) -> set[int]:
 
 @cache
 def magnitudes(codec: Float) -> list[float]:
-    """Every finite, non-negative value of a small float codec. They count up in
-    value with their bits until the first infinity or NaN, so the list is sorted,
-    and indexed by bit pattern."""
+    """Every finite, non-negative value of a small float codec. These count up with
+    their bits, so the list is sorted and indexed by bit pattern."""
     return list(itertools.takewhile(math.isfinite, decoded(codec)))
 
 
