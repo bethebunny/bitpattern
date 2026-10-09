@@ -29,12 +29,17 @@ OUI = re.compile(
 class MAC(OrderedCodec[str]):
     """48-bit MAC addresses (EUI-48), like `01:23:45:67:89:ab`.
 
-    The first octet is the top eight bits, so addresses sort the same as their strings.
-    Its lowest bit is I/G, which is set in `multicast` addresses, and the next one
-    up is U/L, which is set in `local` ones.
+    MAC sets have the same ordering as their string representations.
+    The two least significant bits of the first octet are flags:
+      - bit 0 is I/G, set only on `multicast` addresses
+      - bit 1 is U/L, set only on `local` addresses
 
-    Addresses decode to lowercase with colons. `encode` also takes hyphens, Cisco's
-    `0123.4567.89ab` and uppercase. Integers are already bits, so it refuses them.
+    Supported formats:
+      - colon separated, eg. `01:23:45:67:89:ab`
+      - hyphen separated, eg. `01-23-45-67-89-ab`
+      - Cisco, eg. `0123.4567.89ab`
+    Hex digits may be lower or uppercase. Addresses always decode to
+    lowercase with colons.
     """
 
     def encode(self, value: object) -> int:
