@@ -1,4 +1,4 @@
-"""IPv4 and IPv6 addresses, which are integers already."""
+"""IPv4 and IPv6 addresses as their integers."""
 
 from __future__ import annotations
 
@@ -19,10 +19,13 @@ Network = TypeVar("Network", ipaddress.IPv4Network, ipaddress.IPv6Network)
 
 @dataclass(frozen=True, repr=False)
 class IP(OrderedCodec[Address], Generic[Address, Network]):
-    """IPv4 or IPv6 addresses."""
+    """IPv4 or IPv6 addresses.
 
-    # The family's own classes, since ipaddress.ip_address() guesses the family
-    # from the value, and would decode every IPv6 address below 2**32 as IPv4.
+    `encode` accepts addresses, their strings or their integers.
+    """
+
+    # The family's own classes. ipaddress.ip_address() would decode IPv6 addresses
+    # below 2**32 as IPv4.
     address_type: type[Address]
     network_type: type[Network]
 
@@ -44,8 +47,7 @@ class IP(OrderedCodec[Address], Generic[Address, Network]):
         start: Address | str | int | None = None,
         stop: Address | str | int | None = None,
     ) -> BDDSet[Address]:
-        """Addresses in `[start, stop)`, as addresses or anything that makes one, eg.
-        "10.0.0.1". Leaving either bound out leaves that end open."""
+        """Addresses in `[start, stop)`. A bound of `None` leaves that end open."""
         address = self.address_type
         return super().range(
             None if start is None else address(start),
@@ -53,13 +55,11 @@ class IP(OrderedCodec[Address], Generic[Address, Network]):
         )
 
     def networks(self, source: BDDSet[Address]) -> Iterator[Network]:
-        """The fewest CIDR blocks that make up `source`, ie. route aggregation.
+        """The fewest CIDR blocks that make up `source`, in order, ie. route
+        aggregation."""
 
-        Each path to ACCEPT is a block, and since the diagram is reduced, each one
-        is as big as it can be. Unlike a pattern, a block's free bits all have to
-        be at the end, so this splits even the bits that the diagram doesn't test.
-        """
-
+        # Each path to ACCEPT is a block, as big as it can be in a reduced diagram.
+        # Blocks only have free bits at the end, so this splits bits the path skips.
         def walk(node: BDD, bit: int, prefix: int) -> Iterator[Network]:
             if node is BDD.ACCEPT:
                 yield self.network_type((prefix << (bit + 1), self.width - 1 - bit))
