@@ -151,7 +151,8 @@ class Float(OrderedCodec[float]):
         self, start: float | None = None, stop: float | None = None
     ) -> BDDSet[float]:
         """Floats in `[start, stop)`, never NaN. A bound of `None` includes the
-        infinity at that end."""
+        infinity at that end. `-0.0` sorts just below `0.0`, so `range(0.0)` leaves
+        it out."""
         if any(bound is not None and math.isnan(bound) for bound in (start, stop)):
             raise ValueError("NaN isn't ordered, so it can't bound a range")
         sign, mask = 1 << (self.width - 1), (1 << self.width) - 1
