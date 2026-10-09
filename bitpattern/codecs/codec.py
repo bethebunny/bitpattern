@@ -111,14 +111,10 @@ class OrderedCodec(Codec[T]):
         """The largest value."""
         return self.all[-1]
 
-    def _bound(self, value: T) -> int:
-        """Where a range bounded by `value` starts or stops."""
-        return self.encode(value)
-
     def range(self, start: T | None = None, stop: T | None = None) -> BDDSet[T]:
         """Values in `[start, stop)`. A bound of `None` leaves that end open."""
-        low = 0 if start is None else self._bound(start)
-        high = 1 << self.width if stop is None else self._bound(stop)
+        low = 0 if start is None else self.encode(start)
+        high = 1 << self.width if stop is None else self.encode(stop)
         return BDDSet(self, IntSet.range(low, high, width=self.width)) & self.all
 
 

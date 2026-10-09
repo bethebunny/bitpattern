@@ -66,10 +66,6 @@ class Char(OrderedCodec[str]):
         surrogates = IntSet.range(0xD800, 0xE000, width=self.width)
         return BDDSet(self, points - surrogates)
 
-    def _bound(self, value: str) -> int:
-        # Strings sort by code point, so a surrogate can bound a range too.
-        return ord(value)
-
     def category(self, name: str) -> BDDSet[str]:
         """Characters in a general category like "Lu" or a major class like "L".
 

@@ -34,10 +34,12 @@ CATEGORIES = sorted(set(categories()))
 MAJOR_CLASSES = sorted({name[0] for name in CATEGORIES})
 
 # Ranges change at their bounds and at the surrogates, so probe either side of each.
-BOUNDS = [0, 0x61, 0x7B, 0xD7FF, 0xD800, 0xDFFF, 0xE000, 0x10000, sys.maxunicode]
-PROBES = [point for bound in BOUNDS for point in (bound - 1, bound) if point >= 0]
+BOUNDS = [0, 0x61, 0x7B, 0xD7FF, 0xE000, 0x10000, sys.maxunicode]
+EDGES = [*BOUNDS, SURROGATES[0], SURROGATES[-1]]
+PROBES = [point for edge in EDGES for point in (edge - 1, edge) if point >= 0]
 
 CODE_POINTS = st.integers(0, sys.maxunicode)
+SCALAR_VALUES = CODE_POINTS.filter(lambda point: point not in SURROGATES)
 
 
 def test_chars_are_every_code_point_but_the_surrogates():
@@ -86,7 +88,13 @@ def test_char_range_is_half_open():
 def test_char_range_skips_the_surrogates():
     around = char.range("\ud7fe", "\ue002")
     assert list(around) == ["\ud7fe", "\ud7ff", "\ue000", "\ue001"]
-    assert char.range("\ud800", "\ue000") == char.none
+
+
+def test_surrogates_cant_bound_a_char_range():
+    with pytest.raises(ValueError):
+        char.range("\ud800", "\ue000")
+    with pytest.raises(ValueError):
+        char.range(stop="\udfff")
 
 
 @pytest.mark.parametrize("low", BOUNDS)
@@ -100,7 +108,7 @@ def test_char_range_agrees_with_brute_force(low):
         }
 
 
-@given(low=CODE_POINTS, high=CODE_POINTS, point=CODE_POINTS)
+@given(low=SCALAR_VALUES, high=SCALAR_VALUES, point=CODE_POINTS)
 @settings(deadline=None)
 def test_char_range_holds_the_chars_between_its_bounds(low, high, point):
     inside = low <= point < high and point not in SURROGATES
