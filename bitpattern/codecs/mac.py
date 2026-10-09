@@ -12,7 +12,7 @@ from .codec import BDDSet, OrderedCodec
 
 __all__ = ["MAC", "mac"]
 
-# 01:23:45:67:89:ab, 01-23-45-67-89-ab or Cisco's 0123.4567.89ab, in either case.
+# 01:23:45:67:89:ab, 01-23-45-67-89-ab or Cisco's 0123.4567.89ab, ignoring case.
 ADDRESS = re.compile(
     r"(?:[0-9a-f]{2}:){5}[0-9a-f]{2}"
     r"|(?:[0-9a-f]{2}-){5}[0-9a-f]{2}"
@@ -57,27 +57,27 @@ class MAC(OrderedCodec[str]):
 
     @cached_property
     def multicast(self) -> BDDSet[str]:
-        """Group addresses, which have the I/G bit set."""
+        """Group addresses, with I/G set."""
         return self._prefix("???????1")
 
     @cached_property
     def unicast(self) -> BDDSet[str]:
-        """Individual addresses, which have the I/G bit clear."""
+        """Individual addresses, with I/G clear."""
         return self._prefix("???????0")
 
     @cached_property
     def local(self) -> BDDSet[str]:
-        """Locally administered addresses, which have the U/L bit set."""
+        """Locally administered addresses, with U/L set."""
         return self._prefix("??????1?")
 
     @cached_property
     def universal(self) -> BDDSet[str]:
-        """Universally administered addresses, which have the U/L bit clear."""
+        """Universally administered addresses, with U/L clear."""
         return self._prefix("??????0?")
 
     @cached_property
     def broadcast(self) -> BDDSet[str]:
-        """`ff:ff:ff:ff:ff:ff`, which is in `multicast` and `local` too."""
+        """`ff:ff:ff:ff:ff:ff`, also in `multicast` and `local`."""
         return self.set(["ff:ff:ff:ff:ff:ff"])
 
     def oui(self, prefix: str) -> BDDSet[str]:
