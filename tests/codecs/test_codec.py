@@ -22,7 +22,7 @@ from bitpattern.codecs import (
     uint128,
 )
 
-SMALL = float16.range(1.0, 1.01)  # the 10 float16s from 1.0
+SMALL = float16.range(1.0, 1.01)  # the 11 float16s in [1.0, 1.01)
 
 
 def test_pattern_has_to_be_the_codecs_width():
@@ -51,12 +51,12 @@ def test_values_a_codec_cant_encode_arent_members(value):
 
 def test_bdd_sets_read_like_lists_of_their_values():
     values = list(SMALL)
-    assert len(values) == len(SMALL) == SMALL.size == 10
+    assert len(values) == len(SMALL) == SMALL.size == 11
     assert values == sorted(values) and all(1.0 <= v < 1.01 for v in values)
-    assert [SMALL[at] for at in range(10)] == values
+    assert [SMALL[at] for at in range(11)] == values
     assert SMALL[-1] == values[-1]
     assert list(reversed(SMALL)) == values[::-1]
-    assert [SMALL.index(v) for v in values] == list(range(10))
+    assert [SMALL.index(v) for v in values] == list(range(11))
     assert SMALL.count(values[3]) == 1 and SMALL.count(2.0) == 0
     with pytest.raises(ValueError):
         SMALL.index(2.0)

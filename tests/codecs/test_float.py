@@ -23,7 +23,7 @@ FLOAT8 = [float8_e5m2, float8_e4m3fn]
 BRUTE_FORCED = [*FLOAT8, float16, bfloat16]  # small enough to check every bit pattern
 
 
-SMALL = float16.range(1.0, 1.01)  # the 10 float16s from 1.0
+SMALL = float16.range(1.0, 1.01)  # the 11 float16s in [1.0, 1.01)
 
 
 @cache
@@ -79,6 +79,18 @@ def bounds(codec: Float) -> list[float]:
     smallest_normal = finite[1 << codec.mantissa]
     positive = [finite[1], smallest_normal, 1.0, 2.0, finite[-1], math.inf]
     return [-value for value in reversed(positive)] + [-0.0, 0.0] + positive
+
+
+def between(codec: Float) -> list[float]:
+    """Bounds that aren't values of a small float codec: halfway between neighbors,
+    where ties round to even, a quarter of the way, and past the largest."""
+    finite = magnitudes(codec)
+    normal = 1 << codec.mantissa  # where the smallest normal is
+    lows = [0, 1, normal - 1, normal, len(finite) - 2]
+    halfway = [(finite[at] + finite[at + 1]) / 2 for at in lows]
+    quarter = [(3 * finite[at] + finite[at + 1]) / 4 for at in lows]
+    positive = [*halfway, *quarter, 2 * finite[-1], sys.float_info.max]
+    return [-value for value in reversed(positive)] + positive
 
 
 def nearest(codec: Float, value: float) -> float | None:
@@ -234,6 +246,28 @@ def test_float_range_agrees_with_brute_force(codec):
         assert set(codec.range(low, high).storage) == brute_force_range(
             codec, low, high
         )
+
+
+@pytest.mark.parametrize("codec", BRUTE_FORCED)
+def test_float_range_bounds_can_fall_between_floats(codec):
+    for bound in between(codec):
+        above = codec.range(bound, math.inf)
+        assert set(above.storage) == brute_force_range(codec, bound, math.inf)
+        below = codec.range(-math.inf, bound)
+        assert set(below.storage) == brute_force_range(codec, -math.inf, bound)
+
+
+def test_float_range_bounds_round_up_to_a_float():
+    """400.0 is halfway between 384.0 and 416.0, and ties round to 384.0, the even
+    one."""
+    assert float8_e4m3fn.range(400.0, math.inf)[0] == 416.0
+    assert float8_e4m3fn.range(0.0, 400.0)[-1] == 384.0
+
+
+def test_float_range_bounds_can_be_past_the_largest_float():
+    assert float16.range(0.0, 1e5) == float16.range(0.0, math.inf)
+    assert list(float16.range(1e5)) == [math.inf]
+    assert float8_e4m3fn.range(1000.0) == float8_e4m3fn.none
 
 
 def test_float_range_is_half_open():

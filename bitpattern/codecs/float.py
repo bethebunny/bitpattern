@@ -127,8 +127,15 @@ class Float(OrderedCodec[float]):
         return bits ^ mask if bits & sign else bits | sign
 
     def _bound(self, value: float) -> int:
-        """The key where a range bounded by `value` starts or stops."""
-        return self._key(self.encode(value))
+        """The key of the first float at or above `value`, where a range bounded by
+        `value` starts or stops."""
+        if value > self.max:  # inf if there is one, or else past the end
+            return self._key(self.encode(self.max)) + 1
+        if -math.inf < value < self.min:
+            value = self.min
+        key = self._key(bits := self.encode(value))
+        # encode rounds to the nearest float, which can be the one below.
+        return key + 1 if self.decode(bits) < value else key
 
     @property
     def min(self) -> float:
@@ -216,12 +223,8 @@ class FloatFN(Float):
         return self.all - self.nan
 
     def _bound(self, value: float) -> int:
-        # There's no infinity to encode, but it still bounds a range. The NaNs have
-        # the outermost keys. -inf bounds just above the negative NaN and +inf at the
-        # positive NaN.
-        if math.isinf(value):
-            return 1 if value < 0 else (1 << self.width) - 1
-        return super()._bound(value)
+        # With no -inf to encode, a range from it starts at the most negative float.
+        return super()._bound(self.min if value == -math.inf else value)
 
 
 float8_e5m2 = Float(8, "float8_e5m2", exponent=5, format=">e")
