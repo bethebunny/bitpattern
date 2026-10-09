@@ -1,8 +1,8 @@
 """Pattern, an IntSet written as bits, like `*1.*.*.0000.1111.?01?`.
 
-Text like `*1.0000` expands to bits like `???10000`, one character per bit, and the
-bits build a diagram. `expand` and `dotted` convert between text and bits, and
-`diagram` and `paths` between bits and diagrams.
+Text like `*1.0000` expands to bits like `???10000`, one character per bit:
+  - `expand` and `dotted` convert between text and bits
+  - `diagram` and `paths` convert between bits and diagrams
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ def expand(text: str) -> str:
         if not re.fullmatch("[01?]{1,4}" if at == 0 else "[01?]{4}", expanded):
             raise ValueError(
                 f"bad quartet {quartet!r} in {text!r}. Quartets are 4 bits of 0, 1 "
-                "or ?, with * filling out the rest, and only the leading one can be "
+                "or ?, and * fills out the rest. Only the leading quartet can be "
                 "shorter."
             )
         bits += expanded
@@ -78,7 +78,7 @@ class Pattern(IntSet):
 
     Patterns are written most significant bit first, in quartets separated by
     `.`. `0` and `1` are fixed bits, `?` can be either, and `*` is shorthand for
-    enough `?` to fill out its quartet. The leading quartet can be shorter, for
+    enough `?` to fill out its quartet. The leading quartet can be shorter for
     widths that aren't a multiple of 4.
 
     >>> p = Pattern("*1.0000")
