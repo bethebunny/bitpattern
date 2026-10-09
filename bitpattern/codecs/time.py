@@ -18,13 +18,10 @@ LONGEST = (dt.datetime.max - dt.datetime.min) // MICROSECOND
 
 @dataclass(frozen=True, repr=False)
 class Date(OrderedCodec[dt.date]):
-    """Dates as their proleptic Gregorian ordinal, where `date.min` is 1.
+    """Dates, in time order.
 
-    Ordinals count up a day at a time, so ranges are contiguous and iteration goes
-    forward in time.
-
-    `datetime` subclasses `date`, but a datetime never equals a date, so this refuses
-    them. Use `value.date()` to drop the time.
+    It doesn't accept datetimes even though `datetime` subclasses `date`. Use
+    `value.date()` to drop the time.
     """
 
     def encode(self, value: object) -> int:
@@ -37,25 +34,24 @@ class Date(OrderedCodec[dt.date]):
 
     @cached_property
     def all(self) -> BDDSet[dt.date]:
-        """Every date. Ordinal 0 and those past `date.max` aren't dates."""
+        """Every date. Ordinal 0 and ordinals past `date.max` aren't dates."""
         stop = self.encode(dt.date.max) + 1
         return BDDSet(self, IntSet.range(1, stop, width=self.width))
 
 
 @dataclass(frozen=True, repr=False, init=False)
 class Datetime(OrderedCodec[dt.datetime]):
-    """Datetimes as microseconds since `datetime.min`, so they sort in time.
+    """Datetimes, in time order.
 
-    Aware datetimes count from `datetime.min` in UTC, so sets hold instants, the same
-    way Python compares them, and noon in UTC is the same member as 7am in New York.
-    They decode into `tz`, eg. `Datetime(ZoneInfo("America/New_York"))`. With
-    `tz=None` the codec is naive, and counts wall-clock time instead. Naive and aware datetimes don't compare, so each kind of codec
-    refuses the other.
+    `Datetime(tz)` holds timezone-aware datetimes and decodes them into `tz`. It
+    accepts datetimes from any timezone, eg. 12:00 UTC and 07:00 EST are the same
+    member. `Datetime(None)` holds naive datetimes. Python can't compare the two
+    kinds, so neither codec accepts the other.
 
-    In a zone with daylight saving, the hour the clocks skip has no instants, so it
-    never decodes, and the hour they repeat decodes twice, the second time with
-    `fold=1`. Python counts those two as equal, since they share a zone. A naive codec
-    doesn't keep `fold`, since naive datetimes ignore it when they compare.
+    When `tz` has daylight saving:
+      - local times the clocks skip never decode
+      - local times the clocks repeat decode twice, the second time with `fold=1`
+    Repeated values are equal since they share a timezone.
     """
 
     tz: dt.tzinfo | None
@@ -87,8 +83,8 @@ class Datetime(OrderedCodec[dt.datetime]):
 
     @cached_property
     def all(self) -> BDDSet[dt.datetime]:
-        """Every datetime. An aware codec leaves out instants at the ends that would
-        decode into `tz` outside the years datetime can hold."""
+        """Every datetime. Instants at either end that overflow `datetime` in `tz`
+        are left out."""
         low = max(self._microseconds(dt.datetime.min.replace(tzinfo=self.tz)), 0)
         high = min(self._microseconds(dt.datetime.max.replace(tzinfo=self.tz)), LONGEST)
         return BDDSet(self, IntSet.range(low, high + 1, width=self.width))
