@@ -4,9 +4,8 @@
     >>> Pattern("*1.*.*.0000.1111.?01?").size
     8192
 
-Codecs for floats and IP addresses are in `bitpattern.codecs`, hypothesis
-strategies are in `bitpattern.strategies`, and the diagrams themselves are in
-`bitpattern.bdd`.
+Codecs are in `bitpattern.codecs`, hypothesis strategies in `bitpattern.strategies`
+and the diagrams themselves in `bitpattern.bdd`.
 """
 
 from .bdd import BDD

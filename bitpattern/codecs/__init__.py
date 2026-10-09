@@ -1,9 +1,8 @@
-"""Codecs for floats, integers and IP addresses, and BDDSets, the sets of values they
-make.
+"""Codecs for numbers, characters, times, addresses, UUIDs and enums.
 
-A BDDSet keeps its values as the IntSet of their encodings, which are the values'
-raw bits, so patterns match the bit layout. For instance the float16 NaNs and
-infinities are `float16.pattern("?111.11??.*.*")`.
+A BDDSet keeps its values as the IntSet of their encodings. Most codecs encode values
+as their raw bits, so patterns match the bit layout. For instance the float16 NaNs
+and infinities are `float16.pattern("?111.11??.*.*")`.
 """
 
 from .char import Char, char
