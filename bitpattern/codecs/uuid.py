@@ -1,4 +1,4 @@
-"""UUIDs, as their 128 bits."""
+"""UUIDs as their 128 bits."""
 
 from __future__ import annotations
 
@@ -15,11 +15,11 @@ __all__ = ["UUIDCodec", "uuid128"]
 
 @dataclass(frozen=True, repr=False)
 class UUIDCodec(OrderedCodec[UUID]):
-    """`uuid.UUID`s, as the bits of `UUID.int`, which is also how UUIDs sort.
+    """`uuid.UUID`s, in the order Python sorts them.
 
-    A UUID is written `xxxxxxxx-xxxx-Mxxx-Nxxx-xxxxxxxxxxxx`, one hex digit per
-    quartet of a pattern. RFC 9562 puts the version in M and the variant in the top
-    bits of N.
+    `encode` accepts UUIDs or their strings. Patterns have one quartet per hex digit
+    of `xxxxxxxx-xxxx-Mxxx-Nxxx-xxxxxxxxxxxx`. RFC 9562 puts the version in M and the
+    variant in the top bits of N.
     """
 
     def encode(self, value: object) -> int:
@@ -41,8 +41,8 @@ class UUIDCodec(OrderedCodec[UUID]):
 
     @cached_property
     def rfc9562(self) -> BDDSet[UUID]:
-        """UUIDs in the variant RFC 9562 defines, where N is 8, 9, a or b. The `uuid`
-        module calls it `RFC_4122`."""
+        """UUIDs in RFC 9562's variant, where N is 8, 9, a or b. `uuid` calls it
+        `RFC_4122`."""
         return self._rfc("????")
 
     def version(self, n: int) -> BDDSet[UUID]:
