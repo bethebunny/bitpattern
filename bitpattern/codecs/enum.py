@@ -1,4 +1,4 @@
-"""Enum members, as their index, and flags, as their own bits."""
+"""Enum members as their index, and flags as their own bits."""
 
 from __future__ import annotations
 
@@ -22,11 +22,7 @@ F = TypeVar("F", bound=Flag)
 
 @dataclass(frozen=True, repr=False, init=False)
 class Members(Codec[E]):
-    """An Enum's members, numbered in the order they're defined.
-
-    Members take as few bits as number them, which usually leaves bit patterns past
-    the last one, so `all` is just the members. Aliases are the same member, so they
-    encode the same.
+    """An Enum's members, in the order they're defined.
 
     >>> from enum import Enum
     >>> class Color(Enum):
@@ -73,8 +69,7 @@ class Members(Codec[E]):
 class Flags(Codec[F]):
     """Combinations of a Flag's flags, as their own bits.
 
-    Patterns describe combinations of flags, and sets of them iterate in order of
-    value.
+    Sets iterate in order of value.
 
     >>> from enum import Flag
     >>> class Perm(Flag):
@@ -86,10 +81,6 @@ class Flags(Codec[F]):
     BDDSet(Perm, [<Perm.R: 4>, <Perm.R|W: 6>])
     >>> perms.having(Perm.W) == perms.pattern("?1?")
     True
-
-    `all` is every combination of the flags, including none of them. Bits that aren't
-    in any flag stay clear, and a flag of more than one bit can only be set whole,
-    unless smaller flags make it up.
     """
 
     enum: type[F]
@@ -109,13 +100,13 @@ class Flags(Codec[F]):
         return self.enum(bits)
 
     def _glob(self, flags: int, bit: str) -> BDDSet[F]:
-        """Bit patterns with `bit` at each of `flags`' bits, and anything elsewhere."""
+        """Bit patterns with `bit` at each bit of `flags`, and `?` elsewhere."""
         bits = f"{flags:0{self.width}b}".replace("0", "?").replace("1", bit)
         return BDDSet(self, IntSet.from_bdd(diagram(bits), self.width))
 
     @cached_property
     def all(self) -> BDDSet[F]:
-        """Every combination of the flags."""
+        """Every combination of the flags, including none."""
         flags = {member.value for member in self.enum.__members__.values()}
         combinations = BDDSet(self, IntSet.from_bdd(BDD.ACCEPT, self.width))
         for at in range(self.width):
