@@ -27,7 +27,7 @@ __all__ = [
 class Float(OrderedCodec[float]):
     """An IEEE 754 binary format: a sign bit, then the exponent, then the mantissa.
 
-    Sets iterate in the order of their bits:
+    Sets iterate in bit order:
       - `+0.0` up to `inf`, then NaNs with the sign clear
       - `-0.0` down to `-inf`, then NaNs with the sign set
     `range`, `min` and `max` use numeric order.
@@ -152,7 +152,7 @@ class Float(OrderedCodec[float]):
     ) -> BDDSet[float]:
         """Floats in `[start, stop)`, never NaN. A bound of `None` includes the
         infinity at that end. `-0.0` sorts just below `0.0`, so `range(0.0)` leaves
-        it out."""
+        out `-0.0`."""
         if any(bound is not None and math.isnan(bound) for bound in (start, stop)):
             raise ValueError("NaN isn't ordered, so it can't bound a range")
         sign, mask = 1 << (self.width - 1), (1 << self.width) - 1
@@ -193,7 +193,7 @@ class FloatFN(Float):
             raise ValueError(f"{self} can't encode {value!r}")
         else:
             # Values are whole steps of the smallest subnormal. Subnormals and the
-            # first exponent share that step. Each exponent after doubles it.
+            # first exponent share that step. Each exponent after doubles the step.
             steps = int(math.ldexp(magnitude, -self._lowest))
             exponent = max(steps.bit_length() - self.mantissa, 0)
             mantissa = steps >> max(exponent - 1, 0)  # with the implicit leading 1
@@ -224,7 +224,7 @@ class FloatFN(Float):
         return self.all - self.nan
 
     def _bound(self, value: float) -> int:
-        # With no -inf to encode, a range from it starts at the most negative float.
+        # With no -inf to encode, a range from -inf starts at the most negative float.
         return super()._bound(self.min if value == -math.inf else value)
 
 

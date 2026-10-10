@@ -15,7 +15,7 @@ __all__ = ["UUIDCodec", "uuid128"]
 
 @dataclass(frozen=True, repr=False)
 class UUIDCodec(OrderedCodec[UUID]):
-    """`uuid.UUID`s, in the order Python sorts them.
+    """`uuid.UUID`s, in Python's sort order.
 
     `encode` accepts UUIDs or their strings. Patterns have one quartet per hex digit
     of `xxxxxxxx-xxxx-Mxxx-Nxxx-xxxxxxxxxxxx`. RFC 9562 puts the version in M and the
@@ -27,7 +27,7 @@ class UUIDCodec(OrderedCodec[UUID]):
             case UUID():
                 return value.int
             case str():
-                return UUID(value).int  # raises ValueError if it's malformed
+                return UUID(value).int  # raises ValueError for a malformed string
         raise ValueError(f"{self} can't encode {value!r}")
 
     def decode(self, bits: int) -> UUID:
@@ -41,8 +41,8 @@ class UUIDCodec(OrderedCodec[UUID]):
 
     @cached_property
     def rfc9562(self) -> BDDSet[UUID]:
-        """UUIDs in RFC 9562's variant, where N is 8, 9, a or b. `uuid` calls it
-        `RFC_4122`."""
+        """UUIDs in RFC 9562's variant, where N is 8, 9, a or b. `uuid` calls the
+        variant `RFC_4122`."""
         return self._rfc("????")
 
     def version(self, n: int) -> BDDSet[UUID]:

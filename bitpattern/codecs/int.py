@@ -26,10 +26,10 @@ __all__ = [
 
 @dataclass(frozen=True, repr=False)
 class Int(OrderedCodec[int]):
-    """Fixed-width integers, in two's complement if they're signed.
+    """Fixed-width integers, in two's complement when signed.
 
-    Sets iterate in the order of their bits. For signed integers that's 0 to `max`,
-    then `min` to -1.
+    Sets iterate in bit order, which for signed integers is 0 to `max`, then `min`
+    to -1.
     """
 
     signed: bool

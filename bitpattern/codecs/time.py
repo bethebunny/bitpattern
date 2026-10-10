@@ -20,7 +20,7 @@ LONGEST = (dt.datetime.max - dt.datetime.min) // MICROSECOND
 class Date(OrderedCodec[dt.date]):
     """Dates, in time order.
 
-    It doesn't accept datetimes even though `datetime` subclasses `date`. Use
+    `Date` doesn't accept datetimes even though `datetime` subclasses `date`. Use
     `value.date()` to drop the time.
     """
 

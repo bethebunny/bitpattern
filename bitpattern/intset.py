@@ -53,9 +53,9 @@ class IntSet(AbstractSet[int], Sequence[int]):
     A diagram has at most `size * w` nodes and usually far fewer, eg. a pattern has
     at most one node per bit.
 
-    An IntSet is a diagram and a width. Its members are the integers below
-    `2 ** width` whose bits satisfy the diagram. Sets of different widths are widened
-    to match before they're combined.
+    An IntSet is a diagram and a width, and holds the integers below `2 ** width`
+    whose bits satisfy the diagram. Sets of different widths are widened to match
+    before being combined.
     """
 
     __slots__ = ("bdd", "width")
@@ -88,9 +88,9 @@ class IntSet(AbstractSet[int], Sequence[int]):
         return cls.from_bdd(iota(stop, width=width) - iota(start, width=width), width)
 
     def _extended(self, width: int) -> BDD:
-        # The width bounds the members, but the diagram doesn't know that: {0} at
-        # width 1 is "bit 0 is clear", which read at width 4 is every even number.
-        # So reading it wider needs the bound added explicitly.
+        # The width bounds the members, but the diagram doesn't encode the bound.
+        # {0} at width 1 is "bit 0 is clear", which read at width 4 would be every
+        # even number. So reading a diagram wider needs the bound added explicitly.
         if width <= self.width:
             return self.bdd
         return self.bdd & iota(1 << self.width, width=width)
@@ -145,17 +145,17 @@ class IntSet(AbstractSet[int], Sequence[int]):
     def __getitem__(self, item: int | slice) -> int | Self:
         if not isinstance(item, slice):
             return nth(self.bdd, item, width=self.width)
-        # A slice is the members at those positions. They're still a set, so a
-        # negative step doesn't reverse anything.
+        # A slice is the set of members at the sliced positions, so a negative step
+        # doesn't reverse anything.
         positions = range(self.size)[item]
         if positions.step == 1 and positions:  # one range, so no need to find each one
             return self & IntSet.range(self[positions[0]], self[positions[-1]] + 1)
         return self & IntSet(map(self.__getitem__, positions))
 
     def index(self, value: object, start: int = 0, stop: int | None = None) -> int:
-        """Where `value` is among the members, without searching for it."""
+        """Where `value` is among the members, counted without searching."""
         if isinstance(value, int) and value in self:
-            # Its position is how many members are below it.
+            # The position is how many members are below value.
             at = count(self.bdd & iota(value, width=self.width), self.width)
             if at in range(self.size)[start:stop]:
                 return at

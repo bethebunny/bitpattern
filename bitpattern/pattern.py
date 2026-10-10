@@ -67,7 +67,7 @@ def paths(node: BDD, width: int) -> Iterator[str]:
 
 @weak_cache
 def path_count(node: BDD) -> int:
-    """How many paths `paths` would give, without walking them."""
+    """How many paths `paths` would give, counted without walking the diagram."""
     if node.leaf:
         return int(node is BDD.ACCEPT)
     return path_count(node.left) + path_count(node.right)
@@ -87,13 +87,13 @@ class Pattern(IntSet):
     >>> p.size
     8
 
-    Unions repr as the disjoint patterns that make them up.
+    Unions repr as disjoint patterns.
 
     >>> Pattern("1?1") | Pattern("?1?")
     Pattern('01?') | Pattern('101') | Pattern('11?')
 
-    Only fixed bits need nodes, so a pattern's memory is bounded by the length of
-    its text.
+    Only fixed bits need nodes, so memory is bounded by the length of the pattern's
+    text.
     """
 
     __slots__ = ()
@@ -127,7 +127,7 @@ class Pattern(IntSet):
             return f"<Pattern: width=0, size={self.size}>"
         if not (count := path_count(self.bdd)):
             return f"~Pattern({dotted('?' * self.width)!r})"
-        # Unions repr as the expression that builds them, unless that's too long.
+        # A union reprs as the expression that builds the union, if short enough.
         if count <= 8:
             text = " | ".join(f"Pattern({branch!r})" for branch in self.branches)
             if len(text) <= 200:

@@ -40,7 +40,7 @@ def weak_cache(fn: Callable[[*Ts], T]) -> Callable[[*Ts], T]:
 
 
 def _reference(value: T) -> Callable[[], T | None]:
-    # Counts can't be weakly referenced, but they can't keep a node alive either.
+    # Counts can't be weakly referenced, and can't keep a node alive either.
     return weakref.ref(value) if isinstance(value, BDD) else lambda: value
 
 
@@ -49,8 +49,9 @@ def _reference(value: T) -> Callable[[], T | None]:
 class BDD:
     """A predicate on the bits of an integer as a reduced, ordered decision diagram.
 
-    `BDD(bit, left, right)` is an expression on the `bit` boolean variable. It resolves
-    to `left` for inputs where the bit is 0 and `right` where it is 1.
+    `BDD(bit, left, right)` is an expression on the `bit` boolean variable. The
+    expression resolves to `left` for inputs where the bit is 0 and `right` where the
+    bit is 1.
 
     All leaves in the tree must be `BDD.ACCEPT` or `BDD.REJECT`. BDDs are interned
     and guaranteed to produce the same object for the same expression.
@@ -141,8 +142,8 @@ class BDD:
         (a0, a1), (b0, b1) = cofactors(self, bit), cofactors(other, bit)
         return BDD(bit, a0 | b0, a1 | b1)
 
-    # Leaves pickle by name, and nodes through the constructor so they get
-    # re-interned.
+    # Leaves pickle by name, and nodes through the constructor so unpickled nodes
+    # get re-interned.
     def __reduce__(self) -> str | tuple[type[BDD], tuple[int, BDD, BDD]]:
         if self.leaf:
             return repr(self)
@@ -188,7 +189,7 @@ def count(node: BDD, width: int) -> int:
     """How many integers below `2 ** width` satisfy `node`."""
     if node.bit >= width:
         raise ValueError(f"node tests bit {node.bit}, outside width {width}")
-    return size(node) << (width - 1 - node.bit)  # each free bit above doubles it
+    return size(node) << (width - 1 - node.bit)  # each free bit above doubles the count
 
 
 def nth(node: BDD, n: int, *, width: int) -> int:
@@ -202,7 +203,7 @@ def nth(node: BDD, n: int, *, width: int) -> int:
 def _nth(node: BDD, n: int) -> int:
     if node.leaf:
         return n  # every bit below is free, so the nth member is n
-    # Free bits above the node are the high bits of the result, so they vary slowest.
+    # Free bits above the node are the result's high bits, which vary slowest.
     free, n = divmod(n, size(node))
     high = free << (node.bit + 1)
     if n < (left_count := count(node.left, node.bit)):
@@ -267,7 +268,7 @@ def node_count(node: BDD) -> int:
 
 
 def render_count(total: int) -> str:
-    """`total`, or `2**k` if it's a big power of two."""
+    """`total`, or `2**k` if `total` is a big power of two."""
     if total >= 1024 and not total & (total - 1):
         return f"2**{total.bit_length() - 1}"
     return str(total)

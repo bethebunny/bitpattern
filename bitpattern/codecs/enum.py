@@ -22,7 +22,7 @@ F = TypeVar("F", bound=Flag)
 
 @dataclass(frozen=True, repr=False, init=False)
 class Members(Codec[E]):
-    """An Enum's members, in the order they're defined.
+    """An Enum's members, in definition order.
 
     >>> from enum import Enum
     >>> class Color(Enum):
@@ -51,7 +51,7 @@ class Members(Codec[E]):
         return {member: at for at, member in enumerate(self._members)}
 
     def encode(self, value: object) -> int:
-        # A Flag's combinations are instances too, but they aren't members.
+        # A Flag's combinations are instances too, but aren't members.
         if isinstance(value, self.enum) and value in self._indices:
             return self._indices[value]
         raise ValueError(f"{self} can't encode {value!r}")

@@ -55,7 +55,7 @@ class Codec(Generic[T]):
 
     If a type has illegal bit patterns then `encode` should raise a `ValueError`.
     In this case, the Codec should override `all` to return the legal pattern
-    domain for the type. `~` and `pattern` then stay inside it.
+    domain for the type. `~` and `pattern` then stay inside `all`.
     """
 
     width: int
@@ -65,7 +65,7 @@ class Codec(Generic[T]):
         return self.name
 
     def encode(self, value: object) -> int:
-        """`value`'s bits. Raises ValueError if this codec can't encode it."""
+        """`value`'s bits. Raises ValueError if this codec can't encode `value`."""
         raise NotImplementedError
 
     def decode(self, bits: int) -> T:
@@ -73,7 +73,7 @@ class Codec(Generic[T]):
 
     @cached_property
     def all(self) -> BDDSet[T]:
-        """Every value. That's every bit pattern unless a codec overrides it."""
+        """Every value, which is every bit pattern unless a codec overrides `all`."""
         return BDDSet(self, IntSet.from_bdd(BDD.ACCEPT, self.width))
 
     @cached_property
@@ -98,7 +98,7 @@ class OrderedCodec(Codec[T]):
     """A codec whose values have an order, with `min`, `max` and `range`.
 
     The defaults assume encodings sort the same as their values. Codecs that encode
-    in another order, like `Int` and `Float`, override them.
+    in another order, like `Int` and `Float`, override the defaults.
     """
 
     @property
@@ -274,8 +274,9 @@ class Tuple(Codec[tuple[*Ts]]):
     """Tuples with a value from each field's codec, with the first field's bits on top.
 
     Sets of tuples iterate in order of their first field, then their second, and so
-    on. `product(a, b, c)` makes them, and `a * b` is `product(a, b)`. A product has
-    about as many nodes as its sets combined. `project` gets the values of one field.
+    on. `product(a, b, c)` makes sets of tuples, and `a * b` is `product(a, b)`. A
+    product has about as many nodes as its sets combined. `project` gets the values
+    of one field.
 
     >>> from bitpattern.codecs import ipv4, uint16
     >>> private = ipv4.cidr("10.0.0.0/8") * uint16.range(1024, 65536)
@@ -349,7 +350,7 @@ def product(*sets: BDDSet[Any]) -> BDDSet[tuple[Any, ...]]: ...
 def product(*sets: BDDSet[Any]) -> BDDSet[tuple[Any, ...]]:
     """The tuples with a value from each of `sets`, like `itertools.product`."""
     codec = Tuple(*(source.codec for source in sets))
-    # Each set's diagram sits above the next one's, so `&` just chains them.
+    # Each set's diagram sits above the next one's, so `&` just chains the diagrams.
     shifted = (
         lshift(source.storage.bdd, offset)
         for source, offset in zip(sets, codec._offsets)
