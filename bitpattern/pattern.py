@@ -1,7 +1,7 @@
 """Pattern, an IntSet written as bits, like `*1.*.*.0000.1111.?01?`.
 
 Text like `*1.0000` expands to bits like `???10000`, one character per bit:
-  - `expand` and `dotted` convert between text and bits
+  - `expanded` and `dotted` convert between text and bits
   - `diagram` and `paths` convert between bits and diagrams
 """
 
@@ -16,7 +16,7 @@ from .intset import IntSet
 __all__ = ["Pattern"]
 
 
-def expand(text: str) -> str:
+def expanded(text: str) -> str:
     """A pattern's bits, one character per bit, eg. `*1.0000` is `???10000`."""
     if "|" in text:
         left, _, right = (part.strip() for part in text.partition("|"))
@@ -99,7 +99,7 @@ class Pattern(IntSet):
     __slots__ = ()
 
     def __init__(self, text: str) -> None:
-        bits = expand(text)
+        bits = expanded(text)
         self.bdd, self.width = diagram(bits), len(bits)
 
     @property
