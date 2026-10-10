@@ -191,7 +191,7 @@ def count(node: BDD, width: int) -> int:
     return size(node) << (width - 1 - node.bit)  # each free bit above doubles it
 
 
-def nth(node: BDD, width: int, n: int) -> int:
+def nth(node: BDD, n: int, *, width: int) -> int:
     """The `n`th smallest integer below `2 ** width` that satisfies `node`."""
     total = count(node, width)
     if not -total <= n < total:
@@ -273,7 +273,7 @@ def render_count(total: int) -> str:
     return str(total)
 
 
-def exactly(value: int, width: int) -> BDD:
+def exactly(value: int, *, width: int) -> BDD:
     """Exactly `value`, over `width` bits."""
     node = BDD.ACCEPT
     for bit in range(width):
@@ -284,7 +284,7 @@ def exactly(value: int, width: int) -> BDD:
     return node
 
 
-def less_than(bound: int, width: int) -> BDD:
+def less_than(bound: int, *, width: int) -> BDD:
     """Integers below `bound`, over `width` bits."""
     if bound <= 0:
         return BDD.REJECT

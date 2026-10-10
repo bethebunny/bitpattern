@@ -68,7 +68,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
         if values and (lowest := min(values)) < 0:
             raise ValueError(f"IntSets can't hold negative numbers, got {lowest}")
         self.width = max(width, max(values, default=0).bit_length())
-        singles = (exactly(value, self.width) for value in values)
+        singles = (exactly(value, width=self.width) for value in values)
         self.bdd = functools.reduce(operator.or_, singles, BDD.REJECT)
 
     @classmethod
@@ -85,7 +85,9 @@ class IntSet(AbstractSet[int], Sequence[int]):
             raise ValueError(f"IntSets can't hold negative numbers, got {start}")
         if width is None:
             width = max(stop - 1, 0).bit_length()
-        return cls.from_bdd(less_than(stop, width) - less_than(start, width), width)
+        return cls.from_bdd(
+            less_than(stop, width=width) - less_than(start, width=width), width
+        )
 
     def _extended(self, width: int) -> BDD:
         # The width bounds the members, but the diagram doesn't know that: {0} at
@@ -93,7 +95,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
         # So reading it wider needs the bound added explicitly.
         if width <= self.width:
             return self.bdd
-        return self.bdd & less_than(1 << self.width, width)
+        return self.bdd & less_than(1 << self.width, width=width)
 
     def _align(self, other: Iterable[int]) -> tuple[BDD, BDD, int]:
         if not isinstance(other, IntSet):
@@ -144,7 +146,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
     def __getitem__(self, item: slice) -> Self: ...
     def __getitem__(self, item: int | slice) -> int | Self:
         if not isinstance(item, slice):
-            return nth(self.bdd, self.width, item)
+            return nth(self.bdd, item, width=self.width)
         # A slice is the members at those positions. They're still a set, so a
         # negative step doesn't reverse anything.
         positions = range(self.size)[item]
@@ -156,7 +158,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
         """Where `value` is among the members, without searching for it."""
         if isinstance(value, int) and value in self:
             # Its position is how many members are below it.
-            at = count(self.bdd & less_than(value, self.width), self.width)
+            at = count(self.bdd & less_than(value, width=self.width), self.width)
             if at in range(self.size)[start:stop]:
                 return at
         raise ValueError(f"{value!r} is not in the set")

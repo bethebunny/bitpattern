@@ -218,19 +218,19 @@ def test_free_high_bits_multiply_the_count():
 def test_nth_agrees_with_members():
     evens = BDD(0, BDD.ACCEPT, BDD.REJECT)
     values = list(members(evens, 4))
-    assert [nth(evens, 4, i) for i in range(len(values))] == values
-    assert [nth(evens, 4, ~i) for i in range(len(values))] == values[::-1]
+    assert [nth(evens, i, width=4) for i in range(len(values))] == values
+    assert [nth(evens, ~i, width=4) for i in range(len(values))] == values[::-1]
 
 
 def test_nth_out_of_range():
     for item in (8, -9, 100):
         with pytest.raises(IndexError):
-            nth(BDD(0, BDD.ACCEPT, BDD.REJECT), 4, item)
+            nth(BDD(0, BDD.ACCEPT, BDD.REJECT), item, width=4)
 
 
 def test_zero_width_holds_only_zero():
     assert list(members(BDD.ACCEPT, 0)) == [0]
-    assert nth(BDD.ACCEPT, 0, 0) == 0
+    assert nth(BDD.ACCEPT, 0, width=0) == 0
 
 
 def test_width_must_cover_the_diagram():
