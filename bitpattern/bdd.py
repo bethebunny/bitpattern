@@ -284,18 +284,14 @@ def exactly(value: int, *, width: int) -> BDD:
     return node
 
 
-def less_than(bound: int, *, width: int) -> BDD:
-    """Integers below `bound`, over `width` bits."""
-    if bound <= 0:
+def iota(stop: int, *, width: int) -> BDD:
+    """The integers in `range(stop)`, over `width` bits."""
+    if stop <= 0:
         return BDD.REJECT
-    if bound >= 1 << width:
+    if stop >= 1 << width:
         return BDD.ACCEPT
-    node = BDD.REJECT
-    for bit in range(width):
-        # The highest bit where x and bound differ decides it. Where bound has a 1,
-        # a 0 makes x smaller. Where bound has a 0, a 1 makes x bigger.
-        if bound >> bit & 1:
-            node = BDD(bit, BDD.ACCEPT, node)
-        else:
-            node = BDD(bit, node, BDD.REJECT)
-    return node
+    half = 1 << (width - 1)
+    if stop <= half:  # nothing with the top bit set is below stop
+        return BDD(width - 1, iota(stop, width=width - 1), BDD.REJECT)
+    # Everything with the top bit clear is below stop.
+    return BDD(width - 1, BDD.ACCEPT, iota(stop - half, width=width - 1))

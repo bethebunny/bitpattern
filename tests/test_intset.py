@@ -11,7 +11,7 @@ import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from bitpattern.bdd import BDD, less_than, node_count
+from bitpattern.bdd import BDD, iota, node_count
 from bitpattern.intset import IntSet
 from bitpattern.pattern import Pattern
 
@@ -271,10 +271,10 @@ def test_repr_lists_members_in_order():
 
 
 @pytest.mark.parametrize("width", range(8))
-def test_less_than_agrees_with_builtin(width):
-    for bound in range(-1, (1 << width) + 2):
-        got = list(IntSet.from_bdd(less_than(bound, width=width), width))
-        assert got == [v for v in range(1 << width) if v < bound]
+def test_iota_agrees_with_range(width):
+    for stop in range(-1, (1 << width) + 2):
+        got = list(IntSet.from_bdd(iota(stop, width=width), width))
+        assert got == [v for v in range(1 << width) if v < stop]
 
 
 @pytest.mark.parametrize("width", range(6))
