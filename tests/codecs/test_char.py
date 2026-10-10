@@ -11,7 +11,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from bitpattern import IntSet
-from bitpattern.codecs.char import category_points, char
+from bitpattern.codecs.char import _category_points, char
 
 SURROGATES = range(0xD800, 0xE000)
 
@@ -138,7 +138,7 @@ def test_category_refuses_unknown_names(name):
 
 
 def test_categories_are_cached():
-    assert category_points("Lu", char.width) is category_points("Lu", char.width)
+    assert _category_points(char.width) is _category_points(char.width)
 
 
 def test_char_ranges_can_leave_an_end_open():
