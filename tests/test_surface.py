@@ -96,7 +96,8 @@ def test_leaves_repr_as_their_names():
 
 
 def test_a_deep_shared_dag_reprs_briefly():
-    """Diagrams share nodes, so written out as a tree they'd be exponentially big."""
+    """Diagrams share nodes, so a diagram written out as a tree would be
+    exponentially big."""
     a, b = BDD.ACCEPT, BDD.REJECT
     for depth in range(1, 23):
         a, b = BDD(depth, a, b), BDD(depth, b, a)

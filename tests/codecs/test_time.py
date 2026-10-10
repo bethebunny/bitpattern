@@ -260,7 +260,7 @@ def test_the_hour_clocks_repeat_decodes_twice():
         (1, 0, 1),
         (1, 30, 1),
     ]
-    # Python compares datetimes in one zone by their clocks, so these two are equal.
+    # Python compares datetimes in one timezone by their clocks, so these two are equal.
     assert night[3] == night[5]
     assert night[3].astimezone(UTC) != night[5].astimezone(UTC)
 
@@ -289,7 +289,8 @@ def test_datetime_codecs_are_named_after_their_zone():
 
 
 def test_only_the_right_kind_of_now_is_a_member():
-    """A naive now isn't an instant, the same way it's never equal to an aware one."""
+    """A naive `now()` isn't an instant, just as a naive datetime never equals an
+    aware datetime."""
     assert datetime.now() not in datetimes.all
     assert datetime.now(UTC) in datetimes.all
     assert datetime.now() in naive_datetimes.all

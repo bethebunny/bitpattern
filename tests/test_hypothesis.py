@@ -1,4 +1,4 @@
-"""Hypothesis strategies, end to end. This is what the library was built for."""
+"""Hypothesis strategies, end to end, which the library was built for."""
 
 import math
 
@@ -91,7 +91,7 @@ def test_one_sign_fits_in_len_but_both_dont():
 
 
 def test_index_zero_is_the_natural_shrink_target():
-    """Shrinking the index shrinks the float, since their orders agree."""
+    """Shrinking the index shrinks the float, since the two orders agree."""
     positives = float64.finite & float64.sign_clear
     assert positives[0] == 0.0
     assert positives[1] == 5e-324
@@ -100,7 +100,7 @@ def test_index_zero_is_the_natural_shrink_target():
 @given(value=st.sampled_from(float16.range(1.0, 1.01)))
 @SETTINGS
 def test_small_bdd_sets_work_with_sampled_from(value):
-    """sampled_from copies its sequence into a tuple, so only small ones."""
+    """sampled_from copies its sequence into a tuple, so only small sets work."""
     assert isinstance(value, float) and 1.0 <= value < 1.01
 
 

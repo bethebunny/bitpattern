@@ -135,7 +135,8 @@ def test_cofactors_split_only_the_bit_a_node_tests():
 )
 @pytest.mark.parametrize("other", [5, "x", None, 1.5])
 def test_operators_refuse_anything_but_nodes(node, other):
-    """They return NotImplemented before the cache, which couldn't key on these."""
+    """Operators return NotImplemented before reaching the weak cache, which can't
+    hold `other`."""
     for operate in (lambda: node & other, lambda: node | other, lambda: node - other):
         with pytest.raises(TypeError, match="unsupported operand"):
             operate()
@@ -279,8 +280,8 @@ def test_nodes_are_not_sequences(node):
     ],
 )
 def test_memoising_doesnt_keep_nodes_alive(operate):
-    """Memo tables hold nodes weakly. `x & BDD.ACCEPT` is `x`, so the results have to
-    be held weakly too, or they'd keep their own keys alive."""
+    """Memo tables hold nodes weakly. `x & BDD.ACCEPT` is `x`, so results have to be
+    held weakly too. A strong result `x` would keep the key `x` alive."""
 
     def compute():
         node = BDD(

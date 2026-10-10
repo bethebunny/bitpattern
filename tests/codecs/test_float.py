@@ -68,8 +68,8 @@ def brute_force_range(codec: Float, low, high) -> set[int]:
 
 @cache
 def magnitudes(codec: Float) -> list[float]:
-    """Every finite, non-negative value of a small float codec. These count up with
-    their bits, so the list is sorted and indexed by bit pattern."""
+    """Every finite, non-negative value of a small float codec. Non-negative floats
+    count up with their bits, so the list is sorted and indexed by bit pattern."""
     return list(itertools.takewhile(math.isfinite, decoded(codec)))
 
 
@@ -95,7 +95,7 @@ def between(codec: Float) -> list[float]:
 
 def nearest(codec: Float, value: float) -> float | None:
     """`value` rounded to a small float codec by brute force: the closest value, with
-    ties going to the even bit pattern. None if it rounds up past the largest."""
+    ties going to the even bit pattern. None if `value` rounds up past the largest."""
     finite = magnitudes(codec)
     at = bisect.bisect_left(finite, abs(value))
     if at < len(finite) and finite[at] == abs(value):
@@ -111,7 +111,8 @@ def nearest(codec: Float, value: float) -> float | None:
 
 
 def assert_rounds_to_nearest(codec: Float, value: float) -> None:
-    """`codec` rounds `value` like `nearest`, and refuses it if that's None."""
+    """`codec` rounds `value` like `nearest`, and refuses `value` where `nearest`
+    gives None."""
     expected = nearest(codec, value)
     if expected is None:
         with pytest.raises(ValueError):
@@ -126,13 +127,13 @@ def assert_rounds_to_nearest(codec: Float, value: float) -> None:
     "codec, special",
     [
         (float8_e5m2, Pattern("?111.11??")),
-        (float8_e4m3fn, Pattern("?111.1111")),  # only NaNs, since it has no infinities
+        (float8_e4m3fn, Pattern("?111.1111")),  # only NaNs, with no infinities
         (float16, Pattern("?111.11??.????.????")),
         (bfloat16, Pattern("?111.1111.1???.????")),
     ],
 )
 def test_decode_agrees_with_the_definition(codec, special):
-    """struct decodes the 16-bit formats, so they check the definition itself."""
+    """struct decodes the 16-bit formats, so those cases check `by_definition`."""
     for bits, value in enumerate(decoded(codec)):
         if bits in special:
             assert not math.isfinite(value)
@@ -221,13 +222,13 @@ def test_key_sorts_bits_by_value():
     values = [float16.decode(bits) for bits in ordered]
     assert all(a <= b for a, b in itertools.pairwise(values))
     assert values[0] == -math.inf and values[-1] == math.inf
-    # -0.0 sorts before 0.0, even though they're ==
+    # -0.0 sorts before 0.0, even though -0.0 == 0.0
     assert math.copysign(1, values[len(values) // 2 - 1]) < 0
     assert math.copysign(1, values[len(values) // 2]) > 0
 
 
 def test_non_negative_bits_count_up_in_value():
-    """That's what makes index 0 the natural thing to shrink towards."""
+    """Counting up in value makes index 0 the natural thing to shrink towards."""
     values = list(float16.finite & float16.sign_clear)
     assert values[0] == 0.0 and math.copysign(1, values[0]) > 0
     assert values[-1] == 65504.0
@@ -300,7 +301,7 @@ def test_nan_cant_bound_a_range(codec):
 
 
 def test_wide_float_ranges_stay_small():
-    """A range is one node per bit, however many floats are in it."""
+    """A range is one node per bit, however many floats the range holds."""
     wide = float64.range(-1e300, 1e300)
     assert wide.size > 2**63
     assert len(str(wide.storage.bdd)) < 10_000
@@ -414,7 +415,7 @@ def test_encode_refuses_what_it_cant_encode(value):
         (float8_e4m3fn, math.inf),
         (float8_e4m3fn, -math.inf),
         (float8_e4m3fn, math.nextafter(464.0, math.inf)),  # just past the NaN tie
-        (float8_e4m3fn, sys.float_info.max),  # rounding it up overflows a double
+        (float8_e4m3fn, sys.float_info.max),  # rounding the max up overflows a double
         (float8_e4m3fn, "x"),
     ],
 )

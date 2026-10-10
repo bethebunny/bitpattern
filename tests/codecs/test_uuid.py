@@ -13,7 +13,7 @@ from bitpattern.codecs.uuid import uuid128
 
 VERSIONS = range(1, 9)
 
-# The examples in RFC 9562's appendices. It has none for version 2.
+# The examples in RFC 9562's appendices, which have none for version 2.
 RFC_EXAMPLES = [
     ("c232ab00-9414-11ec-b3c8-9f6bdeced846", 1),
     ("5df41881-3aed-3515-88a7-2f4a814cf09e", 3),
@@ -89,8 +89,8 @@ def test_rfc_examples_are_only_in_their_version(text, n):
 
 
 def test_version_4_holds_exactly_what_uuid4_makes():
-    # uuid4 randomizes all but the 6 version and variant bits, so it can make any
-    # of the 2**122 UUIDs that have them.
+    # uuid4 randomizes all but the 6 version and variant bits, so uuid4 can make
+    # any of the 2**122 UUIDs with those bits.
     assert uuid128.version(4).size == 2**122
     assert all(uuid.uuid4() in uuid128.version(4) for _ in range(5000))
 

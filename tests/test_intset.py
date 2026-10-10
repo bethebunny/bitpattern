@@ -36,7 +36,7 @@ HUGE = IntSet.range(0, 1 << 64, width=64)
 
 
 def samples(width: int, count: int = 12) -> list[set[int]]:
-    """A spread of subsets of `range(2 ** width)`, or all of them if that's cheap."""
+    """A spread of subsets of `range(2 ** width)`, or every subset if there are few."""
     size = 1 << width
     if size <= 4:
         return [{v for v in range(size) if mask >> v & 1} for mask in range(1 << size)]
@@ -398,7 +398,7 @@ SLICES = [
 
 @pytest.mark.parametrize("mask", MASKS)
 def test_slicing_agrees_with_list_slicing(mask):
-    """A slice is the members at those positions, and as a set they're in order."""
+    """A slice holds the members at the sliced positions, in sorted order."""
     members = sorted(SUBSETS[mask])
     for item in SLICES:
         got = SETS[mask][item]
@@ -430,7 +430,7 @@ def test_slicing_a_huge_set_doesnt_enumerate():
 
 
 def position(sequence, value, *bounds):
-    """`sequence.index(value, *bounds)`, or None if it isn't there."""
+    """`sequence.index(value, *bounds)`, or None if `value` isn't there."""
     try:
         return sequence.index(value, *bounds)
     except ValueError:

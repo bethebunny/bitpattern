@@ -43,7 +43,7 @@ class Perm(Flag):
     W = 2
     X = 1
     NONE = 0
-    RWX = 7  # made of the others, so it adds no combinations
+    RWX = 7  # made of the other flags, so RWX adds no combinations
 
 
 class Mode(IntFlag):
@@ -55,7 +55,7 @@ class Mode(IntFlag):
 
 
 class Wide(Flag, boundary=KEEP):
-    """BC is two bits that no other flag has, so they're set together or not at all.
+    """BC is two bits that no other flag has, so both bits are set or neither.
     KEEP lets Wide(2) exist anyway."""
 
     A = 1
@@ -64,7 +64,7 @@ class Wide(Flag, boundary=KEEP):
 
 class Overlapping(Flag, boundary=KEEP):
     """Flags that share a bit, without any single-bit flags. KEEP lets Overlapping(5)
-    exist, though it isn't a combination."""
+    exist, though 5 isn't a combination."""
 
     AB = 3
     BC = 6
