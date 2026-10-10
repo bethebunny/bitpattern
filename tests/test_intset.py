@@ -129,7 +129,7 @@ def test_indexing_matches_sorted_order(members):
 @pytest.mark.parametrize("members", [set(), {0}, {1}, {0, 1}, {0, 3}, {2, 3}])
 def test_widening_keeps_the_members(narrow, wide, members):
     members = {value for value in members if value.bit_length() <= narrow}
-    group = IntSet(members, width=narrow).widen(wide)
+    group = IntSet(members, width=narrow).widened(wide)
     assert group.width == wide
     check(group, members)
 
@@ -138,14 +138,14 @@ def test_widening_keeps_the_members(narrow, wide, members):
 @settings(max_examples=200, deadline=None)
 def test_widening_keeps_the_members_at_larger_widths(members, width):
     group = IntSet(members)
-    group = group.widen(group.width + width)
+    group = group.widened(group.width + width)
     assert set(group) == members
     assert len(group) == len(members)
 
 
 def test_widening_doesnt_add_members():
     """`{0}` at width 1 is "bit 0 is clear", ie. every even number."""
-    assert list(IntSet([0], width=1).widen(4)) == [0]
+    assert list(IntSet([0], width=1).widened(4)) == [0]
 
 
 @pytest.mark.parametrize("left_width", [0, 1, 2, 3, 5])
@@ -171,17 +171,17 @@ def test_has_no_mutators():
         assert not hasattr(IntSet(), name), name
 
 
-def test_widen_returns_a_new_set():
+def test_widened_is_a_new_set():
     group = IntSet([1], width=2)
-    wider = group.widen(8)
+    wider = group.widened(8)
     assert wider is not group
     assert (group.width, wider.width) == (2, 8)
     assert set(group) == set(wider) == {1}
 
 
-def test_widen_does_nothing_if_already_wide_enough():
+def test_widened_is_the_same_set_if_already_wide_enough():
     group = IntSet([1], width=8)
-    assert group.widen(4) is group
+    assert group.widened(4) is group
 
 
 def test_in_place_operators_rebind():
@@ -215,7 +215,7 @@ def test_equal_sets_hash_equally_across_widths(mask):
 @settings(max_examples=200, deadline=None)
 def test_widening_keeps_the_hash(members, extra):
     group = IntSet(members)
-    assert hash(group.widen(group.width + extra)) == hash(group)
+    assert hash(group.widened(group.width + extra)) == hash(group)
 
 
 def test_distinct_sets_hash_apart():

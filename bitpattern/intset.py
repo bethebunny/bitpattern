@@ -111,7 +111,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
             bdd = bdd.left  # all the members fit in width, so the right branch is empty
         return bdd, width
 
-    def widen(self, width: int) -> Self:
+    def widened(self, width: int) -> Self:
         """The same members, over at least `width` bits."""
         if width <= self.width:
             return self

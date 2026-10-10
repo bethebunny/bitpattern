@@ -225,7 +225,7 @@ def test_results_keep_the_subclass():
         group - [2],
         group ^ [3],
         ~group,
-        group.widen(8),
+        group.widened(8),
         group[:1],
     ):
         assert type(result) is TextConstructed
@@ -251,14 +251,14 @@ def test_operations_on_patterns_stay_patterns():
         pattern | [8],
         pattern - [2],
         ~pattern,
-        pattern.widen(8),
+        pattern.widened(8),
         pattern[1:3],
     ):
         assert isinstance(result, Pattern)
 
 
 def test_widening_keeps_a_readable_spelling():
-    assert repr(Pattern("00??").widen(8)) == "Pattern('0000.00??')"
+    assert repr(Pattern("00??").widened(8)) == "Pattern('0000.00??')"
 
 
 def test_patterns_compare_and_hash_with_intsets():
