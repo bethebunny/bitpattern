@@ -93,8 +93,6 @@ class Flags(Codec[F]):
         width = max(
             (member.value for member in enum.__members__.values()), default=0
         ).bit_length()
-        # XXX: this implies that Codecs probably shouldn't be required to be dataclasses,
-        #      and we should remove the dataclass decorator from Codec.
         vars(self).update(width=width, name=enum.__name__, enum=enum)
 
     def encode(self, value: object) -> int:
