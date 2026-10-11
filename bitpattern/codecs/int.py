@@ -26,9 +26,9 @@ __all__ = [
 
 @dataclass(frozen=True, repr=False)
 class Int(OrderedCodec[int]):
-    """Fixed-width integers, in two's complement when signed.
+    """Fixed-width integers in two's complement encoding.
 
-    Sets iterate in bit order, which for signed integers is 0 to `max`, then `min`
+    Sets iterate in bit order. For signed integers this is 0 to `max`, then `min`
     to -1.
     """
 
@@ -54,8 +54,7 @@ class Int(OrderedCodec[int]):
         return bits - (1 << self.width) if bits > self.max else bits
 
     def range(self, start: int | None = None, stop: int | None = None) -> BDDSet[int]:
-        """Integers in `[start, stop)` that fit this codec. A bound of `None` leaves
-        that end open."""
+        """Integers in `[start, stop)`. `None` for an open interval."""
         low = self.min if start is None else max(start, self.min)
         high = self.max + 1 if stop is None else min(stop, self.max + 1)
         # Negative integers are encoded above the rest, offset by 2**width.

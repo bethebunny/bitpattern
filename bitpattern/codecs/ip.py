@@ -19,10 +19,7 @@ Network = TypeVar("Network", ipaddress.IPv4Network, ipaddress.IPv6Network)
 
 @dataclass(frozen=True, repr=False)
 class IP(OrderedCodec[Address], Generic[Address, Network]):
-    """IPv4 or IPv6 addresses.
-
-    `encode` accepts addresses, their strings or their integers.
-    """
+    """IPv4 or IPv6 addresses."""
 
     # The family's own classes. ipaddress.ip_address() would decode IPv6 addresses
     # below 2**32 as IPv4.
@@ -30,6 +27,7 @@ class IP(OrderedCodec[Address], Generic[Address, Network]):
     network_type: type[Network]
 
     def encode(self, value: object) -> int:
+        """Accepts addresses as strings or ints."""
         return int(self.address_type(value))
 
     def decode(self, bits: int) -> Address:
@@ -55,13 +53,11 @@ class IP(OrderedCodec[Address], Generic[Address, Network]):
         )
 
     def networks(self, source: BDDSet[Address]) -> Iterator[Network]:
-        """The fewest CIDR blocks that make up `source`, in order, ie. route
-        aggregation."""
+        """A minimal set of CIDR blocks that exactly cover `source` in order."""
 
-        # Each path to ACCEPT is a block, as big as it can be in a reduced diagram.
-        # Blocks only have free bits at the end, so this splits bits the path skips.
         def walk(node: BDD, bit: int, prefix: int) -> Iterator[Network]:
             if node is BDD.ACCEPT:
+                # Each path to ACCEPT is a block.
                 yield self.network_type((prefix << (bit + 1), self.width - 1 - bit))
             elif node:
                 low, high = cofactors(node, bit)

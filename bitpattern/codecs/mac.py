@@ -14,13 +14,13 @@ __all__ = ["MAC", "mac"]
 
 # 01:23:45:67:89:ab, 01-23-45-67-89-ab or Cisco's 0123.4567.89ab, ignoring case.
 ADDRESS = re.compile(
-    r"(?:[0-9a-f]{2}:){5}[0-9a-f]{2}"
+    r"(?:[0-9a-f]{2}:){5}[0-9a-f]{2}"  # XXX: use multiline RE syntax with inline comments instead ofthe line comment
     r"|(?:[0-9a-f]{2}-){5}[0-9a-f]{2}"
     r"|(?:[0-9a-f]{4}\.){2}[0-9a-f]{4}",
     re.IGNORECASE,
 )
 # 00:1a:2b or 00-1a-2b, the first three octets of an address.
-OUI = re.compile(
+OUI = re.compile(  # XXX same
     r"(?:[0-9a-f]{2}:){2}[0-9a-f]{2}|(?:[0-9a-f]{2}-){2}[0-9a-f]{2}", re.IGNORECASE
 )
 
@@ -57,22 +57,22 @@ class MAC(OrderedCodec[str]):
 
     @cached_property
     def multicast(self) -> BDDSet[str]:
-        """Group addresses, with I/G set."""
+        """Group addresses (I/G bit set)."""
         return self._prefix("???????1")
 
     @cached_property
     def unicast(self) -> BDDSet[str]:
-        """Individual addresses, with I/G clear."""
+        """Individual addresses (I/G bit clear)."""
         return self._prefix("???????0")
 
     @cached_property
     def local(self) -> BDDSet[str]:
-        """Locally administered addresses, with U/L set."""
+        """Locally administered addresses (U/L bit set)."""
         return self._prefix("??????1?")
 
     @cached_property
     def universal(self) -> BDDSet[str]:
-        """Universally administered addresses, with U/L clear."""
+        """Universally administered addresses (U/L bit clear)."""
         return self._prefix("??????0?")
 
     @cached_property
@@ -81,7 +81,7 @@ class MAC(OrderedCodec[str]):
         return self.set(["ff:ff:ff:ff:ff:ff"])
 
     def oui(self, prefix: str) -> BDDSet[str]:
-        """Addresses under a 24-bit OUI, eg. `mac.oui("00:1a:2b")`."""
+        """Addresses under a 24-bit OUI (Organizationally Unique Identifier) eg. `mac.oui("00:1a:2b")`."""
         if not OUI.fullmatch(prefix):
             raise ValueError(
                 f"bad OUI {prefix!r}. OUIs are three octets, like '00:1a:2b' or "

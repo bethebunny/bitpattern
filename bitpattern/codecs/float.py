@@ -25,7 +25,7 @@ __all__ = [
 
 @dataclass(frozen=True, repr=False)
 class Float(OrderedCodec[float]):
-    """An IEEE 754 binary format: a sign bit, then the exponent, then the mantissa.
+    """An IEEE 754 binary format: sign :: exponent :: mantissa
 
     Sets iterate in bit order:
       - `+0.0` up to `inf`, then NaNs with the sign clear
@@ -34,9 +34,7 @@ class Float(OrderedCodec[float]):
     """
 
     exponent: int
-    # For struct, eg. ">d". bfloat16 is the top half of a ">f" and float8_e5m2 the
-    # top byte of an ">e".
-    format: str
+    format: str  # `struct` format, eg. ">d"
 
     @property
     def mantissa(self) -> int:
