@@ -6,8 +6,10 @@
 > pip install 'bitpattern[hypothesis]'  # with the hypothesis strategies
 > ```
 
-bitpattern is a library for describing and working with very large sets of structured
-data. It can count and sample sets far too large to fit in memory.
+bitpattern provides `BDDSet`, a set type for values that encode as fixed-width integers:
+floats, integers, characters, network addresses, UUIDs, dates, enums and tuples of
+these. A BDDSet is stored as a binary decision diagram. Sets far too large to list still
+support the usual set operations, counting, indexing and uniform sampling.
 
 Consider for example 64 bit floats. How many finite normal floats are there? Can we
 sample them directly? These sets are huge and noncontiguous, so you can't express them
@@ -33,122 +35,7 @@ True
 `float64` is the [codec](#codecs) that encodes them. BDDSets support the normal set
 operations and are sequences of their values in the order of their bits.
 
-bitpattern uses a data structure called a Binary Decision Diagram to encode
-extremely large sets. Whereas set operations are typically described in terms
-of the size of the set, bitpattern sets support most operations in O(#bits) of
-the _largest member_ of the set. #bits is called the `width` of the set.
-
-This becomes particularly useful for use cases like [hypothesis](https://hypothesis.works/).
-
-Hypothesis really likes you to express and sample from the _true domain_ of your
-input data. Rejection sampling (in hypothesis literally sampling from the whole
-range and then calling `reject` on inputs that don't match your criteria) frequently
-eliminates too much data. By default hypothesis will fail tests that reject
-more than ~80% of inputs, but for instance subnormals are well under 1% of floats, so
-this isn't practical.
-
-`bitpattern.strategies` turns these sets into hypothesis strategies:
-
-```python
-from hypothesis import given
-
-from bitpattern.codecs import float64
-from bitpattern.strategies import from_set
-
-
-@given(from_set(float64.finite - float64.subnormal))
-def test_kernel_matches_reference(x: float): ...
-```
-
-## Patterns
-
-The pattern syntax follows normal glob rules. Patterns are expressed as quartets of 4
-bits separated by `.`, most significant to least significant, with 0 and 1 representing
-a fixed bit, ? can be either, and * is shorthand for multiple ?. The leading quartet can
-be shorter for widths that aren't a multiple of 4.
-
-Patterns are sets, and work with normal set operations.
-
-```python
->>> from bitpattern import Pattern
->>> Pattern("*1.0000")
-Pattern('???1.0000')
->>> Pattern("0000") | Pattern("0001")
-Pattern('000?')
->>> ~Pattern("00??")
-Pattern('01??') | Pattern('1???')
-
-```
-
-Codecs accept patterns too and match them against the bits of their encoding. A
-float64 is a sign bit, 11 exponent bits and 52 mantissa bits. Quiet NaNs have every
-exponent bit and the top mantissa bit set:
-
-```python
->>> quiet = float64.pattern("?111.1111.1111.1*.*.*.*.*.*.*.*.*.*.*.*.*")
->>> quiet <= float64.nan
-True
-
-```
-
-## Codecs
-
-A `Codec` encodes values of a type as fixed-width integers and decodes them back. Its
-sets are `BDDSet`s. To write one, subclass `Codec` and implement `encode` and `decode`:
-
-```python
->>> from bitpattern import Codec
->>> class Ascii(Codec[str]):
-...     def encode(self, value: object) -> int:
-...         if not isinstance(value, str):
-...             raise TypeError(f"{value!r} isn't a string")
-...         if len(value) != 1 or not value.isascii():
-...             raise ValueError(f"{value!r} isn't an ASCII character")
-...         return ord(value)
-...
-...     def decode(self, bits: int) -> str:
-...         return chr(bits)
->>> ascii = Ascii(7, "ascii")
->>> ascii.set("hello")
-BDDSet(ascii, ['e', 'h', 'l', 'o'])
->>> ascii.pattern("1?0.0001")  # case only changes bit 5
-BDDSet(ascii, ['A', 'a'])
-
-```
-
-`encode` should raise `TypeError` for a value of the wrong type and `ValueError` for a
-value it can't encode. `decode` may raise `IndexError` for bits that aren't a value.
-If some bit patterns aren't values, override `all` with the ones that are. `~` and `pattern` then leave the
-others out. If encodings sort the same as their values, subclass `OrderedCodec` instead
-for `min`, `max` and `range(start, stop)`.
-
-`bitpattern.codecs` includes:
-
-- `float16`, `float32` and `float64` as their IEEE 754 bits, and the ML formats
-  `bfloat16`, `float8_e5m2` and `float8_e4m3fn`. They have sets like `finite`, `nan`,
-  `infinities`, `subnormal` and `zeros`.
-- `int8` through `int128` in two's complement, and `uint8` through `uint128`.
-- `char`, Unicode scalar values as one-character strings, with `category(name)` for
-  general categories like `"Lu"` or `"L"`.
-- `ipv4` and `ipv6`, with `cidr("10.0.0.0/8")`. `networks(addresses)` finds the fewest
-  CIDR blocks that make up a set.
-- `mac`, MAC addresses like `01:23:45:67:89:ab`, with `multicast`, `unicast`, `local`,
-  `universal`, `broadcast` and `oui(prefix)`.
-- `uuid128`, `uuid.UUID`s, with `version(n)` for RFC 9562's versions 1 to 8 and
-  `rfc9562` for its variant.
-- `dates` and `datetimes`. `datetimes` holds timezone-aware datetimes and decodes them
-  into UTC. `DateTime(tz)` decodes into `tz` instead, and `naive_datetimes` holds naive
-  datetimes.
-- `Members(SomeEnum)` for an Enum's members, and `Flags(SomeFlag)` for a Flag's
-  combinations, with `having(flags)` and `lacking(flags)`.
-
-All of these but the enums and flags are ordered, with `min`, `max` and
-`range(start, stop)`. A bound of `None` leaves that end unbounded.
-
-`product(a, b, c)` is the set of tuples `itertools.product(a, b, c)` would give, and
-`a * b` is `product(a, b)`. Their codec is a `Tuple`, with the first field's bits on
-top. A product has about as many nodes as its sets combined. `project` gets the values
-of one field.
+## Tour
 
 Here's a quick tour, with sampling seeded so it's repeatable:
 
@@ -232,6 +119,160 @@ True
 
 ```
 
+## Very large sets
+
+bitpattern uses a data structure called a Binary Decision Diagram to encode
+extremely large sets. Whereas set operations are typically described in terms
+of the size of the set, bitpattern sets support most operations in O(#bits) of
+the _largest member_ of the set. #bits is called the `width` of the set.
+
+Here's how bitpattern's sets compare to other ways of storing a set. `n` and `m` are
+set sizes, `w` is the width (number of bits of the largest member), and `|a|` is the
+number of nodes in `a`'s diagram. `|a|` is at most `n * w` and usually much smaller. A
+set written as a single pattern has `|a| <= w`, since only its fixed bits need nodes.
+For most use cases `w` is a constant and may be read as `O(1)`.
+
+| | sorted `list` | `set` | balanced tree | `BDDSet` |
+| --- | --- | --- | --- | --- |
+| `x in a` | O(log n) | O(1) | O(log n) | O(w) |
+| `a[i]` | O(1) | n/a | O(log n) | O(w) |
+| `len(a)` | O(1) | O(1) | O(1) | O(1) |
+| `a \| b`, `a & b`, `a - b` | O(n + m) | O(n + m) | O(n + m) | O(\|a\| · \|b\|) |
+| `~a` | O(2<sup>w</sup>) | O(2<sup>w</sup>) | O(2<sup>w</sup>) | O(\|a\|) |
+| slice `a[i:j]` | O(j - i) | n/a | O(log n + j - i) | O(w) |
+| `a == b` | O(n) | O(n) | O(n) | O(1) |
+| `hash(a)` | O(n) | O(n) | O(n) | O(w) |
+| random member | O(1) | O(n) | O(log n) | O(w) |
+| memory | O(n) | O(n) | O(n) | O(\|a\|) |
+
+`a == b` is O(1) between sets of the same codec. Between `IntSet`s of different widths
+it's O(w).
+
+> [!WARNING]
+> Python isn't really designed for data structures larger than memory.
+> In particular many operations will fail if `__len__` returns a number >= 2**63.
+> When working with very large sets:
+>
+> - Use `myset.size` instead of `len(myset)`
+> - Use `myset.choice()` instead of `random.choice(myset)` or `random.sample(myset, k)`
+> - Use `myset[0]` and `myset[-1]` instead of `min(myset)` and `max(myset)`, which
+>   look at every member
+> - Use `bitpattern.strategies` instead of hypothesis's `sampled_from(myset)`
+
+## Hypothesis
+
+bitpattern's sets are particularly useful with [hypothesis](https://hypothesis.works/).
+
+Hypothesis really likes you to express and sample from the _true domain_ of your
+input data. Rejection sampling (in hypothesis literally sampling from the whole
+range and then calling `reject` on inputs that don't match your criteria) frequently
+eliminates too much data. By default hypothesis will fail tests that reject
+more than ~80% of inputs, but for instance subnormals are well under 1% of floats, so
+this isn't practical.
+
+`bitpattern.strategies` turns these sets into hypothesis strategies:
+
+```python
+from hypothesis import given
+
+from bitpattern.codecs import float64
+from bitpattern.strategies import from_set
+
+
+@given(from_set(float64.finite - float64.subnormal))
+def test_kernel_matches_reference(x: float): ...
+```
+
+## Patterns
+
+The pattern syntax follows normal glob rules. Patterns are expressed as quartets of 4
+bits separated by `.`, most significant to least significant, with 0 and 1 representing
+a fixed bit, ? can be either, and * is shorthand for multiple ?. The leading quartet can
+be shorter for widths that aren't a multiple of 4.
+
+Patterns are sets, and work with normal set operations.
+
+```python
+>>> from bitpattern import Pattern
+>>> Pattern("*1.0000")
+Pattern('???1.0000')
+>>> Pattern("0000") | Pattern("0001")
+Pattern('000?')
+>>> ~Pattern("00??")
+Pattern('01??') | Pattern('1???')
+
+```
+
+Codecs accept patterns too and match them against the bits of their encoding. A
+float64 is a sign bit, 11 exponent bits and 52 mantissa bits. Quiet NaNs have every
+exponent bit and the top mantissa bit set:
+
+```python
+>>> quiet = float64.pattern("?111.1111.1111.1*.*.*.*.*.*.*.*.*.*.*.*.*")
+>>> quiet <= float64.nan
+True
+
+```
+
+## Codecs
+
+A `Codec` encodes values of a type as fixed-width integers and decodes them back. Its
+sets are `BDDSet`s. To write one, subclass `Codec` and implement `encode` and `decode`:
+
+```python
+>>> from bitpattern import Codec
+>>> class Ascii(Codec[str]):
+...     def encode(self, value: object) -> int:
+...         if not isinstance(value, str):
+...             raise TypeError(f"{value!r} isn't a string")
+...         if len(value) != 1 or not value.isascii():
+...             raise ValueError(f"{value!r} isn't an ASCII character")
+...         return ord(value)
+...
+...     def decode(self, bits: int) -> str:
+...         return chr(bits)
+>>> ascii = Ascii(7, "ascii")
+>>> ascii.set("hello")
+BDDSet(ascii, ['e', 'h', 'l', 'o'])
+>>> ascii.pattern("1?0.0001")  # case only changes bit 5
+BDDSet(ascii, ['A', 'a'])
+
+```
+
+`encode` should raise `TypeError` for a value of the wrong type and `ValueError` for a
+value it can't encode. `decode` may raise `IndexError` for bits that aren't a value.
+If some bit patterns aren't values, override `all` with the ones that are. `~` and
+`pattern` then leave the others out. If encodings sort the same as their values,
+subclass `OrderedCodec` instead for `min`, `max` and `range(start, stop)`.
+
+`bitpattern.codecs` includes:
+
+- `float16`, `float32` and `float64` as their IEEE 754 bits, and the ML formats
+  `bfloat16`, `float8_e5m2` and `float8_e4m3fn`. They have sets like `finite`, `nan`,
+  `infinities`, `subnormal` and `zeros`.
+- `int8` through `int128` in two's complement, and `uint8` through `uint128`.
+- `char`, Unicode scalar values as one-character strings, with `category(name)` for
+  general categories like `"Lu"` or `"L"`.
+- `ipv4` and `ipv6`, with `cidr("10.0.0.0/8")`. `networks(addresses)` finds the fewest
+  CIDR blocks that make up a set.
+- `mac`, MAC addresses like `01:23:45:67:89:ab`, with `multicast`, `unicast`, `local`,
+  `universal`, `broadcast` and `oui(prefix)`.
+- `uuid128`, `uuid.UUID`s, with `version(n)` for RFC 9562's versions 1 to 8 and
+  `rfc9562` for its variant.
+- `dates` and `datetimes`. `datetimes` holds timezone-aware datetimes and decodes them
+  into UTC. `DateTime(tz)` decodes into `tz` instead, and `naive_datetimes` holds naive
+  datetimes.
+- `Members(SomeEnum)` for an Enum's members, and `Flags(SomeFlag)` for a Flag's
+  combinations, with `having(flags)` and `lacking(flags)`.
+
+All of these but the enums and flags are ordered, with `min`, `max` and
+`range(start, stop)`. A bound of `None` leaves that end unbounded.
+
+`product(a, b, c)` is the set of tuples `itertools.product(a, b, c)` would give, and
+`a * b` is `product(a, b)`. Their codec is a `Tuple`, with the first field's bits on
+top. A product has about as many nodes as its sets combined. `project` gets the values
+of one field.
+
 ## IntSet
 
 `IntSet` backs BDDSets and patterns, and works on its own too. An `IntSet` is an
@@ -256,38 +297,6 @@ IntSet([3, 4], width=5)
 IntSet([0, 2], width=2)
 
 ```
-
-> [!WARNING]
-> Python isn't really designed for data structures larger than memory.
-> In particular many operations will fail if `__len__` returns a number >= 2**63.
-> When working with very large sets:
->
-> - Use `myset.size` instead of `len(myset)`
-> - Use `myset.choice()` instead of `random.choice(myset)` or `random.sample(myset, k)`
-> - Use `myset[0]` and `myset[-1]` instead of `min(myset)` and `max(myset)`, which
->   look at every member
-> - Use `bitpattern.strategies` instead of hypothesis's `sampled_from(myset)`
-
-Here's how `IntSet` compares to other ways of storing a set. `n` and `m` are set
-sizes, `w` is the width (number of bits of the largest member), and `|a|` is the number of nodes in `a`'s diagram.
-`|a|` is at most `n * w` and usually much smaller. A set written as a single pattern
-has `|a| <= w`, since only its fixed bits need nodes. For most use cases `w` is a
-constant and may be read as `O(1)`.
-
-| | sorted `list` | `set` | balanced tree | `IntSet` |
-| --- | --- | --- | --- | --- |
-| `x in a` | O(log n) | O(1) | O(log n) | O(w) |
-| `a[i]` | O(1) | n/a | O(log n) | O(w) |
-| `len(a)` | O(1) | O(1) | O(1) | O(1) |
-| `a \| b`, `a & b`, `a - b` | O(n + m) | O(n + m) | O(n + m) | O(\|a\| · \|b\|) |
-| `~a` | O(2<sup>w</sup>) | O(2<sup>w</sup>) | O(2<sup>w</sup>) | O(\|a\|) |
-| slice `a[i:j]` | O(j - i) | n/a | O(log n + j - i) | O(w) |
-| `a == b` | O(n) | O(n) | O(n) | O(1) |
-| `hash(a)` | O(n) | O(n) | O(n) | O(w) |
-| random member | O(1) | O(n) | O(log n) | O(w) |
-| memory | O(n) | O(n) | O(n) | O(\|a\|) |
-
-`a == b` is O(1) between sets of the same width and O(w) between different widths.
 
 [Bryant, 1986]: https://doi.org/10.1109/TC.1986.1676819
 
