@@ -86,14 +86,20 @@ class Flags(Codec[F]):
     enum: type[F]
 
     def __init__(self, enum: type[F]) -> None:
-        flags = (member.value for member in enum.__members__.values())
-        width = max(flags, default=0).bit_length()
+        # iter(Flag) doesn't include multi-bit members, use __members__
+        width = max(
+            (member.value for member in enum.__members__.values()), default=0
+        ).bit_length()
+        # XXX: this implies that Codecs probably shouldn't be required to be dataclasses,
+        #      and we should remove the dataclass decorator from Codec.
         vars(self).update(width=width, name=enum.__name__, enum=enum)
 
     def encode(self, value: object) -> int:
-        # Flag can make values that aren't combinations, eg. IntFlag keeps stray bits.
+        # Python Flag can make values that aren't legal combinations. Check that it is.
         if isinstance(value, self.enum) and value.value in self.all.storage:
             return value.value
+        # XXX: let's use TypeError for failures encoding invalid types, ValueError
+        #   for encoding invalid values, and IndexError for decoding invalid values
         raise ValueError(f"{self} can't encode {value!r}")
 
     def decode(self, bits: int) -> F:
@@ -107,10 +113,31 @@ class Flags(Codec[F]):
     @cached_property
     def all(self) -> BDDSet[F]:
         """Every combination of the flags, including none."""
-        flags = {member.value for member in self.enum.__members__.values()}
+        # iter(Flag) doesn't include multi-bit members, use __members__
+        flags = [member.value for member in self.enum.__members__.values()]
+        # Flags can have some weird properties:
+        #   - Flags aren't required to be dense, ie. they can skip bits
+        #   - Flags aren't required to be powers of 2, ie. they can set multiple bits
+        #   - A flag can include another flag's bits, eg. ssl.VerifyFlags'
+        #     VERIFY_CRL_CHECK_CHAIN (0xc) includes VERIFY_CRL_CHECK_LEAF (0x4), so
+        #     setting CHAIN always sets LEAF
+        # Algorithm, treating values and flags as sets of bits:
+        #   - Start with every bit pattern.
+        #   - For each bit `b`, remove each `x` with `b ∈ x` where no flag `f` with
+        #     `b ∈ f` has `f ⊆ x`.
+        # Proof that this leaves exactly the unions of flags:
+        #   - If `x` is a union of flags, each `b ∈ x` is in one of those flags `f`,
+        #     and `f ⊆ x`. Thus no step removes `x`.
+        #   - If `x` isn't a union of flags, let `u` be the union of every flag
+        #     `f ⊆ x`. `u` is a union of flags and `x` isn't, so `u != x`. Since
+        #     `u ⊂ x`, some `b ∈ x` has `b ∉ u`. No flag `f` with `b ∈ f` has
+        #     `f ⊆ x`, since then `f ⊆ u` and `b ∈ u`. Thus the step for `b` removes
+        #     `x`.
         combinations = BDDSet(self, IntSet.from_bdd(BDD.ACCEPT, self.width))
         for at in range(self.width):
             # Each bit is clear, or part of a flag that's wholly set.
+            # The inverse of this set is the set of values where the bit is set
+            # but no flag containing the bit is wholly set.
             whole = (self._glob(flag, "1") for flag in flags if flag >> at & 1)
             clear = self._glob(1 << at, "0")
             combinations &= functools.reduce(operator.or_, whole, clear)
