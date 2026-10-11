@@ -134,7 +134,7 @@ for `min`, `max` and `range(start, stop)`.
 - `uuid128`, `uuid.UUID`s, with `version(n)` for RFC 9562's versions 1 to 8 and
   `rfc9562` for its variant.
 - `dates` and `datetimes`. `datetimes` holds timezone-aware datetimes and decodes them
-  into UTC. `Datetime(tz)` decodes into `tz` instead, and `naive_datetimes` holds naive
+  into UTC. `DateTime(tz)` decodes into `tz` instead, and `naive_datetimes` holds naive
   datetimes.
 - `Members(SomeEnum)` for an Enum's members, and `Flags(SomeFlag)` for a Flag's
   combinations, with `having(flags)` and `lacking(flags)`.

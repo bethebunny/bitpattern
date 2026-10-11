@@ -186,7 +186,7 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
     def __contains__(self, value: object) -> bool:
         try:
             return self.codec.encode(value) in self.storage
-        except ValueError:  # not something this codec can encode
+        except (TypeError, ValueError):  # not something this codec can encode
             return False
 
     def __iter__(self) -> Iterator[T]:

@@ -8,16 +8,16 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from bitpattern.codecs.time import Datetime, dates, datetimes, naive_datetimes
+from bitpattern.codecs.time import DateTime, dates, datetimes, naive_datetimes
 
 MICROSECOND = timedelta(microseconds=1)
 HOUR = 3600 * 10**6  # in microseconds
 NEW_YORK = ZoneInfo("America/New_York")
 ZONES = [
     datetimes,
-    Datetime(NEW_YORK),
-    Datetime(timezone(timedelta(hours=14))),
-    Datetime(timezone(timedelta(hours=-12))),
+    DateTime(NEW_YORK),
+    DateTime(timezone(timedelta(hours=14))),
+    DateTime(timezone(timedelta(hours=-12))),
 ]
 
 
@@ -168,7 +168,7 @@ def test_a_datetime_isnt_in_a_set_of_dates():
     ],
 )
 def test_time_codecs_refuse_what_they_cant_encode(codec, value):
-    with pytest.raises(ValueError):
+    with pytest.raises((TypeError, ValueError)):
         codec.encode(value)
     assert value not in codec.all
 
@@ -182,7 +182,7 @@ def test_time_codecs_refuse_what_they_cant_encode(codec, value):
     ],
 )
 def test_time_ranges_refuse_bounds_they_cant_encode(codec, low, high):
-    with pytest.raises(ValueError):
+    with pytest.raises((TypeError, ValueError)):
         codec.range(low, high)
 
 
@@ -284,8 +284,8 @@ def test_datetime_codecs_are_named_after_their_zone():
         "datetimes[UTC-12:00]",
     ]
     assert repr(naive_datetimes) == "naive_datetimes"
-    assert Datetime(UTC) == datetimes and Datetime(None) == naive_datetimes
-    assert Datetime(NEW_YORK).all | ZONES[1].none == ZONES[1].all
+    assert DateTime(UTC) == datetimes and DateTime(None) == naive_datetimes
+    assert DateTime(NEW_YORK).all | ZONES[1].none == ZONES[1].all
 
 
 def test_only_the_right_kind_of_now_is_a_member():

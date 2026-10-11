@@ -33,7 +33,7 @@ from .int import (
 )
 from .ip import IP, ipv4, ipv6
 from .mac import MAC, mac
-from .time import Date, Datetime, dates, datetimes, naive_datetimes
+from .time import Date, DateTime, dates, datetimes, naive_datetimes
 from .uuid import UUIDCodec, uuid128
 
 __all__ = [
@@ -43,7 +43,7 @@ __all__ = [
     "Char",
     "Codec",
     "Date",
-    "Datetime",
+    "DateTime",
     "Flags",
     "Float",
     "FloatFN",

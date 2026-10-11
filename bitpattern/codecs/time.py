@@ -9,22 +9,22 @@ from functools import cached_property
 from ..intset import IntSet
 from .codec import BDDSet, OrderedCodec
 
-__all__ = ["Date", "Datetime", "dates", "datetimes", "naive_datetimes"]
+__all__ = ["Date", "DateTime", "dates", "datetimes", "naive_datetimes"]
 
 MICROSECOND = dt.timedelta(microseconds=1)
-# From datetime.min to datetime.max, in microseconds.
-LONGEST = (dt.datetime.max - dt.datetime.min) // MICROSECOND
+LARGEST_DATETIME_US = (dt.datetime.max - dt.datetime.min) // MICROSECOND
+LARGEST_DATE_DAYS = (dt.date.max - dt.date.min).days
 
 
 @dataclass(frozen=True, repr=False)
 class Date(OrderedCodec[dt.date]):
-    """Dates, in time order.
-
-    `Date` doesn't accept datetimes even though `datetime` subclasses `date`. Use
-    `value.date()` to drop the time.
-    """
+    """Dates in time order."""
 
     def encode(self, value: object) -> int:
+        if isinstance(value, dt.datetime):
+            raise TypeError(
+                "Refusing to implicitly encode datetime object. Use `datetime.date()` explicitly."
+            )
         if isinstance(value, dt.date) and not isinstance(value, dt.datetime):
             return value.toordinal()
         raise ValueError(f"{self} can't encode {value!r}")
@@ -40,25 +40,26 @@ class Date(OrderedCodec[dt.date]):
 
 
 @dataclass(frozen=True, repr=False, init=False)
-class Datetime(OrderedCodec[dt.datetime]):
-    """Datetimes, in time order.
+class DateTime(OrderedCodec[dt.datetime]):
+    """datetimes in time order.
 
-    `Datetime(tz)` holds timezone-aware datetimes and decodes them into `tz`. It
-    accepts datetimes from any timezone, eg. 12:00 UTC and 07:00 EST are the same
-    member. `Datetime(None)` holds naive datetimes. Python can't compare the two
-    kinds, so neither codec accepts the other.
+    `DateTime(tz)` holds timezone-aware datetimes and decodes them into `tz`.
+    - Encoding accepts datetimes from any timezone, eg. 12:00 UTC and 07:00 EST are the same member.
+    - `DateTime(None)` holds naive datetimes.
+    - naive datetimes and tz-aware datetimes don't accept comparisons, so their respective codecs
+        reject encoding the other.
 
     When `tz` has daylight saving:
-      - local times the clocks skip never decode
-      - local times the clocks repeat decode twice, the second time with `fold=1`
-    Repeated values are equal since they share a timezone.
+      - local times that would never occur have no decoding
+      - local times that occur more than once have multiple decodings, distinguished
+        with different `fold` values. They compare as equal to each other.
     """
 
     tz: dt.tzinfo | None
 
     def __init__(self, tz: dt.tzinfo | None) -> None:
         name = "naive_datetimes" if tz is None else f"datetimes[{tz}]"
-        vars(self).update(width=LONGEST.bit_length(), name=name, tz=tz)
+        vars(self).update(width=LARGEST_DATETIME_US.bit_length(), name=name, tz=tz)
 
     @cached_property
     def _epoch(self) -> dt.datetime:
@@ -68,9 +69,9 @@ class Datetime(OrderedCodec[dt.datetime]):
         return (value - self._epoch) // MICROSECOND
 
     def encode(self, value: object) -> int:
-        # A tzinfo that gives no UTC offset still leaves a datetime naive.
         if (
             isinstance(value, dt.datetime)
+            # Datetimes having a tzinfo with no UTC offset are naive
             and (value.utcoffset() is None) == (self.tz is None)
             and (microseconds := self._microseconds(value)) in self.all.storage
         ):
@@ -84,12 +85,15 @@ class Datetime(OrderedCodec[dt.datetime]):
     @cached_property
     def all(self) -> BDDSet[dt.datetime]:
         """Every datetime. Instants at either end that overflow `datetime` in `tz`
-        are left out."""
+        are omitted."""
         low = max(self._microseconds(dt.datetime.min.replace(tzinfo=self.tz)), 0)
-        high = min(self._microseconds(dt.datetime.max.replace(tzinfo=self.tz)), LONGEST)
+        high = min(
+            self._microseconds(dt.datetime.max.replace(tzinfo=self.tz)),
+            LARGEST_DATETIME_US,
+        )
         return BDDSet(self, IntSet.range(low, high + 1, width=self.width))
 
 
-dates = Date(22, "dates")  # the fewest bits that hold date.max
-datetimes = Datetime(dt.UTC)
-naive_datetimes = Datetime(None)
+dates = Date(LARGEST_DATE_DAYS.bit_length(), "dates")
+datetimes = DateTime(dt.UTC)
+naive_datetimes = DateTime(None)
