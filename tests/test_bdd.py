@@ -199,26 +199,26 @@ def test_distributivity(a, b, third):
 def test_accept_is_everything():
     assert count(BDD.ACCEPT, 0) == 1
     assert count(BDD.ACCEPT, 4) == 16
-    assert list(members(BDD.ACCEPT, 4)) == list(range(16))
+    assert list(members(BDD.ACCEPT, width=4)) == list(range(16))
 
 
 def test_reject_is_nothing():
     assert count(BDD.REJECT, 0) == 0
     assert count(BDD.REJECT, 8) == 0
-    assert list(members(BDD.REJECT, 8)) == []
+    assert list(members(BDD.REJECT, width=8)) == []
 
 
 def test_free_high_bits_multiply_the_count():
     evens = BDD(0, BDD.ACCEPT, BDD.REJECT)
     assert count(evens, 1) == 1
     assert count(evens, 4) == 8
-    assert list(members(evens, 4)) == [0, 2, 4, 6, 8, 10, 12, 14]
+    assert list(members(evens, width=4)) == [0, 2, 4, 6, 8, 10, 12, 14]
     assert accepts(evens, 2**100) and not accepts(evens, 2**100 + 1)
 
 
 def test_nth_agrees_with_members():
     evens = BDD(0, BDD.ACCEPT, BDD.REJECT)
-    values = list(members(evens, 4))
+    values = list(members(evens, width=4))
     assert [nth(evens, i, width=4) for i in range(len(values))] == values
     assert [nth(evens, ~i, width=4) for i in range(len(values))] == values[::-1]
 
@@ -230,7 +230,7 @@ def test_nth_out_of_range():
 
 
 def test_zero_width_holds_only_zero():
-    assert list(members(BDD.ACCEPT, 0)) == [0]
+    assert list(members(BDD.ACCEPT, width=0)) == [0]
     assert nth(BDD.ACCEPT, 0, width=0) == 0
 
 
@@ -242,7 +242,7 @@ def test_width_must_cover_the_diagram():
 @pytest.mark.parametrize("mask", MASKS)
 def test_matches_the_subset_it_was_built_from(mask):
     node, expected = diagram(mask), sorted(subset(mask))
-    assert list(members(node, WIDTH)) == expected
+    assert list(members(node, width=WIDTH)) == expected
     assert count(node, WIDTH) == len(expected)
     assert [value for value in UNIVERSE if accepts(node, value)] == expected
 
@@ -315,7 +315,7 @@ def test_shared_diagrams_stay_polynomial():
 def test_lshift_moves_every_bit(mask):
     node = diagram(mask)
     up = lshift(node, 2)
-    assert set(members(up, WIDTH + 2)) == {
+    assert set(members(up, width=WIDTH + 2)) == {
         value << 2 | low for value in subset(mask) for low in range(4)
     }
     assert lshift(up, -2) is node
@@ -328,7 +328,21 @@ def test_freed_between_frees_a_range_of_bits(mask, low, high):
     settings = [bits for bits in UNIVERSE if not bits & ~freed]
     expected = {value & ~freed | bits for value in subset(mask) for bits in settings}
     node = freed_between(diagram(mask), low_bit=low, high_bit=high)
-    assert set(members(node, WIDTH)) == expected
+    assert set(members(node, width=WIDTH)) == expected
+
+
+def test_lshift_moves_each_shared_node_once():
+    """Parity has two nodes per bit but 2**64 paths, so the test only finishes if
+    lshift visits each node once."""
+    even, _ = parity(64)
+    assert node_count(lshift(even, 1)) == node_count(even)
+
+
+def test_freed_between_frees_each_shared_node_once():
+    """Parity has two nodes per bit but 2**64 paths, so the test only finishes if
+    freed_between visits each node once."""
+    even, _ = parity(64)
+    assert freed_between(even, low_bit=0, high_bit=1) is BDD.ACCEPT
 
 
 def test_freeing_nothing_changes_nothing():

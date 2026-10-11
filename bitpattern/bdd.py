@@ -211,59 +211,62 @@ def _nth(node: BDD, n: int) -> int:
     return high | 1 << node.bit | _nth(node.right, n - left_count)
 
 
-def members(node: BDD, width: int) -> Iterator[int]:
-    """Every integer below `2 ** width` that satisfies `node`, in order."""
-    if node is BDD.ACCEPT:
-        yield from range(1 << width)
-    elif node:
-        bit = width - 1
-        low, high = cofactors(node, bit)
-        yield from members(low, bit)
-        for value in members(high, bit):
-            yield 1 << bit | value
+def members(node: BDD, *, width: int) -> Iterator[int]:
+    """Every integer below `2 ** width` that satisfies `node` in order."""
+    if node.leaf:
+        if node is BDD.ACCEPT:
+            yield from range(1 << width)
+        return
+
+    bit = width - 1
+    low, high = cofactors(node, bit)
+    yield from members(low, width=bit)
+    for value in members(high, width=bit):
+        yield 1 << bit | value
 
 
 def lshift(node: BDD, by: int) -> BDD:
     """`node` with every tested bit moved up by `by`, or down if `by` is negative."""
-    moved: dict[BDD, BDD] = {}
 
-    def move(node: BDD) -> BDD:
+    @functools.cache  # diagrams share nodes, so move each node once
+    def moved(node: BDD) -> BDD:
         if node.leaf:
             return node
-        if (result := moved.get(node)) is None:
-            result = moved[node] = BDD(node.bit + by, move(node.left), move(node.right))
-        return result
+        return BDD(node.bit + by, moved(node.left), moved(node.right))
 
-    return move(node)
+    return moved(node)
 
 
 def freed_between(node: BDD, *, low_bit: int, high_bit: int) -> BDD:
-    """`node` with the bits in `[low_bit, high_bit)` free, ie. `?`. The result accepts
-    an integer when `node` accepts that integer with those bits set some way."""
-    results: dict[BDD, BDD] = {}
+    """`node` with the bits in `[low_bit, high_bit)` free (`?`). The result accepts
+    an integer `i` when `node` accepts any integer `i'` where `i` and `i'` have the
+    same bits outside the freed range."""
 
+    @functools.cache  # diagrams share nodes, so free each node once
     def freed(node: BDD) -> BDD:
         if node.bit < low_bit:
             return node
-        if (result := results.get(node)) is None:
-            left, right = freed(node.left), freed(node.right)
-            # A node testing a freed bit accepts whatever either branch accepts.
-            result = left | right if node.bit < high_bit else BDD(node.bit, left, right)
-            results[node] = result
-        return result
+        left, right = freed(node.left), freed(node.right)
+        if node.bit >= high_bit:
+            return BDD(node.bit, left, right)
+        return left | right
 
     return freed(node)
 
 
 @weak_cache
 def node_count(node: BDD) -> int:
-    """How many nodes there are under `node`, not counting the leaves."""
+    """The number of non-leaf nodes in the BDD graph."""
     seen: set[BDD] = set()
-    stack = [node]
-    while stack:
-        if not (current := stack.pop()).leaf and current not in seen:
-            seen.add(current)
-            stack += current.left, current.right
+
+    def visit(node: BDD) -> None:
+        # Diagrams share nodes, so count each node once however many paths reach it.
+        if not node.leaf and node not in seen:
+            seen.add(node)
+            visit(node.left)
+            visit(node.right)
+
+    visit(node)
     return len(seen)
 
 

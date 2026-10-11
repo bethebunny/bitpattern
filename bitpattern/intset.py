@@ -132,7 +132,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
         return accepts(self.bdd, value)
 
     def __iter__(self) -> Iterator[int]:
-        return members(self.bdd, self.width)
+        return members(self.bdd, width=self.width)
 
     def __reversed__(self) -> Iterator[int]:
         # Sequence's goes through len() which can overflow.
