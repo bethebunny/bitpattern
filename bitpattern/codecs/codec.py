@@ -121,7 +121,7 @@ class OrderedCodec(Codec[T]):
         return self.all[-1]
 
     def range(self, start: T | None = None, stop: T | None = None) -> BDDSet[T]:
-        """Values in `[start, stop)`. A bound of `None` leaves that end open."""
+        """Values in `[start, stop)`. A bound of `None` leaves that end unbounded."""
         low = 0 if start is None else self.encode(start)
         high = 1 << self.width if stop is None else self.encode(stop)
         return BDDSet(self, IntSet.range(low, high, width=self.width)) & self.all

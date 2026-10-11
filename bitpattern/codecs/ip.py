@@ -50,7 +50,7 @@ class IP(OrderedCodec[Address], Generic[Address, Network]):
         start: Address | str | int | None = None,
         stop: Address | str | int | None = None,
     ) -> BDDSet[Address]:
-        """Addresses in `[start, stop)`. A bound of `None` leaves that end open."""
+        """Addresses in `[start, stop)`. A bound of `None` leaves that end unbounded."""
         address = self.address_type
         return super().range(
             None if start is None else address(self.encode(start)),

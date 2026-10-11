@@ -143,7 +143,7 @@ for `min`, `max` and `range(start, stop)`.
   combinations, with `having(flags)` and `lacking(flags)`.
 
 All of these but the enums and flags are ordered, with `min`, `max` and
-`range(start, stop)`. A bound of `None` leaves that end open.
+`range(start, stop)`. A bound of `None` leaves that end unbounded.
 
 `product(a, b, c)` is the set of tuples `itertools.product(a, b, c)` would give, and
 `a * b` is `product(a, b)`. Their codec is a `Tuple`, with the first field's bits on
