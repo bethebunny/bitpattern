@@ -50,7 +50,6 @@ class Int(OrderedCodec[int]):
         return integer % (1 << self.width)
 
     def decode(self, bits: int) -> int:
-        self._check(bits)
         return bits - (1 << self.width) if bits > self.max else bits
 
     def range(self, start: int | None = None, stop: int | None = None) -> BDDSet[int]:

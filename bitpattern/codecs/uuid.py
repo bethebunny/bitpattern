@@ -31,8 +31,10 @@ class UUIDCodec(OrderedCodec[UUID]):
         raise TypeError(f"{self} can't encode {value!r}")
 
     def decode(self, bits: int) -> UUID:
-        self._check(bits)
-        return UUID(int=bits)
+        try:
+            return UUID(int=bits)
+        except ValueError as e:  # wider than 128 bits
+            raise IndexError(f"{self} has no value encoded as {bits}") from e
 
     def _rfc(self, version: str) -> BDDSet[UUID]:
         """The RFC 9562 variant, with `version` as M's bits, eg. `0100` or `????`."""

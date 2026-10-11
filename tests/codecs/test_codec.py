@@ -74,8 +74,25 @@ def test_codecs_refuse_other_types_with_type_error(codec):
     assert object() not in codec.all
 
 
-@pytest.mark.parametrize("codec", CODECS, ids=repr)
-def test_codecs_refuse_bits_past_their_width_with_index_error(codec):
+# Decoding bits outside `all` doesn't have to fail, but these codecs fail past
+# their width.
+FAILING_DECODES = [
+    char,
+    float16,
+    ipv4,
+    ipv6,
+    mac,
+    uuid128,
+    dates,
+    datetimes,
+    naive_datetimes,
+    Members(Size),
+    Flags(Style),
+]
+
+
+@pytest.mark.parametrize("codec", FAILING_DECODES, ids=repr)
+def test_decode_failures_are_index_errors(codec):
     with pytest.raises(IndexError):
         codec.decode(1 << codec.width)
 
@@ -146,7 +163,6 @@ class Digit(OrderedCodec[int]):
         return value
 
     def decode(self, bits: int) -> int:
-        self._check(bits)
         return bits
 
     @cached_property

@@ -49,8 +49,10 @@ class Char(OrderedCodec[str]):
         return ord(value)
 
     def decode(self, bits: int) -> str:
-        self._check(bits)
-        return chr(bits)
+        try:
+            return chr(bits)
+        except ValueError as e:  # past the last code point
+            raise IndexError(f"{self} has no value encoded as {bits}") from e
 
     @cached_property
     def all(self) -> BDDSet[str]:

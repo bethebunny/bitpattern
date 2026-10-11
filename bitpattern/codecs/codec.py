@@ -50,8 +50,6 @@ class Codec(Generic[T]):
     ...         return ord(value)
     ...
     ...     def decode(self, bits: int) -> str:
-    ...         if not 0 <= bits < 128:
-    ...             raise IndexError(f"{bits} isn't 7 bits")
     ...         return chr(bits)
     >>> ascii = Ascii(7, "ascii")
     >>> ascii.pattern("1?0.0001")  # case only changes bit 5
@@ -60,7 +58,8 @@ class Codec(Generic[T]):
     Codecs signal what they can't handle with:
       - `TypeError` from `encode`, for a value of the wrong type
       - `ValueError` from `encode`, for a value of the right type that isn't legal
-      - `IndexError` from `decode`, for bits that aren't a legal value's encoding
+      - `IndexError` from `decode`, for bits outside `all`, though `decode` doesn't
+        have to check
     If a type has illegal bit patterns, the Codec should override `all` to return
     the legal pattern domain for the type. `~` and `pattern` then stay inside `all`.
     """
@@ -77,13 +76,9 @@ class Codec(Generic[T]):
         raise NotImplementedError
 
     def decode(self, bits: int) -> T:
-        """The value encoded as `bits`. Raises IndexError if `bits` isn't in `all`."""
+        """The value encoded as `bits`. Bits outside `all` may raise IndexError, but
+        don't have to."""
         raise NotImplementedError
-
-    def _check(self, bits: int) -> None:
-        """Raises IndexError unless `bits` is in `all`, for `decode`."""
-        if bits not in self.all.storage:
-            raise IndexError(f"{self} has no value encoded as {bits}")
 
     @cached_property
     def all(self) -> BDDSet[T]:
@@ -344,7 +339,6 @@ class Tuple(Codec[tuple[*Ts]]):
         )
 
     def decode(self, bits: int) -> tuple[*Ts]:
-        self._check(bits)
         return tuple(
             field.decode(bits >> offset & ((1 << field.width) - 1))
             for field, offset in zip(self.fields, self._offsets)

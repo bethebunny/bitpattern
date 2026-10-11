@@ -71,9 +71,9 @@ def test_chars_refuse_what_isnt_a_string(value):
     assert value not in char.all
 
 
-def test_char_decode_refuses_surrogates():
+def test_char_decode_refuses_bits_past_the_last_code_point():
     with pytest.raises(IndexError):
-        char.decode(0xD800)
+        char.decode(sys.maxunicode + 1)
 
 
 def test_patterns_only_match_chars():

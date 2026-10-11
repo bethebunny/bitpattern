@@ -59,8 +59,7 @@ class Members(Codec[E]):
         return self._indices[value]
 
     def decode(self, bits: int) -> E:
-        self._check(bits)
-        return self._members[bits]
+        return self._members[bits]  # raises IndexError past the last member
 
     @cached_property
     def all(self) -> BDDSet[E]:
@@ -104,8 +103,10 @@ class Flags(Codec[F]):
         return value.value
 
     def decode(self, bits: int) -> F:
-        self._check(bits)
-        return self.enum(bits)
+        try:
+            return self.enum(bits)
+        except ValueError as e:  # a strict Flag refuses bits outside every flag
+            raise IndexError(f"{self} has no value encoded as {bits}") from e
 
     def _glob(self, flags: int, bit: str) -> BDDSet[F]:
         """Bit patterns with `bit` at each bit of `flags`, and `?` elsewhere."""

@@ -39,7 +39,6 @@ class Small(Codec[int]):
         return value
 
     def decode(self, bits: int) -> int:
-        self._check(bits)
         return bits
 
     @cached_property

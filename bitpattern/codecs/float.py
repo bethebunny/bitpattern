@@ -65,8 +65,10 @@ class Float(OrderedCodec[float]):
         return int.from_bytes(packed) >> self._spare
 
     def decode(self, bits: int) -> float:
-        self._check(bits)
-        packed = (bits << self._spare).to_bytes(struct.calcsize(self.format))
+        try:
+            packed = (bits << self._spare).to_bytes(struct.calcsize(self.format))
+        except OverflowError as e:  # wider than this format
+            raise IndexError(f"{self} has no value encoded as {bits}") from e
         return struct.unpack(self.format, packed)[0]
 
     @property
@@ -209,7 +211,6 @@ class FloatFN(Float):
         return bits | sign if math.copysign(1, double) < 0 else bits
 
     def decode(self, bits: int) -> float:
-        self._check(bits)
         sign = 1 << (self.width - 1)
         if (magnitude := bits & (sign - 1)) == sign - 1:
             value = math.nan

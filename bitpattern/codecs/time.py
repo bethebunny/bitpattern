@@ -30,8 +30,10 @@ class Date(OrderedCodec[dt.date]):
         return value.toordinal()
 
     def decode(self, bits: int) -> dt.date:
-        self._check(bits)
-        return dt.date.fromordinal(bits)
+        try:
+            return dt.date.fromordinal(bits)
+        except (ValueError, OverflowError) as e:  # ordinal 0, or past date.max
+            raise IndexError(f"{self} has no value encoded as {bits}") from e
 
     @cached_property
     def all(self) -> BDDSet[dt.date]:
@@ -80,9 +82,11 @@ class DateTime(OrderedCodec[dt.datetime]):
         return microseconds
 
     def decode(self, bits: int) -> dt.datetime:
-        self._check(bits)
-        moment = self._epoch + bits * MICROSECOND
-        return moment if self.tz is None else moment.astimezone(self.tz)
+        try:
+            moment = self._epoch + bits * MICROSECOND
+            return moment if self.tz is None else moment.astimezone(self.tz)
+        except OverflowError as e:  # outside the years datetime can hold
+            raise IndexError(f"{self} has no value encoded as {bits}") from e
 
     @cached_property
     def all(self) -> BDDSet[dt.datetime]:

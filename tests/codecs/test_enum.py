@@ -193,11 +193,11 @@ def test_enum_codecs_refuse_what_they_cant_encode(codec, value, error):
     assert value not in codec.all
 
 
-def test_enum_codecs_refuse_bits_that_arent_values():
+def test_enum_decode_failures_are_index_errors():
     with pytest.raises(IndexError):
         Members(Color).decode(3)  # three members take two bits
     with pytest.raises(IndexError):
-        Flags(Wide).decode(2)  # half of BC
+        Flags(Perm).decode(8)  # a strict Flag refuses bits outside every flag
 
 
 def test_enum_codecs_over_the_same_enum_are_equal():

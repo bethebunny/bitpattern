@@ -33,8 +33,10 @@ class IP(OrderedCodec[Address], Generic[Address, Network]):
         return int(self.address_type(value))  # raises ValueError if malformed
 
     def decode(self, bits: int) -> Address:
-        self._check(bits)
-        return self.address_type(bits)
+        try:
+            return self.address_type(bits)
+        except ValueError as e:  # wider than this family's addresses
+            raise IndexError(f"{self} has no value encoded as {bits}") from e
 
     def cidr(self, network: Network | str) -> BDDSet[Address]:
         block = self.network_type(network, strict=False)

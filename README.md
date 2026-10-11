@@ -107,8 +107,6 @@ sets are `BDDSet`s. To write one, subclass `Codec` and implement `encode` and `d
 ...         return ord(value)
 ...
 ...     def decode(self, bits: int) -> str:
-...         if not 0 <= bits < 128:
-...             raise IndexError(f"{bits} isn't 7 bits")
 ...         return chr(bits)
 >>> ascii = Ascii(7, "ascii")
 >>> ascii.set("hello")
@@ -119,7 +117,7 @@ BDDSet(ascii, ['A', 'a'])
 ```
 
 `encode` should raise `TypeError` for a value of the wrong type and `ValueError` for a
-value it can't encode. `decode` should raise `IndexError` for bits that aren't a value.
+value it can't encode. `decode` may raise `IndexError` for bits that aren't a value.
 If some bit patterns aren't values, override `all` with the ones that are. `~` and `pattern` then leave the
 others out. If encodings sort the same as their values, subclass `OrderedCodec` instead
 for `min`, `max` and `range(start, stop)`.

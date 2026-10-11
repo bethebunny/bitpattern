@@ -55,8 +55,10 @@ class MAC(OrderedCodec[str]):
         return int(re.sub("[.:-]", "", value), 16)
 
     def decode(self, bits: int) -> str:
-        self._check(bits)
-        return bits.to_bytes(6).hex(":")
+        try:
+            return bits.to_bytes(6).hex(":")
+        except OverflowError as e:  # wider than 48 bits
+            raise IndexError(f"{self} has no value encoded as {bits}") from e
 
     def _prefix(self, bits: str) -> BDDSet[str]:
         """Addresses whose leading bits match `bits`, eg. `???????1` is `multicast`."""
