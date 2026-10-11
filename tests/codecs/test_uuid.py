@@ -72,13 +72,24 @@ def test_encode_takes_the_strings_uuid_takes(text):
         "919108f7-52d1-4320-9bac",
         "919108f7-52d1-4320-9bac-f847db4148ag",
         "not a uuid",
+    ],
+)
+def test_encode_refuses_malformed_strings(value):
+    with pytest.raises(ValueError):
+        uuid128.encode(value)
+    assert value not in uuid128.all
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
         0x919108F752D143209BACF847DB4148A8,  # UUID() only takes ints by keyword
         bytes(16),
         None,
     ],
 )
 def test_encode_refuses_anything_else(value):
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         uuid128.encode(value)
     assert value not in uuid128.all
 

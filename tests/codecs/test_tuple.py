@@ -32,11 +32,14 @@ class Small(Codec[int]):
     """0 to 2, which leaves one of its 4 bit patterns unused."""
 
     def encode(self, value: object) -> int:
-        if isinstance(value, int) and 0 <= value <= 2:
-            return value
-        raise ValueError(f"{value!r} isn't 0, 1 or 2")
+        if not isinstance(value, int):
+            raise TypeError(f"{value!r} isn't an int")
+        if not 0 <= value <= 2:
+            raise ValueError(f"{value!r} isn't 0, 1 or 2")
+        return value
 
     def decode(self, bits: int) -> int:
+        self._check(bits)
         return bits
 
     @cached_property
@@ -134,11 +137,16 @@ def test_all_is_every_tuple_of_the_fields_values():
     assert (3, 0) not in small.all
 
 
-@pytest.mark.parametrize(
-    "value", [(1,), (1, 2, 3), [1, 2], (256, 0), (0, 128), (0, 1.5), "ab", None]
-)
+@pytest.mark.parametrize("value", [(1,), (1, 2, 3), (256, 0), (0, 128)])
 def test_tuples_refuse_what_they_cant_encode(value):
     with pytest.raises(ValueError):
+        PAIR.encode(value)
+    assert value not in PAIR.all
+
+
+@pytest.mark.parametrize("value", [[1, 2], (0, 1.5), "ab", None])
+def test_tuples_refuse_other_types(value):
+    with pytest.raises(TypeError):
         PAIR.encode(value)
     assert value not in PAIR.all
 

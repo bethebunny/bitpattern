@@ -62,13 +62,19 @@ def test_wide_int_ranges():
 
 
 @pytest.mark.parametrize(
-    "codec, value",
-    [(int8, 128), (int8, -129), (uint8, -1), (uint8, 256), (int8, 1.0), (int8, "1")],
+    "codec, value", [(int8, 128), (int8, -129), (uint8, -1), (uint8, 256)]
 )
 def test_ints_refuse_what_they_cant_encode(codec, value):
     with pytest.raises(ValueError):
         codec.encode(value)
     assert value not in codec.all
+
+
+@pytest.mark.parametrize("value", [1.0, "1", None])
+def test_ints_refuse_what_has_no_index(value):
+    with pytest.raises(TypeError):
+        int8.encode(value)
+    assert value not in int8.all
 
 
 def test_ints_take_anything_with_an_index():

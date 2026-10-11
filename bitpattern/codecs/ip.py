@@ -28,9 +28,12 @@ class IP(OrderedCodec[Address], Generic[Address, Network]):
 
     def encode(self, value: object) -> int:
         """Accepts addresses as strings or ints."""
-        return int(self.address_type(value))
+        if not isinstance(value, (self.address_type, str, int)):
+            raise TypeError(f"{self} can't encode {value!r}")
+        return int(self.address_type(value))  # raises ValueError if malformed
 
     def decode(self, bits: int) -> Address:
+        self._check(bits)
         return self.address_type(bits)
 
     def cidr(self, network: Network | str) -> BDDSet[Address]:
@@ -48,8 +51,8 @@ class IP(OrderedCodec[Address], Generic[Address, Network]):
         """Addresses in `[start, stop)`. A bound of `None` leaves that end open."""
         address = self.address_type
         return super().range(
-            None if start is None else address(start),
-            None if stop is None else address(stop),
+            None if start is None else address(self.encode(start)),
+            None if stop is None else address(self.encode(stop)),
         )
 
     def networks(self, source: BDDSet[Address]) -> Iterator[Network]:

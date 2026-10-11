@@ -25,11 +25,12 @@ class Date(OrderedCodec[dt.date]):
             raise TypeError(
                 "Refusing to implicitly encode datetime object. Use `datetime.date()` explicitly."
             )
-        if isinstance(value, dt.date) and not isinstance(value, dt.datetime):
-            return value.toordinal()
-        raise ValueError(f"{self} can't encode {value!r}")
+        if not isinstance(value, dt.date):
+            raise TypeError(f"{self} can't encode {value!r}")
+        return value.toordinal()
 
     def decode(self, bits: int) -> dt.date:
+        self._check(bits)
         return dt.date.fromordinal(bits)
 
     @cached_property
@@ -69,16 +70,17 @@ class DateTime(OrderedCodec[dt.datetime]):
         return (value - self._epoch) // MICROSECOND
 
     def encode(self, value: object) -> int:
-        if (
-            isinstance(value, dt.datetime)
-            # Datetimes having a tzinfo with no UTC offset are naive
-            and (value.utcoffset() is None) == (self.tz is None)
-            and (microseconds := self._microseconds(value)) in self.all.storage
-        ):
-            return microseconds
-        raise ValueError(f"{self} can't encode {value!r}")
+        if not isinstance(value, dt.datetime):
+            raise TypeError(f"{self} can't encode {value!r}")
+        # Datetimes having a tzinfo with no UTC offset are naive
+        if (value.utcoffset() is None) != (self.tz is None):
+            raise ValueError(f"{self} can't encode {value!r}")
+        if (microseconds := self._microseconds(value)) not in self.all.storage:
+            raise ValueError(f"{self} can't encode {value!r}")
+        return microseconds
 
     def decode(self, bits: int) -> dt.datetime:
+        self._check(bits)
         moment = self._epoch + bits * MICROSECOND
         return moment if self.tz is None else moment.astimezone(self.tz)
 

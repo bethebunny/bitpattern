@@ -43,19 +43,26 @@ class Codec(Generic[T]):
 
     >>> class Ascii(Codec[str]):
     ...     def encode(self, value: object) -> int:
-    ...         if isinstance(value, str) and len(value) == 1 and value.isascii():
-    ...             return ord(value)
-    ...         raise ValueError(f"{value!r} isn't an ASCII character")
+    ...         if not isinstance(value, str):
+    ...             raise TypeError(f"{value!r} isn't a string")
+    ...         if len(value) != 1 or not value.isascii():
+    ...             raise ValueError(f"{value!r} isn't an ASCII character")
+    ...         return ord(value)
     ...
     ...     def decode(self, bits: int) -> str:
+    ...         if not 0 <= bits < 128:
+    ...             raise IndexError(f"{bits} isn't 7 bits")
     ...         return chr(bits)
     >>> ascii = Ascii(7, "ascii")
     >>> ascii.pattern("1?0.0001")  # case only changes bit 5
     BDDSet(ascii, ['A', 'a'])
 
-    If a type has illegal bit patterns then `encode` should raise a `ValueError`.
-    In this case, the Codec should override `all` to return the legal pattern
-    domain for the type. `~` and `pattern` then stay inside `all`.
+    Codecs signal what they can't handle with:
+      - `TypeError` from `encode`, for a value of the wrong type
+      - `ValueError` from `encode`, for a value of the right type that isn't legal
+      - `IndexError` from `decode`, for bits that aren't a legal value's encoding
+    If a type has illegal bit patterns, the Codec should override `all` to return
+    the legal pattern domain for the type. `~` and `pattern` then stay inside `all`.
     """
 
     width: int
@@ -65,11 +72,18 @@ class Codec(Generic[T]):
         return self.name
 
     def encode(self, value: object) -> int:
-        """`value`'s bits. Raises ValueError if this codec can't encode `value`."""
+        """`value`'s bits. Raises TypeError if `value` is the wrong type, and
+        ValueError if `value` is the right type but not a legal value."""
         raise NotImplementedError
 
     def decode(self, bits: int) -> T:
+        """The value encoded as `bits`. Raises IndexError if `bits` isn't in `all`."""
         raise NotImplementedError
+
+    def _check(self, bits: int) -> None:
+        """Raises IndexError unless `bits` is in `all`, for `decode`."""
+        if bits not in self.all.storage:
+            raise IndexError(f"{self} has no value encoded as {bits}")
 
     @cached_property
     def all(self) -> BDDSet[T]:
@@ -205,7 +219,11 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
         return self.codec.decode(self.storage[item])
 
     def index(self, value: object, start: int = 0, stop: int | None = None) -> int:
-        return self.storage.index(self.codec.encode(value), start, stop)
+        try:
+            bits = self.codec.encode(value)
+        except TypeError as e:  # like list.index, a value of another type isn't in it
+            raise ValueError(f"{value!r} is not in the set") from e
+        return self.storage.index(bits, start, stop)
 
     def count(self, value: object) -> int:
         return int(value in self)
@@ -316,7 +334,9 @@ class Tuple(Codec[tuple[*Ts]]):
         return tuple(itertools.accumulate(widths, initial=0))[::-1]
 
     def encode(self, value: object) -> int:
-        if not isinstance(value, tuple) or len(value) != len(self.fields):
+        if not isinstance(value, tuple):
+            raise TypeError(f"{self} can't encode {value!r}")
+        if len(value) != len(self.fields):
             raise ValueError(f"{self} can't encode {value!r}")
         return sum(
             field.encode(item) << offset
@@ -324,6 +344,7 @@ class Tuple(Codec[tuple[*Ts]]):
         )
 
     def decode(self, bits: int) -> tuple[*Ts]:
+        self._check(bits)
         return tuple(
             field.decode(bits >> offset & ((1 << field.width) - 1))
             for field, offset in zip(self.fields, self._offsets)

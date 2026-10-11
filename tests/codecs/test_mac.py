@@ -95,8 +95,6 @@ def test_macs_sort_like_their_strings(encodings):
         "01:23:45:67:89:ab\n",
         "０１:23:45:67:89:ab",  # fullwidth digits, which int() reads
         "",
-        b"01:23:45:67:89:ab",
-        None,
     ],
 )
 def test_macs_refuse_anything_else(value):
@@ -105,10 +103,10 @@ def test_macs_refuse_anything_else(value):
     assert value not in mac.all
 
 
-@pytest.mark.parametrize("value", [0, 0x0123456789AB, True])
-def test_ints_arent_macs(value):
+@pytest.mark.parametrize("value", [0, 0x0123456789AB, True, b"01:23:45:67:89:ab", None])
+def test_macs_refuse_what_isnt_a_string(value):
     """An int would be the bits, which is what `decode` takes."""
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         mac.encode(value)
     assert value not in mac.all
 

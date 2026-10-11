@@ -57,11 +57,23 @@ def test_surrogates_arent_chars():
             char.encode(chr(point))
 
 
-@pytest.mark.parametrize("value", ["", "ab", "e\u0301", 97, None, b"a", ["a"]])
-def test_chars_refuse_what_isnt_one_character(value):
+@pytest.mark.parametrize("value", ["", "ab", "e\u0301"])
+def test_chars_refuse_strings_that_arent_one_character(value):
     with pytest.raises(ValueError):
         char.encode(value)
     assert value not in char.all
+
+
+@pytest.mark.parametrize("value", [97, None, b"a", ["a"]])
+def test_chars_refuse_what_isnt_a_string(value):
+    with pytest.raises(TypeError):
+        char.encode(value)
+    assert value not in char.all
+
+
+def test_char_decode_refuses_surrogates():
+    with pytest.raises(IndexError):
+        char.decode(0xD800)
 
 
 def test_patterns_only_match_chars():

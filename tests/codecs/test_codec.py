@@ -4,6 +4,7 @@ import ipaddress
 import math
 import operator
 import random
+from enum import Enum, Flag
 from functools import cached_property
 
 import pytest
@@ -11,18 +12,72 @@ import pytest
 from bitpattern import IntSet, Pattern
 from bitpattern.codecs import (
     BDDSet,
+    Flags,
+    Members,
     OrderedCodec,
+    Tuple,
     bfloat16,
+    char,
+    dates,
+    datetimes,
+    float8_e4m3fn,
     float16,
     float32,
     float64,
     int8,
     ipv4,
     ipv6,
+    mac,
+    naive_datetimes,
     uint128,
+    uuid128,
 )
 
 SMALL = float16.range(1.0, 1.01)  # the 11 float16s in [1.0, 1.01)
+
+
+class Size(Enum):
+    S = "s"
+    M = "m"
+    L = "l"
+
+
+class Style(Flag):
+    BOLD = 1
+    ITALIC = 2
+
+
+# One of each kind of codec.
+CODECS = [
+    char,
+    int8,
+    uint128,
+    float16,
+    float8_e4m3fn,
+    ipv4,
+    ipv6,
+    mac,
+    uuid128,
+    dates,
+    datetimes,
+    naive_datetimes,
+    Members(Size),
+    Flags(Style),
+    Tuple(int8, char),
+]
+
+
+@pytest.mark.parametrize("codec", CODECS, ids=repr)
+def test_codecs_refuse_other_types_with_type_error(codec):
+    with pytest.raises(TypeError):
+        codec.encode(object())
+    assert object() not in codec.all
+
+
+@pytest.mark.parametrize("codec", CODECS, ids=repr)
+def test_codecs_refuse_bits_past_their_width_with_index_error(codec):
+    with pytest.raises(IndexError):
+        codec.decode(1 << codec.width)
 
 
 def test_pattern_has_to_be_the_codecs_width():
@@ -60,6 +115,8 @@ def test_bdd_sets_read_like_lists_of_their_values():
     assert SMALL.count(values[3]) == 1 and SMALL.count(2.0) == 0
     with pytest.raises(ValueError):
         SMALL.index(2.0)
+    with pytest.raises(ValueError):  # like list.index, even for another type
+        SMALL.index("x")
 
 
 def test_slices_are_bdd_sets():
@@ -82,11 +139,14 @@ class Digit(OrderedCodec[int]):
     """0 to 9, which leaves 6 of its 16 bit patterns unused."""
 
     def encode(self, value: object) -> int:
-        if isinstance(value, int) and 0 <= value <= 9:
-            return value
-        raise ValueError(f"{value!r} isn't a digit")
+        if not isinstance(value, int):
+            raise TypeError(f"{value!r} isn't an int")
+        if not 0 <= value <= 9:
+            raise ValueError(f"{value!r} isn't a digit")
+        return value
 
     def decode(self, bits: int) -> int:
+        self._check(bits)
         return bits
 
     @cached_property

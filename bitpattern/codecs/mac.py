@@ -48,11 +48,14 @@ class MAC(OrderedCodec[str]):
     """
 
     def encode(self, value: object) -> int:
-        if isinstance(value, str) and ADDRESS.fullmatch(value):
-            return int(re.sub("[.:-]", "", value), 16)
-        raise ValueError(f"{self} can't encode {value!r}")
+        if not isinstance(value, str):
+            raise TypeError(f"{self} can't encode {value!r}")
+        if not ADDRESS.fullmatch(value):
+            raise ValueError(f"{self} can't encode {value!r}")
+        return int(re.sub("[.:-]", "", value), 16)
 
     def decode(self, bits: int) -> str:
+        self._check(bits)
         return bits.to_bytes(6).hex(":")
 
     def _prefix(self, bits: str) -> BDDSet[str]:

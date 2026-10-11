@@ -28,9 +28,10 @@ class UUIDCodec(OrderedCodec[UUID]):
                 return value.int
             case str():
                 return UUID(value).int  # raises ValueError for a malformed string
-        raise ValueError(f"{self} can't encode {value!r}")
+        raise TypeError(f"{self} can't encode {value!r}")
 
     def decode(self, bits: int) -> UUID:
+        self._check(bits)
         return UUID(int=bits)
 
     def _rfc(self, version: str) -> BDDSet[UUID]:

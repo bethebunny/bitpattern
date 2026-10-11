@@ -43,14 +43,14 @@ class Int(OrderedCodec[int]):
         return self.min + (1 << self.width) - 1
 
     def encode(self, value: object) -> int:
-        if (
-            isinstance(value, SupportsIndex)
-            and self.min <= (integer := operator.index(value)) <= self.max
-        ):
-            return integer % (1 << self.width)
-        raise ValueError(f"{self} can't encode {value!r}")
+        if not isinstance(value, SupportsIndex):
+            raise TypeError(f"{self} can't encode {value!r}")
+        if not self.min <= (integer := operator.index(value)) <= self.max:
+            raise ValueError(f"{self} can't encode {value!r}")
+        return integer % (1 << self.width)
 
     def decode(self, bits: int) -> int:
+        self._check(bits)
         return bits - (1 << self.width) if bits > self.max else bits
 
     def range(self, start: int | None = None, stop: int | None = None) -> BDDSet[int]:

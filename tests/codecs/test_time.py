@@ -153,37 +153,46 @@ def test_a_datetime_isnt_in_a_set_of_dates():
 
 
 @pytest.mark.parametrize(
-    "codec, value",
+    "codec, value, error",
     [
-        (dates, datetime(2020, 1, 1)),
-        (dates, "2020-01-01"),
-        (dates, date(2020, 1, 1).toordinal()),
-        (dates, None),
-        (naive_datetimes, AWARE),
-        (naive_datetimes, datetime(2020, 1, 1, tzinfo=timezone(timedelta(hours=-8)))),
-        (naive_datetimes, date(2020, 1, 1)),
-        (naive_datetimes, "2020-01-01T00:00:00"),
-        (naive_datetimes, 0),
-        (naive_datetimes, None),
+        (dates, datetime(2020, 1, 1), TypeError),
+        (dates, "2020-01-01", TypeError),
+        (dates, date(2020, 1, 1).toordinal(), TypeError),
+        (dates, None, TypeError),
+        (naive_datetimes, AWARE, ValueError),
+        (
+            naive_datetimes,
+            datetime(2020, 1, 1, tzinfo=timezone(timedelta(hours=-8))),
+            ValueError,
+        ),
+        (naive_datetimes, date(2020, 1, 1), TypeError),
+        (naive_datetimes, "2020-01-01T00:00:00", TypeError),
+        (naive_datetimes, 0, TypeError),
+        (naive_datetimes, None, TypeError),
     ],
 )
-def test_time_codecs_refuse_what_they_cant_encode(codec, value):
-    with pytest.raises((TypeError, ValueError)):
+def test_time_codecs_refuse_what_they_cant_encode(codec, value, error):
+    with pytest.raises(error):
         codec.encode(value)
     assert value not in codec.all
 
 
 @pytest.mark.parametrize(
-    "codec, low, high",
+    "codec, low, high, error",
     [
-        (dates, datetime(2020, 1, 1), datetime(2021, 1, 1)),
-        (naive_datetimes, date(2020, 1, 1), date(2021, 1, 1)),
-        (naive_datetimes, AWARE, AWARE + timedelta(days=1)),
+        (dates, datetime(2020, 1, 1), datetime(2021, 1, 1), TypeError),
+        (naive_datetimes, date(2020, 1, 1), date(2021, 1, 1), TypeError),
+        (naive_datetimes, AWARE, AWARE + timedelta(days=1), ValueError),
     ],
 )
-def test_time_ranges_refuse_bounds_they_cant_encode(codec, low, high):
-    with pytest.raises((TypeError, ValueError)):
+def test_time_ranges_refuse_bounds_they_cant_encode(codec, low, high, error):
+    with pytest.raises(error):
         codec.range(low, high)
+
+
+def test_dates_decode_refuses_ordinals_that_arent_dates():
+    with pytest.raises(IndexError):
+        dates.decode(0)
 
 
 def test_a_tzinfo_without_an_offset_leaves_a_datetime_naive():

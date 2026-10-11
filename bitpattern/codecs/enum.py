@@ -51,12 +51,15 @@ class Members(Codec[E]):
         return {member: at for at, member in enumerate(self._members)}
 
     def encode(self, value: object) -> int:
+        if not isinstance(value, self.enum):
+            raise TypeError(f"{self} can't encode {value!r}")
         # A Flag's combinations are instances too, but aren't members.
-        if isinstance(value, self.enum) and value in self._indices:
-            return self._indices[value]
-        raise ValueError(f"{self} can't encode {value!r}")
+        if value not in self._indices:
+            raise ValueError(f"{self} can't encode {value!r}")
+        return self._indices[value]
 
     def decode(self, bits: int) -> E:
+        self._check(bits)
         return self._members[bits]
 
     @cached_property
@@ -95,14 +98,15 @@ class Flags(Codec[F]):
         vars(self).update(width=width, name=enum.__name__, enum=enum)
 
     def encode(self, value: object) -> int:
+        if not isinstance(value, self.enum):
+            raise TypeError(f"{self} can't encode {value!r}")
         # Python Flag can make values that aren't legal combinations. Check that it is.
-        if isinstance(value, self.enum) and value.value in self.all.storage:
-            return value.value
-        # XXX: let's use TypeError for failures encoding invalid types, ValueError
-        #   for encoding invalid values, and IndexError for decoding invalid values
-        raise ValueError(f"{self} can't encode {value!r}")
+        if value.value not in self.all.storage:
+            raise ValueError(f"{self} can't encode {value!r}")
+        return value.value
 
     def decode(self, bits: int) -> F:
+        self._check(bits)
         return self.enum(bits)
 
     def _glob(self, flags: int, bit: str) -> BDDSet[F]:

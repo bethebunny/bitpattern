@@ -173,24 +173,31 @@ def test_having_and_lacking_agree_with_brute_force(flag):
 
 
 @pytest.mark.parametrize(
-    "codec, value",
+    "codec, value, error",
     [
-        (Members(Suit), Color.RED),  # another enum's member
-        (Members(Suit), "c"),  # a member's value
-        (Members(Planet), 1),  # == Planet.MERCURY, but not a member
-        (Members(Perm), Perm.R | Perm.W),  # a combination, not a member
-        (Flags(Perm), Mode.READ),  # another flag's member
-        (Flags(Mode), 1),  # == Mode.READ, but not a member
-        (Flags(Mode), Mode(4)),  # a bit that isn't any flag's
-        (Flags(Mode), Mode(16)),  # past the widest flag
-        (Flags(Wide), Wide(2)),  # half of BC
-        (Flags(Overlapping), Overlapping(5)),  # needs a bit from each flag
+        (Members(Suit), Color.RED, TypeError),  # another enum's member
+        (Members(Suit), "c", TypeError),  # a member's value
+        (Members(Planet), 1, TypeError),  # == Planet.MERCURY, but not a member
+        (Members(Perm), Perm.R | Perm.W, ValueError),  # a combination, not a member
+        (Flags(Perm), Mode.READ, TypeError),  # another flag's member
+        (Flags(Mode), 1, TypeError),  # == Mode.READ, but not a member
+        (Flags(Mode), Mode(4), ValueError),  # a bit that isn't any flag's
+        (Flags(Mode), Mode(16), ValueError),  # past the widest flag
+        (Flags(Wide), Wide(2), ValueError),  # half of BC
+        (Flags(Overlapping), Overlapping(5), ValueError),  # needs a bit from each flag
     ],
 )
-def test_enum_codecs_refuse_what_they_cant_encode(codec, value):
-    with pytest.raises(ValueError):
+def test_enum_codecs_refuse_what_they_cant_encode(codec, value, error):
+    with pytest.raises(error):
         codec.encode(value)
     assert value not in codec.all
+
+
+def test_enum_codecs_refuse_bits_that_arent_values():
+    with pytest.raises(IndexError):
+        Members(Color).decode(3)  # three members take two bits
+    with pytest.raises(IndexError):
+        Flags(Wide).decode(2)  # half of BC
 
 
 def test_enum_codecs_over_the_same_enum_are_equal():

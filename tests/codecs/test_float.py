@@ -402,10 +402,18 @@ def test_float8_e4m3fn_values():
     assert float8_e4m3fn.encode(464.0) == 0b0_1111_110
 
 
-@pytest.mark.parametrize("value", ["x", None, 1e10])  # 1e10 is too big for a float16
-def test_encode_refuses_what_it_cant_encode(value):
+def test_encode_refuses_floats_too_big_for_the_format():
     with pytest.raises(ValueError):
-        float16.encode(value)
+        float16.encode(1e10)
+
+
+@pytest.mark.parametrize(
+    "codec, value", [(float16, "x"), (float16, None), (float8_e4m3fn, "x")]
+)
+def test_floats_refuse_what_isnt_a_number(codec, value):
+    with pytest.raises(TypeError):
+        codec.encode(value)
+    assert value not in codec.all
 
 
 @pytest.mark.parametrize(
@@ -416,7 +424,6 @@ def test_encode_refuses_what_it_cant_encode(value):
         (float8_e4m3fn, -math.inf),
         (float8_e4m3fn, math.nextafter(464.0, math.inf)),  # just past the NaN tie
         (float8_e4m3fn, sys.float_info.max),  # rounding the max up overflows a double
-        (float8_e4m3fn, "x"),
     ],
 )
 def test_float8_refuses_what_it_cant_encode(codec, value):

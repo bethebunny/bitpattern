@@ -45,17 +45,27 @@ class Float(OrderedCodec[float]):
         """How many bits `format` has below this format's."""
         return 8 * struct.calcsize(self.format) - self.width
 
-    def encode(self, value: object) -> int:
+    def _double(self, value: object) -> float:
+        """`value` as a Python float, for `encode`."""
         try:
-            double = struct.unpack(">d", struct.pack(">d", value))[0]
+            return struct.unpack(">d", struct.pack(">d", value))[0]
+        except struct.error as e:  # not a number
+            raise TypeError(f"{self} can't encode {value!r}") from e
+        except OverflowError as e:  # an int too big for a double
+            raise ValueError(f"{self} can't encode {value!r}") from e
+
+    def encode(self, value: object) -> int:
+        double = self._double(value)
+        try:
             # Round to this format before packing. struct would round to the wider
             # format, and rounding twice can go the wrong way.
             packed = struct.pack(self.format, self._round(double))
-        except (struct.error, OverflowError) as e:
+        except OverflowError as e:
             raise ValueError(f"{self} can't encode {value!r}") from e
         return int.from_bytes(packed) >> self._spare
 
     def decode(self, bits: int) -> float:
+        self._check(bits)
         packed = (bits << self._spare).to_bytes(struct.calcsize(self.format))
         return struct.unpack(self.format, packed)[0]
 
@@ -179,10 +189,10 @@ class FloatFN(Float):
         return self.positive[-1]
 
     def encode(self, value: object) -> int:
+        double = self._double(value)
         try:
-            double = struct.unpack(">d", struct.pack(">d", value))[0]
             magnitude = abs(self._round(double))  # rounding up can overflow a double
-        except (struct.error, OverflowError) as e:
+        except OverflowError as e:
             raise ValueError(f"{self} can't encode {value!r}") from e
         sign = 1 << (self.width - 1)
         if math.isnan(magnitude):
@@ -199,6 +209,7 @@ class FloatFN(Float):
         return bits | sign if math.copysign(1, double) < 0 else bits
 
     def decode(self, bits: int) -> float:
+        self._check(bits)
         sign = 1 << (self.width - 1)
         if (magnitude := bits & (sign - 1)) == sign - 1:
             value = math.nan

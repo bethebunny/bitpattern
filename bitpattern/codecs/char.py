@@ -42,15 +42,14 @@ class Char(OrderedCodec[str]):
     """
 
     def encode(self, value: object) -> int:
-        if (
-            isinstance(value, str)
-            and len(value) == 1
-            and (point := ord(value)) in self.all.storage
-        ):
-            return point
-        raise ValueError(f"{self} can't encode {value!r}")
+        if not isinstance(value, str):
+            raise TypeError(f"{self} can't encode {value!r}")
+        if len(value) != 1 or ord(value) not in self.all.storage:
+            raise ValueError(f"{self} can't encode {value!r}")
+        return ord(value)
 
     def decode(self, bits: int) -> str:
+        self._check(bits)
         return chr(bits)
 
     @cached_property
