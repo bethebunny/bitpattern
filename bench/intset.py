@@ -11,10 +11,12 @@ diagram identity can't answer a repeated question. Prints the best time per work
 from __future__ import annotations
 
 import argparse
+import cProfile
 import functools
 import importlib
 import json
 import operator
+import pstats
 import random
 import time
 from collections.abc import Callable, Iterator
@@ -35,14 +37,19 @@ def implementation(name: str) -> type[IntSet]:
     return importlib.import_module("bitpattern_rs").IntSet
 
 
-def timed(setup: Setup, run: Run) -> float:
-    """The best time of `run(setup(rng))` over REPEAT freshly seeded inputs."""
+def timed(setup: Setup, run: Run, profiler: cProfile.Profile | None = None) -> float:
+    """The best time of `run(setup(rng))` over REPEAT freshly seeded inputs. A
+    `profiler` sees only the runs, not the setups."""
     best = float("inf")
     for seed in range(REPEAT):
         inputs = setup(random.Random(seed))
+        if profiler:
+            profiler.enable()
         start = time.perf_counter()
         run(inputs)
         best = min(best, time.perf_counter() - start)
+        if profiler:
+            profiler.disable()
     return best
 
 
@@ -129,12 +136,18 @@ def main() -> None:
         "--only", default="", help="run workloads whose name contains this"
     )
     parser.add_argument("--json", help="also write the times here")
+    parser.add_argument(
+        "--profile", action="store_true", help="print each run's hot spots"
+    )
     args = parser.parse_args()
     results = {}
     for label, setup, run in workloads(implementation(args.implementation)):
         if args.only in label:
-            results[label] = timed(setup, run)
+            profiler = cProfile.Profile() if args.profile else None
+            results[label] = timed(setup, run, profiler)
             print(f"{label:40} {results[label] * 1000:9.1f} ms", flush=True)
+            if profiler:
+                pstats.Stats(profiler).sort_stats("tottime").print_stats(8)
     if args.json:
         with open(args.json, "w") as f:
             json.dump(results, f, indent=1)
