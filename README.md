@@ -6,10 +6,11 @@
 > pip install 'bitpattern[hypothesis]'  # with the hypothesis strategies
 > ```
 
-bitpattern provides `BDDSet`, a set type for values that encode as fixed-width integers:
-floats, integers, characters, network addresses, UUIDs, dates, enums and tuples of
-these. A BDDSet is stored as a binary decision diagram. Sets far too large to list still
-support the usual set operations, counting, indexing and uniform sampling.
+bitpattern provides `BDDSet`, a set type for values that can be encoded as fixed-width
+integers: for instance, IEEE floats and twos-complement integers, unicode codepoints,
+network addresses, UUIDs, dates and times, enums and tuples of any of these. BDDSets can
+efficiently represent sets far too large to list and still support the usual set
+operations, counting, uniform sampling and even indexing.
 
 Consider for example 64 bit floats. How many finite normal floats are there? Can we
 sample them directly? These sets are huge and noncontiguous, so you can't express them
@@ -17,23 +18,22 @@ in traditional data structures.
 
 ```python
 >>> from bitpattern.codecs import float64
->>> supported = float64.finite - float64.subnormal
->>> supported.size
-18428729675200069634
->>> 0.25 in supported
+>>> normal = float64.finite - float64.subnormal - float64.zeros
+>>> normal
+BDDSet(float64, [2.2250738585072014e-308, 2.225073858507202e-308, 2.2250738585072024e-308, 2.225073858507203e-308, ..., -1.7976931348623155e+308, -1.7976931348623157e+308], size=18428729675200069632)
+>>> 0.25 in normal
 True
->>> list(supported[:3])
-[0.0, 2.2250738585072014e-308, 2.225073858507202e-308]
->>> supported.choice()
-2.3171912436506223e+167
+>>> list(normal[:3])
+[2.2250738585072014e-308, 2.225073858507202e-308, 2.2250738585072024e-308]
+>>> normal.choice()
+2.3171912436506225e+167
 >>> float64.range(1.0, 2.0).size
 4503599627370496
 
 ```
 
-`supported` is a `BDDSet[float]`, which stores its floats' bits as an `IntSet`.
-`float64` is the [codec](#codecs) that encodes them. BDDSets support the normal set
-operations and are sequences of their values in the order of their bits.
+`float64` is the [codec](#codecs) that tells bitpattern how to encode float64 values
+as integers.
 
 ## Tour
 
@@ -44,24 +44,11 @@ Here's a quick tour, with sampling seeded so it's repeatable:
 >>> from datetime import UTC, date, datetime
 >>> from enum import Flag
 >>> from bitpattern.codecs import (
-...     Flags, char, dates, datetimes, float8_e4m3fn, ipv4, mac, product, project,
-...     uint16, uuid128,
+...     Flags, char, dates, datetimes, float8_e4m3fn, ipv4, project, uint16, uuid128,
 ... )
 >>> rng = random.Random(0)
 
->>> # Tuples: every (address, port) on a private network's unprivileged ports
->>> networks = ipv4.cidr("10.0.0.0/8") | ipv4.cidr("192.168.0.0/16")
->>> private = networks * uint16.range(1024, 65536)
->>> private.size
-1086559617024
->>> ("10.1.2.3", 8080) in private
-True
->>> private.choice(rng=rng)
-(IPv4Address('10.100.105.211'), 22477)
->>> project(private, 1) == uint16.range(1024, 65536)
-True
-
->>> # fp8: the whole format, and how floats round into it
+>>> # fp8
 >>> float8_e4m3fn.finite.size
 254
 >>> float8_e4m3fn.positive[-1]
@@ -79,11 +66,17 @@ True
 >>> char.range("a", "{") == char.category("Ll") & char.range("\0", "\x80")
 True
 
->>> # Random MAC addresses are the locally administered unicast ones
->>> (mac.local & mac.unicast).size
-70368744177664
->>> (mac.local & mac.unicast).choice(rng=rng)
-'16:2e:6b:aa:94:55'
+>>> # `a * b` is the set of pairs, ie. the cartesian product
+>>> networks = ipv4.cidr("10.0.0.0/8") | ipv4.cidr("192.168.0.0/16")
+>>> private = networks * uint16.range(1024, 65536)
+>>> private.size
+1086559617024
+>>> ("10.1.2.3", 8080) in private
+True
+>>> private.choice(rng=rng)
+(IPv4Address('10.100.105.211'), 22477)
+>>> project(private, 1) == uint16.range(1024, 65536)
+True
 
 >>> # UUIDs
 >>> uuid128.version(4).size == 2**122
@@ -91,7 +84,7 @@ True
 >>> uuid.uuid4() in uuid128.version(4)
 True
 >>> uuid128.version(7).choice(rng=rng)
-UUID('f8cb83e0-b8b9-798b-b728-b4fa42485e3a')
+UUID('14ba5e5a-eaa5-7157-a3e7-0682c2094cac')
 
 >>> # Dates and datetimes
 >>> dates.range(date(2024, 1, 1), date(2025, 1, 1)).size
@@ -99,12 +92,6 @@ UUID('f8cb83e0-b8b9-798b-b728-b4fa42485e3a')
 >>> new_year = datetime(2024, 1, 1, tzinfo=UTC)
 >>> datetimes.range(new_year, datetime(2024, 1, 2, tzinfo=UTC)).size
 86400000000
-
->>> # Tuples of anything: a year of UUIDv7 events from random MAC addresses
->>> year = datetimes.range(new_year, datetime(2025, 1, 1, tzinfo=UTC))
->>> events = product(uuid128.version(7), year, mac.local & mac.unicast)
->>> events.choice(rng=rng)
-(UUID('87c088c2-719e-7f82-acdb-109dda3a1e99'), datetime.datetime(2024, 7, 4, 5, 51, 31, 716165, tzinfo=datetime.timezone.utc), '9e:b3:67:a9:c3:78')
 
 >>> # Flags
 >>> class Permission(Flag):
