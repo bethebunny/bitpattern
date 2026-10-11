@@ -54,7 +54,7 @@ class Int(OrderedCodec[int]):
         return bits - (1 << self.width) if bits > self.max else bits
 
     def range(self, start: int | None = None, stop: int | None = None) -> BDDSet[int]:
-        """Integers in `[start, stop)`. `None` for an open interval."""
+        """Integers in `[start, stop)`. A bound of `None` leaves that end unbounded."""
         low = self.min if start is None else max(start, self.min)
         high = self.max + 1 if stop is None else min(stop, self.max + 1)
         # Negative integers are encoded above the rest, offset by 2**width.
