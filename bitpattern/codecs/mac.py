@@ -12,16 +12,21 @@ from .codec import BDDSet, OrderedCodec
 
 __all__ = ["MAC", "mac"]
 
-# 01:23:45:67:89:ab, 01-23-45-67-89-ab or Cisco's 0123.4567.89ab, ignoring case.
 ADDRESS = re.compile(
-    r"(?:[0-9a-f]{2}:){5}[0-9a-f]{2}"  # XXX: use multiline RE syntax with inline comments instead ofthe line comment
-    r"|(?:[0-9a-f]{2}-){5}[0-9a-f]{2}"
-    r"|(?:[0-9a-f]{4}\.){2}[0-9a-f]{4}",
-    re.IGNORECASE,
+    r"""
+      (?:[0-9a-f]{2}:){5}[0-9a-f]{2}    # 01:23:45:67:89:ab
+    | (?:[0-9a-f]{2}-){5}[0-9a-f]{2}    # 01-23-45-67-89-ab
+    | (?:[0-9a-f]{4}\.){2}[0-9a-f]{4}   # Cisco's 0123.4567.89ab
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
-# 00:1a:2b or 00-1a-2b, the first three octets of an address.
-OUI = re.compile(  # XXX same
-    r"(?:[0-9a-f]{2}:){2}[0-9a-f]{2}|(?:[0-9a-f]{2}-){2}[0-9a-f]{2}", re.IGNORECASE
+# The first three octets of an address.
+OUI = re.compile(
+    r"""
+      (?:[0-9a-f]{2}:){2}[0-9a-f]{2}    # 00:1a:2b
+    | (?:[0-9a-f]{2}-){2}[0-9a-f]{2}    # 00-1a-2b
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
 
 
