@@ -1,0 +1,642 @@
+"""Functions that make diagrams."""
+
+from std.bit import count_leading_zeros
+from std.collections import Set
+from std.ffi import c_int, c_uint, external_call
+from std.python._cpython import PyObjectPtr
+from std.utils import Variant
+
+from arena import (
+    ACCEPT,
+    Arena,
+    Id,
+    Interrupted,
+    MAX_WIDTH,
+    NARROW_WIDTH,
+    REJECT,
+    narrow_bit,
+    wide_bit,
+)
+from arena import Misordered
+from arena import exactly_these as built
+from arena.build import diagram as built_diagram, interval as built_interval
+from arena.reshape import ShiftedOut
+from arena.reshape import freed_between as freed, lshift as shifted
+from arena.reshape import narrowed as narrowed_node
+from arena.rows import Row, rows as rows_of, rebuilt as rebuilt_node
+from bigint import BigUInt
+
+from .args import (
+    Arguments,
+    Signature,
+    bit,
+    clamped,
+    described,
+    in_range,
+    least_width,
+    node,
+    not_an_instance,
+    utf8,
+    width,
+)
+from .capi import (
+    Py_DecRef,
+    Py_NewRef,
+    PyErr_Clear,
+    PyErr_Occurred,
+    PyImport_ImportModule,
+    PyIter_Next,
+    PyList_New,
+    PyList_SetItem,
+    PyLong_FromLongLong,
+    PyObject_GetAttrString,
+    PyObject_GetIter,
+    PyTuple_GetItem,
+    PyTuple_New,
+    PyTuple_SetItem,
+    PyTuple_Size,
+    PyType_GetFlags,
+    PyUnicode_AsUTF8AndSize,
+    PyUnicode_InternFromString,
+    cstr,
+    ob_type,
+)
+from .errors import PyError, type_error, value_error
+from .ints import Ints, big_of, fitting, indexed, u128_of
+from .objects import enter, leave, made, node_of, wrap
+from .state import StatePointer, give_back, taken_arena
+
+
+comptime Py_TPFLAGS_LIST_SUBCLASS: UInt64 = 1 << 25
+comptime Py_TPFLAGS_TUPLE_SUBCLASS: UInt64 = 1 << 26
+comptime Py_TPFLAGS_UNICODE_SUBCLASS: UInt64 = 1 << 28
+
+
+def finished(state: StatePointer, id: Id) raises PyError -> PyObjectPtr:
+    """Leaves the call with `id`'s object, wrapped first so nothing collects `id`.
+    """
+    try:
+        var result = wrap(state, id)
+        leave(state)
+        return result
+    except e:
+        leave(state)
+        raise e
+
+
+def reduced(state: StatePointer, o: PyObjectPtr) raises PyError -> PyObjectPtr:
+    """BDD.__reduce__: leaves pickle by name, and other nodes as flat rows, since
+    nesting would recurse once per bit."""
+    var id = node_of(o)
+    if id.is_leaf():
+        var name = PyUnicode_InternFromString(
+            cstr("BDD.ACCEPT") if id == ACCEPT else cstr("BDD.REJECT")
+        )
+        if not name:
+            raise PyError()
+        return name
+    var arena = taken_arena(state)
+    var found: List[Row]
+    try:
+        found = rows_of(arena[], id)
+    except:
+        give_back(state, arena)
+        raise PyError()
+    give_back(state, arena)
+    var written = PyList_New(len(found))
+    if not written:
+        raise PyError()
+    for index in range(len(found)):
+        var row = found[index]
+        var item = external_call[
+            "Py_BuildValue", PyObjectPtr, num_fixed_args=1
+        ](cstr("(iII)"), c_int(row.bit), c_uint(row.lo), c_uint(row.hi))
+        # Steals `item`, even if it fails.
+        if not item or PyList_SetItem(written, index, item) < 0:
+            Py_DecRef(written)
+            raise PyError()
+    var module = external_call["PyType_GetModule", PyObjectPtr](ob_type(o))
+    var rebuild = PyObject_GetAttrString(module, cstr("_rebuilt"))
+    if not rebuild:
+        Py_DecRef(written)
+        raise PyError()
+    var reduction = external_call[
+        "Py_BuildValue", PyObjectPtr, num_fixed_args=1
+    ](cstr("(N(N))"), rebuild, written)
+    if not reduction:
+        raise PyError()
+    return reduction
+
+
+comptime LSHIFT = Signature("lshift", 2, 2, ["node", "by", "", "", ""])
+
+
+def lshift(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
+    var id = node(state, args[0])
+    var by = fitting(args[1])
+    if not by.fits():
+        # Too far for any decision node.
+        if id.is_leaf():
+            return Py_NewRef(args[0])
+        var arena = taken_arena(state)
+        var top = arena[].decision(id).bit
+        give_back(state, arena)
+        # `described` can run Python, so the arena goes back first.
+        raise shifted_out(described(state[].ints, args[1]), top)
+    if by.value == 0 or id.is_leaf():
+        return Py_NewRef(args[0])
+    var arena = enter(state)
+    var moved: Variant[Id, ShiftedOut]
+    if Int64(Int32.MIN) <= by.value and by.value <= Int64(Int32.MAX):
+        try:
+            moved = shifted(arena[], id, Int32(by.value))
+        except:
+            give_back(state, arena)
+            leave(state)
+            raise PyError()
+    else:
+        moved = ShiftedOut(arena[].decision(id).bit)
+    give_back(state, arena)
+    if moved.isa[ShiftedOut]():
+        leave(state)
+        raise shifted_out(String(by.value), moved[ShiftedOut].bit)
+    return finished(state, moved[Id])
+
+
+def shifted_out(by: String, bit: Int32) -> PyError:
+    return value_error(
+        String("shifting by ", by, " moves bit ", bit, " out of range")
+    )
+
+
+comptime FREED_BETWEEN = Signature(
+    "freed_between", 3, 1, ["node", "low_bit", "high_bit", "", ""]
+)
+
+
+def freed_between(
+    state: StatePointer, args: Arguments
+) raises PyError -> PyObjectPtr:
+    """Accepts `i` when `node` accepts any `i'` with the same bits outside
+    `[low_bit, high_bit)`."""
+    var id = node(state, args[0])
+    var low = clamped(args[1])
+    var high = clamped(args[2])
+    if low >= high:
+        return Py_NewRef(args[0])
+
+    def walk(
+        mut arena: Arena,
+    ) raises Interrupted {var id, var low, var high} -> Id:
+        return freed(arena, id, low, high)
+
+    return made(state, walk)
+
+
+comptime NARROWED = Signature("narrowed", 2, 1, ["node", "width", "", "", ""])
+
+
+def narrowed(
+    state: StatePointer, args: Arguments
+) raises PyError -> PyObjectPtr:
+    var id = node(state, args[0])
+    var at = width(state[].ints, args[1])
+    var arena = taken_arena(state)
+    var narrow = arena[].tests_only_below(id, at)
+    give_back(state, arena)
+    if narrow:
+        return Py_NewRef(args[0])
+
+    def walk(mut arena: Arena) raises Interrupted {var id, var at} -> Id:
+        return narrowed_node(arena, id, at)
+
+    return made(state, walk)
+
+
+comptime DIAGRAM = Signature("diagram", 1, 1, ["bits", "", "", "", ""])
+
+
+def diagram(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
+    """`bits` is most significant first, with `?` for free bits."""
+    var o = args[0]
+    if PyType_GetFlags(ob_type(o)) & Py_TPFLAGS_UNICODE_SUBCLASS == 0:
+        raise not_an_instance(state, o, "str")
+    var size = 0
+    var data = PyUnicode_AsUTF8AndSize(o, size)
+    if data == 0:
+        raise PyError()
+    # The str keeps its UTF-8 for as long as it lives, and the caller holds it.
+    var bits = StringSlice(
+        unsafe_from_utf8=Span[UInt8, ImmUntrackedOrigin](
+            unsafe_ptr=Pointer[UInt8, ImmUntrackedOrigin](
+                unsafe_from_address=data
+            ),
+            length=size,
+        )
+    )
+    var bytes = bits.as_bytes()
+    for index in range(size):
+        var byte = bytes[index]
+        if (
+            byte != UInt8(ord("0"))
+            and byte != UInt8(ord("1"))
+            and byte != UInt8(ord("?"))
+        ):
+            # Bits are ASCII, so the first byte that isn't one starts a character.
+            var decoded = Codepoint.unsafe_decode_utf8_codepoint(bytes[index:])
+            raise value_error(
+                String("bits are 0, 1 or ?, not ", quoted(decoded[0]))
+            )
+    if size > Int(MAX_WIDTH):
+        raise value_error(String(size, " bits is too many"))
+
+    def build(mut arena: Arena) raises Interrupted {var bits} -> Id:
+        return built_diagram(arena, bits)
+
+    return made(state, build)
+
+
+def quoted(symbol: Codepoint) -> String:
+    """`symbol` as the Rust build's errors write it (Rust's `{:?}`)."""
+    var code = symbol.to_u32()
+    if code == 0:
+        return "'\\0'"
+    if code == 9:
+        return "'\\t'"
+    if code == 10:
+        return "'\\n'"
+    if code == 13:
+        return "'\\r'"
+    if code == UInt32(ord("'")) or code == UInt32(ord("\\")):
+        return String("'\\", symbol, "'")
+    if escaped(code):
+        return String("'\\u{", hex(code, prefix=""), "}'")
+    return String("'", symbol, "'")
+
+
+def escaped(code: UInt32) -> Bool:
+    """Whether Rust escapes the character: if it isn't printable (an "other" character,
+    or a separator but space) or it extends a grapheme (taken to be a nonspacing or
+    enclosing mark). Asks Python's unicodedata, since Mojo has no character categories.
+    """
+    if code < 0x80:
+        return code < 0x20 or code == 0x7F
+    var unicodedata = PyImport_ImportModule(cstr("unicodedata"))
+    if not unicodedata:
+        PyErr_Clear()
+        return False
+    var category = external_call[
+        "PyObject_CallMethod", PyObjectPtr, num_fixed_args=3
+    ](unicodedata, cstr("category"), cstr("C"), c_int(code))
+    Py_DecRef(unicodedata)
+    if not category:
+        PyErr_Clear()
+        return False
+    var name = utf8(category)
+    Py_DecRef(category)
+    return (
+        name.startswith("C")
+        or name.startswith("Z")
+        or name == "Mn"
+        or name == "Me"
+    )
+
+
+comptime EXACTLY_THESE = Signature(
+    "exactly_these", 2, 1, ["values", "width", "", "", ""]
+)
+
+
+def exactly_these(
+    state: StatePointer, args: Arguments
+) raises PyError -> PyObjectPtr:
+    """The set of `values`, and its width (at least `width`). Errors are IntSet's.
+    """
+    var least = least_width(state[].ints, args[1])
+    var members = Members.read(state[].ints, args[0])
+    var bits = members.bits()
+    if bits > Int(MAX_WIDTH):
+        raise value_error(
+            String("a value of ", bits, " bits is wider than any set")
+        )
+    var at = max(least, Int32(bits))
+
+    def build(mut arena: Arena) raises Interrupted {imm members, var at} -> Id:
+        if members.wide:
+            return built[wide_bit](arena, members.wide.value(), at)
+        return built[narrow_bit](arena, members.narrow, at)
+
+    var node = made(state, build)
+    var pair = PyTuple_New(2)
+    var width_int = PyLong_FromLongLong(Int64(at))
+    if not pair or not width_int:
+        Py_DecRef(node)
+        Py_DecRef(pair)
+        Py_DecRef(width_int)
+        raise PyError()
+    _ = PyTuple_SetItem(pair, 0, node)
+    _ = PyTuple_SetItem(pair, 1, width_int)
+    return pair
+
+
+struct Distinct[T: KeyElement & Copyable & Comparable & Deinitable](Movable):
+    """Values without repeats. The list is deduplicated each time it doubles, and becomes
+    a hash set once most values were repeats."""
+
+    var values: List[Self.T]
+    var sorted_length: Int
+    """`values` is sorted and distinct up to here."""
+    var pushed: Int
+    """Counts repeats too."""
+    var hashed: Set[Self.T]
+    var hashing: Bool
+
+    def __init__(out self):
+        self.values = List[Self.T]()
+        self.sorted_length = 0
+        self.pushed = 0
+        self.hashed = Set[Self.T]()
+        self.hashing = False
+
+    def __init__(out self, *, var sorted: List[Self.T]):
+        """`sorted` is sorted and distinct."""
+        self.sorted_length = len(sorted)
+        self.pushed = len(sorted)
+        self.values = sorted^
+        self.hashed = Set[Self.T]()
+        self.hashing = False
+
+    def push(mut self, var value: Self.T):
+        if self.hashing:
+            self.hashed.add(value^)
+            return
+        self.values.append(value^)
+        self.pushed += 1
+        if len(self.values) >= 2 * max(self.sorted_length, 1024):
+            deduplicate(self.values)
+            self.sorted_length = len(self.values)
+            if 2 * len(self.values) < self.pushed:
+                for value in self.values:
+                    self.hashed.add(value.copy())
+                self.hashing = True
+                self.values = List[Self.T]()
+
+    def sorted(mut self) -> List[Self.T]:
+        """Empties it."""
+        var values = List[Self.T]()
+        swap(values, self.values)
+        for value in self.hashed:
+            values.append(value.copy())
+        self.hashed = Set[Self.T]()
+        self.hashing = False
+        deduplicate(values)
+        return values^
+
+
+def deduplicate[T: Copyable & Comparable & Deinitable](mut values: List[T]):
+    sort(Span(values))
+    var kept = 0
+    for index in range(len(values)):
+        if kept == 0 or values[kept - 1] != values[index]:
+            values[kept] = values[index].copy()
+            kept += 1
+    values.shrink(kept)
+
+
+struct Members(Movable):
+    """Sorted and distinct. In UInt128s, which are smaller and sort faster, unless a
+    value doesn't fit one."""
+
+    var narrow: List[UInt128]
+    var wide: Optional[List[BigUInt]]
+
+    @staticmethod
+    def read(ints: Ints, values: PyObjectPtr) raises PyError -> Members:
+        var iterator = PyObject_GetIter(values)
+        if not iterator:
+            raise PyError()
+        var narrow = Distinct[UInt128]()
+        var wide: Optional[Distinct[BigUInt]] = None
+        while True:
+            var item = PyIter_Next(iterator)
+            if not item:
+                break
+            var int: PyObjectPtr
+            try:
+                # Runs __index__ once, so a second read can't hide the first's error.
+                int = indexed(ints, item)
+            except e:
+                Py_DecRef(item)
+                Py_DecRef(iterator)
+                raise e
+            Py_DecRef(item)
+            var small = u128_of(ints, int) if not wide else None
+            if small:
+                narrow.push(small.value())
+                Py_DecRef(int)
+                continue
+            var signed = big_of(ints, int)
+            if signed[0]:
+                var error = value_error(
+                    String(
+                        "IntSets can't hold negative numbers, got ",
+                        described(ints, int),
+                    )
+                )
+                Py_DecRef(int)
+                Py_DecRef(iterator)
+                raise error
+            Py_DecRef(int)
+            if not wide:
+                var promoted = List[BigUInt]()
+                for value in narrow.sorted():
+                    promoted.append(BigUInt(value))
+                narrow = Distinct[UInt128]()
+                wide = Distinct[BigUInt](sorted=promoted^)
+            wide.value().push(signed[1].copy())
+        Py_DecRef(iterator)
+        if PyErr_Occurred():
+            raise PyError()
+        if wide:
+            return Members(List[UInt128](), wide.value().sorted())
+        return Members(narrow.sorted(), None)
+
+    def __init__(
+        out self, var narrow: List[UInt128], var wide: Optional[List[BigUInt]]
+    ):
+        self.narrow = narrow^
+        self.wide = wide^
+
+    def bits(self) -> Int:
+        if self.wide:
+            ref values = self.wide.value()
+            return values[len(values) - 1].bits() if values else 0
+        if not self.narrow:
+            return 0
+        return 128 - Int(count_leading_zeros(self.narrow[len(self.narrow) - 1]))
+
+
+comptime INTERVAL = Signature(
+    "interval", 3, 2, ["start", "stop", "width", "", ""]
+)
+
+
+def interval(
+    state: StatePointer, args: Arguments
+) raises PyError -> PyObjectPtr:
+    var at = width(state[].ints, args[2])
+    var start = fitting(args[0])
+    var stop = fitting(args[1])
+    # Bounds that fit an Int64 make members that fit a UInt128.
+    if start.fits() and stop.fits():
+        if stop.value <= 0:
+            return wrap(state, REJECT)
+        var top = UInt128(0)
+        if at > 0:
+            top = UInt128.MAX >> UInt128(128 - min(at, 128))
+        var first = UInt128(max(start.value, 0))
+        var last = min(UInt128(stop.value - 1), top)
+        if first > last:
+            return wrap(state, REJECT)
+        return narrow_interval(state, first, last, at)
+    var low = big_int(state[].ints, args[0])
+    var high = big_int(state[].ints, args[1])
+    if high[0] or not high[1]:
+        return wrap(state, REJECT)
+    var last = high[1] - BigUInt(1)
+    if last.bits() > Int(at):
+        last = BigUInt.mask(Int(at))
+    var first = BigUInt() if low[0] else low[1].copy()
+    if first > last:
+        return wrap(state, REJECT)
+    if at <= NARROW_WIDTH:
+        return narrow_interval(
+            state,
+            first.fitting_uint128().value(),
+            last.fitting_uint128().value(),
+            at,
+        )
+
+    def build(
+        mut arena: Arena,
+    ) raises Interrupted {imm first, imm last, var at} -> Id:
+        return built_interval[wide_bit](arena, first, last, at)
+
+    return made(state, build)
+
+
+def narrow_interval(
+    state: StatePointer, first: UInt128, last: UInt128, at: Int32
+) raises PyError -> PyObjectPtr:
+    def build(
+        mut arena: Arena,
+    ) raises Interrupted {var first, var last, var at} -> Id:
+        return built_interval[narrow_bit](arena, first, last, at)
+
+    return made(state, build)
+
+
+def big_int(ints: Ints, o: PyObjectPtr) raises PyError -> Tuple[Bool, BigUInt]:
+    """`o`'s sign (True if negative) and magnitude."""
+    var int = indexed(ints, o)
+    var signed = big_of(ints, int)
+    Py_DecRef(int)
+    return signed^
+
+
+comptime REBUILT = Signature("_rebuilt", 1, 1, ["rows", "", "", "", ""])
+
+
+def rebuilt(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
+    var rows = read_rows(state, args[0])
+    if not rows or not formed(rows):
+        raise value_error("rows don't make a diagram")
+    var arena = enter(state)
+    var built: Variant[Id, Misordered]
+    try:
+        built = rebuilt_node(arena[], rows)
+    except:
+        give_back(state, arena)
+        leave(state)
+        raise PyError()
+    give_back(state, arena)
+    if built.isa[Misordered]():
+        leave(state)
+        raise value_error(String(built[Misordered]))
+    return finished(state, built[Id])
+
+
+def formed(rows: List[Row]) -> Bool:
+    """Whether every branch names a leaf or an earlier row."""
+    for index in range(len(rows)):
+        # Row `index` makes node `2 + index`.
+        if Int(rows[index].lo) >= 2 + index or Int(rows[index].hi) >= 2 + index:
+            return False
+    return True
+
+
+def read_rows(state: StatePointer, o: PyObjectPtr) raises PyError -> List[Row]:
+    """A sequence of `(bit, lo, hi)` tuples, as PyO3 reads a Vec of them."""
+    var flags = PyType_GetFlags(ob_type(o))
+    if flags & Py_TPFLAGS_UNICODE_SUBCLASS:
+        raise type_error("Can't extract `str` to `Vec`")
+    var listed = flags & (Py_TPFLAGS_LIST_SUBCLASS | Py_TPFLAGS_TUPLE_SUBCLASS)
+    if not listed and not is_sequence(o):
+        raise not_an_instance(state, o, "Sequence")
+    var iterator = PyObject_GetIter(o)
+    if not iterator:
+        raise PyError()
+    var rows = List[Row]()
+    while True:
+        var item = PyIter_Next(iterator)
+        if not item:
+            break
+        try:
+            rows.append(read_row(state, item))
+        except e:
+            Py_DecRef(item)
+            Py_DecRef(iterator)
+            raise e
+        Py_DecRef(item)
+    Py_DecRef(iterator)
+    if PyErr_Occurred():
+        raise PyError()
+    return rows^
+
+
+def is_sequence(o: PyObjectPtr) raises PyError -> Bool:
+    """`isinstance(o, collections.abc.Sequence)`."""
+    var abc = PyImport_ImportModule(cstr("collections.abc"))
+    if not abc:
+        raise PyError()
+    var sequence = PyObject_GetAttrString(abc, cstr("Sequence"))
+    Py_DecRef(abc)
+    if not sequence:
+        raise PyError()
+    var found = external_call["PyObject_IsInstance", c_int](o, sequence)
+    Py_DecRef(sequence)
+    if found < 0:
+        raise PyError()
+    return found == 1
+
+
+def read_row(state: StatePointer, o: PyObjectPtr) raises PyError -> Row:
+    """A branch out of range is malformed, not an error here: it names no row.
+    """
+    if PyType_GetFlags(ob_type(o)) & Py_TPFLAGS_TUPLE_SUBCLASS == 0:
+        raise not_an_instance(state, o, "tuple")
+    if PyTuple_Size(o) != 3:
+        raise value_error(
+            String(
+                "expected tuple of length 3, but got tuple of length ",
+                PyTuple_Size(o),
+            )
+        )
+    var at = bit(state[].ints, PyTuple_GetItem(o, 0))
+    var lo = in_range(PyTuple_GetItem(o, 1), Int32.MAX)
+    var hi = in_range(PyTuple_GetItem(o, 2), Int32.MAX)
+    return Row(
+        at,
+        UInt32(lo.value()) if lo else UInt32.MAX,
+        UInt32(hi.value()) if hi else UInt32.MAX,
+    )

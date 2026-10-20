@@ -9,10 +9,9 @@ and the diagrams themselves in `bitpattern.bdd`.
 """
 
 from .bdd import BDD
+from .bdd import __version__ as __version__  # from pyproject.toml
 from .codecs import BDDSet, Codec, OrderedCodec
 from .intset import IntSet
 from .pattern import Pattern
-
-__version__ = "0.2.0"
 
 __all__ = ["BDD", "BDDSet", "Codec", "IntSet", "OrderedCodec", "Pattern"]

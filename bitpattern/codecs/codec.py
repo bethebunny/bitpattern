@@ -14,11 +14,15 @@ from collections.abc import Iterable, Iterator, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, Generic, Literal, TypeVar, TypeVarTuple, overload
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, TypeVarTuple, overload
 
-from ..bdd import BDD, freed_between, lshift, render_count
-from ..intset import IntSet
+from ..bdd import BDD, count_repr, freed_between, lshift
+from ..dlpack import CPU, DType, exported, unsigned
+from ..intset import IntSet, listed
 from ..pattern import Pattern
+
+if TYPE_CHECKING:
+    from typing_extensions import CapsuleType
 
 __all__ = ["BDDSet", "Codec", "OrderedCodec", "Tuple", "product", "project"]
 
@@ -60,8 +64,8 @@ class Codec(Generic[T]):
       - `ValueError` from `encode`, for a value of the right type that isn't legal
       - `IndexError` from `decode`, for bits outside `all`, though `decode` doesn't
         have to check
-    If a type has illegal bit patterns, the Codec should override `all` to return
-    the legal pattern domain for the type. `~` and `pattern` then stay inside `all`.
+    Codecs with illegal bit patterns override `all`, and `~` and `pattern` stay inside
+    it.
     """
 
     width: int
@@ -71,32 +75,36 @@ class Codec(Generic[T]):
         return self.name
 
     def encode(self, value: object) -> int:
-        """`value`'s bits. Raises TypeError if `value` is the wrong type, and
-        ValueError if `value` is the right type but not a legal value."""
+        """`value`'s bits. TypeError for the wrong type, and ValueError for an illegal
+        value."""
         raise NotImplementedError
 
     def decode(self, bits: int) -> T:
-        """The value encoded as `bits`. Bits outside `all` may raise IndexError, but
-        don't have to."""
+        """Bits outside `all` may raise IndexError."""
         raise NotImplementedError
+
+    def dtype(self) -> DType:
+        """The C type that sets export their values as, eg. to `numpy.from_dlpack`.
+
+        Codecs that encode values as a C type's bits (like int32) return that type, so a
+        subclass that changes `encode` overrides `dtype` too. Others export as IntSets
+        do.
+        """
+        return unsigned(self.width)
 
     @cached_property
     def all(self) -> BDDSet[T]:
-        """Every value, which is every bit pattern unless a codec overrides `all`."""
         return BDDSet(self, IntSet.from_bdd(BDD.ACCEPT, self.width))
 
     @cached_property
     def none(self) -> BDDSet[T]:
-        """The empty set."""
         return BDDSet(self, IntSet.from_bdd(BDD.REJECT, self.width))
 
     def set(self, values: Iterable[T] = ()) -> BDDSet[T]:
-        """Constructs a BDDSet from the input values."""
         return BDDSet(self, IntSet(map(self.encode, values), width=self.width))
 
     def pattern(self, text: str) -> BDDSet[T]:
-        """Constructs a BDDSet of values matching the pattern. Bit patterns outside
-        `all` are left out."""
+        """Values matching `text`, within `all`."""
         pattern = Pattern(text)
         if pattern.width != self.width:
             raise ValueError(f"pattern is {pattern.width} bits, not {self.width}")
@@ -112,16 +120,14 @@ class OrderedCodec(Codec[T]):
 
     @property
     def min(self) -> T:
-        """The smallest value."""
         return self.all[0]
 
     @property
     def max(self) -> T:
-        """The largest value."""
         return self.all[-1]
 
     def range(self, start: T | None = None, stop: T | None = None) -> BDDSet[T]:
-        """Values in `[start, stop)`. A bound of `None` leaves that end unbounded."""
+        """Values in `[start, stop)`. `None` is unbounded."""
         low = 0 if start is None else self.encode(start)
         high = 1 << self.width if stop is None else self.encode(stop)
         return BDDSet(self, IntSet.range(low, high, width=self.width)) & self.all
@@ -161,9 +167,8 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
     A diagram has at most `size * w` nodes and usually far fewer, eg. a pattern has
     at most one node per bit.
 
-    Set operators and comparisons only accept sets of the same codec. Anything else
-    raises TypeError, including plain sets. Convert this set via `set(bddset)` or
-    the other via `codec.set(other)` for comparison.
+    Set operators and comparisons only accept sets of the same codec, and raise
+    TypeError for anything else (convert with `set(s)` or `codec.set(other)`).
     """
 
     codec: Codec[T]
@@ -176,11 +181,13 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
             )
 
     def _storage(self, other: object) -> IntSet:
-        if not isinstance(other, BDDSet) or other.codec != self.codec:
-            # Raise rather than return NotImplemented. IntSet's reflected operators
-            # would try to enumerate the set.
-            raise TypeError(f"{self.codec} sets only combine with each other")
-        return other.storage
+        # `is` first, since it's quicker.
+        if isinstance(other, BDDSet) and (
+            other.codec is self.codec or other.codec == self.codec
+        ):
+            return other.storage
+        # Not NotImplemented, since IntSet's reflected operators would enumerate the set.
+        raise TypeError(f"{self.codec} sets only combine with each other")
 
     @property
     def size(self) -> int:
@@ -204,6 +211,29 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
     def __reversed__(self) -> Iterator[T]:
         return map(self.codec.decode, reversed(self.storage))
 
+    def __dlpack__(
+        self,
+        *,
+        stream: int | None = None,
+        max_version: tuple[int, int] | None = None,
+        dl_device: tuple[int, int] | None = None,
+        copy: bool | None = None,
+    ) -> CapsuleType:
+        """The values as a DLPack tensor of `codec.dtype()`. Values wider than an
+        unsigned type are rows of words."""
+        return exported(
+            self.storage.bdd,
+            width=self.codec.width,
+            dtype=self.codec.dtype(),
+            stream=stream,
+            max_version=max_version,
+            dl_device=dl_device,
+            copy=copy,
+        )
+
+    def __dlpack_device__(self) -> tuple[int, int]:
+        return (CPU, 0)
+
     @overload
     def __getitem__(self, item: int) -> T: ...
     @overload
@@ -216,7 +246,7 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
     def index(self, value: object, start: int = 0, stop: int | None = None) -> int:
         try:
             bits = self.codec.encode(value)
-        except TypeError as e:  # like list.index, a value of another type isn't in it
+        except TypeError as e:  # as for list.index
             raise ValueError(f"{value!r} is not in the set") from e
         return self.storage.index(bits, start, stop)
 
@@ -224,7 +254,7 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
         return int(value in self)
 
     def choice(self, *, rng: random.Random | None = None) -> T:
-        """random.choice(self), but supports sets larger than 2**63."""
+        """Like `random.choice`, but at any size."""
         return self.codec.decode(self.storage.choice(rng=rng))
 
     def __and__(self, other: AbstractSet[T]) -> BDDSet[T]:
@@ -247,7 +277,6 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
         return BDDSet(self.codec, self._storage(other) - self.storage)
 
     def __invert__(self) -> BDDSet[T]:
-        """Every other value in `codec.all`."""
         return self.codec.all - self
 
     def __le__(self, other: object) -> bool:
@@ -263,7 +292,7 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
         return self.storage > self._storage(other)
 
     def __mul__(self, other: BDDSet[U]) -> BDDSet[tuple[T, U]]:
-        """Pairs from this set and `other`, ie. `product(self, other)`."""
+        """`product(self, other)`."""
         if not isinstance(other, BDDSet):
             return NotImplemented
         return product(self, other)
@@ -272,24 +301,19 @@ class BDDSet(AbstractSet[T], Sequence[T], Generic[T]):
         return self.storage.isdisjoint(self._storage(other))
 
     def __repr__(self) -> str:
-        # Render small sets directly. Larger sets print a summary.
         if (size := self.size) <= 10:
-            return f"BDDSet({self.codec}, {list(self)})"
-        head = ", ".join(map(repr, itertools.islice(self, 4)))
-        return (
-            f"BDDSet({self.codec}, [{head}, ..., {self[-2]!r}, {self[-1]!r}], "
-            f"size={render_count(size)})"
-        )
+            return f"BDDSet({self.codec}, [{listed(self)}])"
+        head, tail = listed(itertools.islice(self, 4)), listed([self[-2], self[-1]])
+        return f"BDDSet({self.codec}, [{head}, ..., {tail}], size={count_repr(size)})"
 
 
 @dataclass(frozen=True, repr=False, init=False)
 class Tuple(Codec[tuple[*Ts]]):
     """Tuples with a value from each field's codec, with the first field's bits on top.
 
-    Sets of tuples iterate in order of their first field, then their second, and so
-    on. `product(a, b, c)` makes sets of tuples, and `a * b` is `product(a, b)`. A
-    product has about as many nodes as its sets combined. `project` gets the values
-    of one field.
+    Sets of tuples sort by their first field, then their second, and so on. `product`
+    makes them (`a * b` is `product(a, b)`), with about as many nodes as its sets
+    combined. `project` gets one field's values.
 
     >>> from bitpattern.codecs import ipv4, uint16
     >>> private = ipv4.cidr("10.0.0.0/8") * uint16.range(1024, 65536)
@@ -324,29 +348,39 @@ class Tuple(Codec[tuple[*Ts]]):
 
     @cached_property
     def _offsets(self) -> tuple[int, ...]:
-        """Where each field's lowest bit is."""
+        """Each field's lowest bit."""
         widths = [field.width for field in reversed(self.fields[1:])]
         return tuple(itertools.accumulate(widths, initial=0))[::-1]
+
+    @cached_property
+    def _layout(self) -> tuple[tuple[Codec[Any], int, int], ...]:
+        """Each field with its lowest bit and its mask."""
+        masks = [(1 << field.width) - 1 for field in self.fields]
+        return tuple(zip(self.fields, self._offsets, masks))
 
     def encode(self, value: object) -> int:
         if not isinstance(value, tuple):
             raise TypeError(f"{self} can't encode {value!r}")
         if len(value) != len(self.fields):
             raise ValueError(f"{self} can't encode {value!r}")
-        return sum(
-            field.encode(item) << offset
-            for field, item, offset in zip(self.fields, value, self._offsets)
-        )
+        bits = 0
+        try:
+            for field, item in zip(self.fields, value):
+                bits = bits << field.width | field.encode(item)
+        except StopIteration as e:
+            # As a generator would, so a field's StopIteration can't quietly end an
+            # iteration (eg. in `set`).
+            raise RuntimeError(f"{self} raised StopIteration") from e
+        return bits
 
     def decode(self, bits: int) -> tuple[*Ts]:
+        # A generator, so a field's StopIteration becomes a RuntimeError.
         return tuple(
-            field.decode(bits >> offset & ((1 << field.width) - 1))
-            for field, offset in zip(self.fields, self._offsets)
+            field.decode(bits >> low & mask) for field, low, mask in self._layout
         )
 
     @cached_property
     def all(self) -> BDDSet[tuple[*Ts]]:
-        """Every tuple of the fields' values."""
         return product(*(field.all for field in self.fields))
 
 
@@ -365,7 +399,7 @@ def product(*sets: BDDSet[Any]) -> BDDSet[tuple[Any, ...]]: ...
 def product(*sets: BDDSet[Any]) -> BDDSet[tuple[Any, ...]]:
     """The tuples with a value from each of `sets`, like `itertools.product`."""
     codec = Tuple(*(source.codec for source in sets))
-    # Each set's diagram sits above the next one's, so `&` just chains the diagrams.
+    # Each diagram sits above the next, so `&` chains them.
     shifted = (
         lshift(source.storage.bdd, offset)
         for source, offset in zip(sets, codec._offsets)
@@ -402,7 +436,6 @@ def project(source: BDDSet[tuple[Any, ...]], index: int) -> BDDSet[Any]:
     if not isinstance(codec := source.codec, Tuple):
         raise TypeError(f"{codec} sets aren't sets of tuples")
     field, low = codec.fields[index], codec._offsets[index]
-    # Free the other fields' bits, then move this field down to bit 0.
     bdd = freed_between(
         source.storage.bdd, low_bit=low + field.width, high_bit=codec.width
     )

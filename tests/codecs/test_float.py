@@ -4,7 +4,9 @@ patterns."""
 import bisect
 import itertools
 import math
+import pickle
 import random
+import struct
 import sys
 from fractions import Fraction
 from functools import cache
@@ -470,3 +472,62 @@ def test_float_ranges_can_leave_an_end_open():
 )
 def test_float_min_and_max_are_the_finite_ends(codec, largest):
     assert (codec.min, codec.max) == (-largest, largest)
+
+
+def rounded_then_packed(codec, value):
+    """encode as it was for every format: round to the format, then pack."""
+    try:
+        packed = struct.pack(codec.format, codec._round(value))
+    except OverflowError:
+        return None
+    return int.from_bytes(packed) >> codec._spare
+
+
+def encoded(codec, value):
+    try:
+        return codec.encode(value)
+    except ValueError:
+        return None
+
+
+def test_float16_rounds_once_like_it_rounded_twice():
+    """struct rounds a double to float16 exactly once, so encode can skip _round:
+    the two agree at every float16, halfway between neighbours, and either side."""
+    values = [float16.decode(bits) for bits in range(1 << 16)]
+    finite = sorted({value for value in values if math.isfinite(value)})
+    halves = [(low + high) / 2 for low, high in itertools.pairwise(finite)]
+    beside = [
+        math.nextafter(half, side) for half in halves for side in (-math.inf, math.inf)
+    ]
+    for value in [*values, *halves, *beside, 65520.0, -65520.0, 1e300]:
+        assert encoded(float16, value) == rounded_then_packed(float16, value), value
+
+
+@settings(max_examples=2000)
+@given(st.floats())
+def test_wider_floats_round_once_like_they_rounded_twice(value):
+    for codec in (float32, float64):
+        assert encoded(codec, value) == rounded_then_packed(codec, value)
+
+
+def test_float_sets_pickle_after_their_codec_has_encoded():
+    float64.encode(0.5)
+    group = float64.range(0.0, 1.0)
+    assert pickle.loads(pickle.dumps(group)) == group
+
+
+class Fussy(float):
+    def __bool__(self) -> bool:
+        raise AssertionError("encode ran the subclass's own code")
+
+
+@pytest.mark.parametrize("codec", [float64, bfloat16, float8_e4m3fn])
+def test_float_subclasses_encode_as_their_doubles(codec):
+    assert codec.encode(Fussy(0.5)) == codec.encode(0.5)
+
+
+@pytest.mark.parametrize("codec", [float64, float16, float8_e4m3fn])
+def test_ints_too_big_for_a_double_are_value_errors(codec):
+    with pytest.raises(ValueError):
+        codec.encode(10**400)
+    assert codec.encode(True) == codec.encode(1.0)

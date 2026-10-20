@@ -6,27 +6,28 @@ import re
 from dataclasses import dataclass
 from functools import cached_property
 
+from ..bdd import diagram
 from ..intset import IntSet
-from ..pattern import diagram
 from .codec import BDDSet, OrderedCodec
 
 __all__ = ["MAC", "mac"]
 
+# Both cases spelled out match faster than re.IGNORECASE.
 ADDRESS = re.compile(
     r"""
-      (?:[0-9a-f]{2}:){5}[0-9a-f]{2}    # 01:23:45:67:89:ab
-    | (?:[0-9a-f]{2}-){5}[0-9a-f]{2}    # 01-23-45-67-89-ab
-    | (?:[0-9a-f]{4}\.){2}[0-9a-f]{4}   # Cisco's 0123.4567.89ab
+      (?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}    # 01:23:45:67:89:ab
+    | (?:[0-9a-fA-F]{2}-){5}[0-9a-fA-F]{2}    # 01-23-45-67-89-ab
+    | (?:[0-9a-fA-F]{4}\.){2}[0-9a-fA-F]{4}   # Cisco's 0123.4567.89ab
     """,
-    re.IGNORECASE | re.VERBOSE,
+    re.VERBOSE,
 )
 # The first three octets of an address.
 OUI = re.compile(
     r"""
-      (?:[0-9a-f]{2}:){2}[0-9a-f]{2}    # 00:1a:2b
-    | (?:[0-9a-f]{2}-){2}[0-9a-f]{2}    # 00-1a-2b
+      (?:[0-9a-fA-F]{2}:){2}[0-9a-fA-F]{2}    # 00:1a:2b
+    | (?:[0-9a-fA-F]{2}-){2}[0-9a-fA-F]{2}    # 00-1a-2b
     """,
-    re.IGNORECASE | re.VERBOSE,
+    re.VERBOSE,
 )
 
 
@@ -52,7 +53,7 @@ class MAC(OrderedCodec[str]):
             raise TypeError(f"{self} can't encode {value!r}")
         if not ADDRESS.fullmatch(value):
             raise ValueError(f"{self} can't encode {value!r}")
-        return int(re.sub("[.:-]", "", value), 16)
+        return int(value.replace(":", "").replace("-", "").replace(".", ""), 16)
 
     def decode(self, bits: int) -> str:
         try:
@@ -97,7 +98,7 @@ class MAC(OrderedCodec[str]):
                 f"bad OUI {prefix!r}. OUIs are three octets, like '00:1a:2b' or "
                 "'00-1a-2b'."
             )
-        oui = int(re.sub("[:-]", "", prefix), 16)
+        oui = int(prefix.replace(":", "").replace("-", ""), 16)
         return self._prefix(f"{oui:024b}")
 
 

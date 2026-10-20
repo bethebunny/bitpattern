@@ -14,10 +14,11 @@ from .codec import BDDSet, OrderedCodec
 
 __all__ = ["Char", "char"]
 
+# Code points, but not characters.
+SURROGATES = range(0xD800, 0xE000)
 
-# Categories aren't particularly expensive to compute, but expensive enough
-# to not compute them on import if they're unused. @cache so they're only
-# computed once lazily.
+
+# Lazy, since computing every category takes a moment.
 @cache
 def _category_points(width: int) -> dict[str, IntSet]:
     """Consecutive code points in each general category (eg. "Lu") and major
@@ -44,9 +45,14 @@ class Char(OrderedCodec[str]):
     def encode(self, value: object) -> int:
         if not isinstance(value, str):
             raise TypeError(f"{self} can't encode {value!r}")
-        if len(value) != 1 or ord(value) not in self.all.storage:
+        # A code point past the width would spill into eg. another field of a tuple.
+        if (
+            len(value) != 1
+            or (point := ord(value)) in SURROGATES
+            or point >> self.width
+        ):
             raise ValueError(f"{self} can't encode {value!r}")
-        return ord(value)
+        return point
 
     def decode(self, bits: int) -> str:
         try:
@@ -56,9 +62,8 @@ class Char(OrderedCodec[str]):
 
     @cached_property
     def all(self) -> BDDSet[str]:
-        """Every code point except surrogates."""
         points = IntSet.range(0, sys.maxunicode + 1, width=self.width)
-        surrogates = IntSet.range(0xD800, 0xE000, width=self.width)
+        surrogates = IntSet.range(SURROGATES.start, SURROGATES.stop, width=self.width)
         return BDDSet(self, points - surrogates)
 
     def category(self, name: str) -> BDDSet[str]:

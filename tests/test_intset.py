@@ -1,18 +1,20 @@
 """`IntSet` cross-checked against the builtin `set`."""
 
 import copy
+import itertools
 import operator
 import pickle
 import random
 from collections.abc import MutableSequence, MutableSet, Sequence
 from collections.abc import Set as AbstractSet
+from typing import NamedTuple
 
 import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from bitpattern.bdd import BDD, iota, node_count
-from bitpattern.intset import IntSet
+from bitpattern.bdd import BDD, interval, node_count
+from bitpattern.intset import IntSet, written
 from bitpattern.pattern import Pattern
 
 # Every subset of a three-bit universe, which is few enough to check exhaustively.
@@ -92,6 +94,18 @@ def test_reads_agree_with_builtin_set_at_larger_widths(members):
     for at, value in enumerate(sorted(members)):
         assert group[at] == value
         assert value in group
+
+
+@pytest.mark.parametrize("width", [16, 200])
+def test_iterating_runs_and_lone_members(width):
+    """Iterating hands over long runs of members whole, and the rest in lists, which
+    start at 16 members and double up to 1024."""
+    members = [1, 3, *range(10, 3000), 4000, *range(5000, 6024), *range(7000, 8023)]
+    members.append(1 << (width - 1))
+    assert list(IntSet(members, width=width)) == members
+    for size in (15, 16, 17, 31, 33, 63, 64, 65, 1023, 1024, 1025, 4000):
+        spaced = range(0, 2 * size, 2)  # no runs, so every member goes in a list
+        assert list(IntSet(spaced, width=width)) == list(spaced)
 
 
 @given(left=GROUPS, right=GROUPS)
@@ -254,6 +268,13 @@ def test_empty_set():
     assert len(group) == 0 and list(group) == [] and 0 not in group
 
 
+@pytest.mark.parametrize("width", [-1, -100, -(2**100)])
+def test_a_negative_width_is_0(width):
+    """As for str.ljust, since it's only the least width the set has."""
+    assert IntSet(width=width).width == 0
+    assert IntSet([5], width=width).width == 3
+
+
 def test_zero_width_holds_only_zero():
     assert list(IntSet.from_bdd(BDD.ACCEPT, 0)) == [0]
     assert list(IntSet.from_bdd(BDD.REJECT, 0)) == []
@@ -270,11 +291,24 @@ def test_repr_lists_members_in_order():
     assert repr(IntSet([3, 1], width=2)) == "IntSet([1, 3], width=2)"
 
 
-@pytest.mark.parametrize("width", range(8))
-def test_iota_agrees_with_range(width):
-    for stop in range(-1, (1 << width) + 2):
-        got = list(IntSet.from_bdd(iota(stop, width=width), width))
-        assert got == [v for v in range(1 << width) if v < stop]
+@pytest.mark.parametrize("width", range(7))
+def test_interval_agrees_with_range(width):
+    """Bounds past either end of the width clamp, and never raise."""
+    bounds = range(-2, (1 << width) + 2)
+    for start in bounds:
+        for stop in bounds:
+            got = list(IntSet.from_bdd(interval(start, stop, width=width), width))
+            assert got == [v for v in range(1 << width) if start <= v < stop]
+
+
+@pytest.mark.parametrize("width", [126, 127, 128, 129, 200])
+def test_intervals_around_the_big_int_widths(width):
+    top = 1 << width
+    for start, stop in [(0, top), (5, top), (0, top - 3), (top // 2 - 1, top // 2 + 2)]:
+        group = IntSet.from_bdd(interval(start, stop, width=width), width)
+        assert group.size == stop - start
+        assert group[0] == start and group[-1] == stop - 1
+        assert start - 1 not in group and stop not in group
 
 
 @pytest.mark.parametrize("width", range(6))
@@ -305,8 +339,11 @@ def test_range_covers_the_whole_universe():
 
 
 def test_range_rejects_a_negative_start():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="can't hold negative numbers, got -1$"):
         IntSet.range(-1, 5)
+    # Python won't write out an int this long.
+    with pytest.raises(ValueError, match="got an int of 20001 bits"):
+        IntSet.range(-(1 << 20_000), 5)
 
 
 def test_size_agrees_with_len_when_it_fits():
@@ -453,6 +490,87 @@ def test_index_works_on_a_huge_set():
         HUGE.index(2**64)
 
 
+def test_sets_wider_than_127_bits_are_exact():
+    top = (1 << 200) - 1
+    group = IntSet([0, 1 << 199, top], width=200)
+    assert group.size == 3
+    assert list(group) == [0, 1 << 199, top]
+    assert group[1] == 1 << 199
+    assert group.index(top) == 2
+    assert (~group).size == (1 << 200) - 3
+    assert top - 1 in ~group
+
+
+def test_indexing_sets_wider_than_128_bits_keeps_their_high_bits():
+    # Multiples of 4 below 2**130: two nodes, under 128 free bits.
+    fours = IntSet.from_bdd(BDD(1, BDD(0, BDD.ACCEPT, BDD.REJECT), BDD.REJECT), 130)
+    n = 2**126 + 12345
+    assert fours[n] == 4 * n
+    assert fours.index(4 * n) == n
+    assert fours[-1] == 2**130 - 4
+    assert fours[n - 2 : n + 2] == IntSet([4 * i for i in range(n - 2, n + 2)])
+    assert fours[:] == fours
+
+
+def test_walking_wide_sets_takes_a_member_of_memory():
+    """Iterating keeps one member and a frame per bit, however many bits are free."""
+    evens = IntSet.from_bdd(BDD(0, BDD.ACCEPT, BDD.REJECT), 100_000)
+    assert list(itertools.islice(evens, 3)) == [0, 2, 4]
+    node = BDD(1 << 20, BDD(3, BDD.ACCEPT, BDD.REJECT), BDD.ACCEPT)
+    assert next(iter(IntSet.from_bdd(node, (1 << 20) + 1))) == 0
+
+
+def test_reprs_write_members_too_long_for_decimal_in_hex():
+    top = 1 << 19_999
+    assert (
+        repr(IntSet([0, 5, top], width=20_000))
+        == f"IntSet([0, 5, {top:#x}], width=20000)"
+    )
+
+
+class Pair(NamedTuple):
+    low: int
+    high: int
+
+
+def test_reprs_leave_a_tuple_subclass_to_its_own_repr():
+    """Written out as a plain tuple, a namedtuple would lose its name and fields."""
+    assert written(Pair(1, 2)) == "Pair(low=1, high=2)"
+    with pytest.raises(ValueError):
+        written(Pair(1, 1 << 19_999))
+
+
+def test_128_bit_sets_reach_both_ends():
+    top = 1 << 128
+    ends = IntSet([0, 1, 2**127, top - 2, top - 1], width=128)
+    assert ends.size == 5
+    assert list(ends) == [0, 1, 2**127, top - 2, top - 1]
+    assert [ends[i] for i in range(-5, 5)] == list(ends) * 2
+    assert [ends.index(value) for value in ends] == list(range(5))
+    span = IntSet.range(top - 5, top, width=128)
+    assert list(span) == list(range(top - 5, top))
+    assert list(reversed(span)) == list(range(top - 1, top - 6, -1))
+    everything = IntSet.range(0, top, width=128)
+    assert everything.size == top and everything[-1] == top - 1
+    assert everything[2**127 + 3] == 2**127 + 3 and everything.index(top - 9) == top - 9
+    assert list(itertools.islice(everything, 3)) == [0, 1, 2]
+
+
+def test_index_of_wide_sets_with_free_high_bits():
+    wide = IntSet.from_bdd(IntSet([3, 70, 900], width=16).bdd, 200)
+    for high in (0, 1, 2**100, 2**184 - 1):
+        for at, low in enumerate([3, 70, 900]):
+            assert wide.index(high << 16 | low) == high * 3 + at
+
+
+def test_the_last_member_of_a_sparse_wide_set():
+    sparse = IntSet.from_bdd(IntSet([3, 700], width=11).bdd, 130)
+    assert sparse.size == 2**120
+    last = (1 << 130) - 2048 | 700
+    assert sparse[-1] == next(reversed(sparse)) == last
+    assert repr(sparse).endswith(f"{last}], size=2**120, width=130)")
+
+
 def test_reversed():
     for group, members in zip(SETS, SUBSETS):
         assert list(reversed(group)) == sorted(members, reverse=True)
@@ -486,6 +604,8 @@ def test_comparisons_across_widths():
     assert IntSet([1], width=1) <= IntSet([1, 3], width=2)
     assert not IntSet([1, 3], width=2) <= IntSet([1], width=1)
     assert IntSet([1], width=1).isdisjoint(IntSet([2, 3], width=2))
+    assert not IntSet([2], width=2) <= IntSet([0], width=1)  # {0} isn't every even
+    assert IntSet([0], width=1) <= IntSet([0, 2], width=2)
 
 
 def test_is_an_immutable_set_and_sequence():

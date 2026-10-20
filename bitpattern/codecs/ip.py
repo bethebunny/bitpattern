@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from ..bdd import BDD, cofactors
+from ..bdd import blocks
 from ..intset import IntSet
 from .codec import BDDSet, OrderedCodec
 
@@ -27,9 +27,12 @@ class IP(OrderedCodec[Address], Generic[Address, Network]):
     network_type: type[Network]
 
     def encode(self, value: object) -> int:
-        """Accepts addresses as strings or ints."""
+        """Accepts addresses, strings or ints."""
+        if isinstance(value, self.address_type) and type(value) is self.address_type:
+            return int(value)
         if not isinstance(value, (self.address_type, str, int)):
             raise TypeError(f"{self} can't encode {value!r}")
+        # A subclass goes through its text, so an interface (with a prefix) is refused.
         return int(self.address_type(value))  # raises ValueError if malformed
 
     def decode(self, bits: int) -> Address:
@@ -50,7 +53,7 @@ class IP(OrderedCodec[Address], Generic[Address, Network]):
         start: Address | str | int | None = None,
         stop: Address | str | int | None = None,
     ) -> BDDSet[Address]:
-        """Addresses in `[start, stop)`. A bound of `None` leaves that end unbounded."""
+        """Addresses in `[start, stop)`. `None` is unbounded."""
         address = self.address_type
         return super().range(
             None if start is None else address(self.encode(start)),
@@ -58,20 +61,11 @@ class IP(OrderedCodec[Address], Generic[Address, Network]):
         )
 
     def networks(self, source: BDDSet[Address]) -> Iterator[Network]:
-        """A minimal set of CIDR blocks that exactly cover `source` in order."""
-
-        def walk(node: BDD, bit: int, prefix: int) -> Iterator[Network]:
-            if node is BDD.ACCEPT:
-                # Each path to ACCEPT is a block.
-                yield self.network_type((prefix << (bit + 1), self.width - 1 - bit))
-            elif node:
-                low, high = cofactors(node, bit)
-                yield from walk(low, bit - 1, prefix << 1)
-                yield from walk(high, bit - 1, prefix << 1 | 1)
-
+        """The fewest CIDR blocks that exactly cover `source`, in order."""
         if source.codec != self:
             raise TypeError(f"{source.codec} addresses aren't {self} addresses")
-        yield from walk(source.storage.bdd, self.width - 1, 0)
+        for start, free in blocks(source.storage.bdd, width=self.width):
+            yield self.network_type((start, self.width - free))
 
 
 ipv4 = IP(32, "ipv4", ipaddress.IPv4Address, ipaddress.IPv4Network)

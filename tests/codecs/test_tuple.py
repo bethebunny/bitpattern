@@ -17,6 +17,7 @@ from bitpattern.codecs import (
     float16,
     int8,
     ipv4,
+    ipv6,
     product,
     project,
     uint8,
@@ -184,3 +185,31 @@ def test_fields_can_be_any_codec():
     source = float16.range(1.0, 2.0) * uint8.set([7])
     assert (1.5, 7) in source
     assert (2.0, 7) not in source and (1.5, 8) not in source
+
+
+def test_products_wider_than_128_bits_index_by_position():
+    pairs = ipv6.all * uint16.set([80, 443])
+    n = 2**126 + 1
+    assert pairs[n] == (ipv6.decode(n // 2), 443)
+    assert pairs.index(pairs[n]) == n
+
+
+class Stopping(Codec[int]):
+    """A broken codec, whose encode and decode raise StopIteration."""
+
+    def encode(self, value: object) -> int:
+        raise StopIteration
+
+    def decode(self, bits: int) -> int:
+        raise StopIteration
+
+
+def test_a_field_raising_stop_iteration_is_a_runtime_error():
+    """As is, it would quietly end an iteration, eg. one over the values to encode."""
+    pair = Tuple(uint8, Stopping(8, "stopping"))
+    with pytest.raises(RuntimeError):
+        pair.decode(5)
+    with pytest.raises(RuntimeError):
+        pair.encode((1, 2))
+    with pytest.raises(RuntimeError):
+        pair.set([(1, 2), (3, 4)])

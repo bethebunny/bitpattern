@@ -5,6 +5,7 @@ as their raw bits, so patterns match the bit layout. For instance the float16 Na
 and infinities are `float16.pattern("?111.11??.*.*")`.
 """
 
+from ..dlpack import DType
 from .char import Char, char
 from .codec import BDDSet, Codec, OrderedCodec, Tuple, product, project
 from .enum import Flags, Members
@@ -42,6 +43,7 @@ __all__ = [
     "BDDSet",
     "Char",
     "Codec",
+    "DType",
     "Date",
     "DateTime",
     "Flags",

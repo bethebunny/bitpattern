@@ -9,7 +9,7 @@ import pytest
 
 import bitpattern
 from bitpattern import IntSet, Pattern, bdd
-from bitpattern.bdd import BDD, node_count, render_count
+from bitpattern.bdd import BDD, count_repr, node_count
 from bitpattern.codecs import (
     BDDSet,
     Codec,
@@ -109,11 +109,20 @@ def test_node_repr_summarizes_the_shape():
     assert repr(BDD(3, BDD.ACCEPT, BDD.REJECT)) == "<BDD bit=3, 1 nodes, 8 members>"
 
 
-def test_render_count():
-    assert render_count(2**53) == "2**53"
-    assert render_count(1024) == "2**10"
-    assert render_count(512) == "512"  # small enough to read as is
-    assert render_count(8191) == "8191"
+def test_count_repr():
+    assert count_repr(2**53) == "2**53"
+    assert count_repr(1024) == "2**10"
+    assert count_repr(512) == "512"  # small enough to read as is
+    assert count_repr(8191) == "8191"
+
+
+def test_count_repr_of_totals_too_long_to_write_out():
+    assert count_repr(10**4299) == str(10**4299)  # 4,300 digits, Python's limit
+    assert count_repr(3 << 20_000) == "~2**20001.6"
+    assert count_repr(1 << 20_000) == "2**20000"
+    assert repr(BDD(30_000, BDD(0, BDD.ACCEPT, BDD.REJECT), BDD.ACCEPT)).endswith(
+        "~2**30000.6 members>"
+    )
 
 
 def test_small_intset_reprs_round_trip():

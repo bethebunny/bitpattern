@@ -1,0 +1,172 @@
+"""Diagrams' `&`, `|`, `^` and `~`."""
+
+from .arena import ACCEPT, Arena, Id, Interrupted, REJECT
+from .steps import Pair, Step, emptied, popped_branches, push_branches
+from .table import Table, single, sorted_pair
+
+
+@fieldwise_init
+struct Op(Equatable, ImplicitlyCopyable, TrivialRegisterPassable):
+    var value: Int
+
+    comptime INTERSECTION = Op(0)
+    comptime UNION = Op(1)
+    comptime SYMMETRIC_DIFFERENCE = Op(2)
+
+    def __eq__(self, other: Self) -> Bool:
+        return self.value == other.value
+
+
+def intersection(mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
+    return applied[Op.INTERSECTION](arena, a, b)
+
+
+def union(mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
+    return applied[Op.UNION](arena, a, b)
+
+
+def symmetric_difference(
+    mut arena: Arena, a: Id, b: Id
+) raises Interrupted -> Id:
+    return applied[Op.SYMMETRIC_DIFFERENCE](arena, a, b)
+
+
+def difference(mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
+    var not_b = complement(arena, b)
+    return intersection(arena, a, not_b)
+
+
+def applied[op: Op](mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
+    """Bryant's apply, specialised for `op` at compile time."""
+    # Skips taking the stacks for the many calls that need no walk.
+    var answer = known[op](arena, a, b)
+    if answer:
+        return answer.value()
+    var steps = List[Step[Pair]]()
+    swap(steps, arena.spare.pair_steps)
+    var results = List[Id]()
+    swap(results, arena.spare.results)
+    steps.append(Step[Pair].visit(Pair(a, b)))
+    while steps:
+        arena.tick()
+        var step = steps.pop()
+        if step.is_visit():
+            var pair = step.item
+            var found = known[op](arena, pair.a, pair.b)
+            if found:
+                results.append(found.value())
+                continue
+            var bit = arena.top_bit(pair.a, pair.b)
+            var a_lo, a_hi = arena.cofactors(pair.a, bit)
+            var b_lo, b_hi = arena.cofactors(pair.b, bit)
+            steps.append(Step[Pair].make(bit, pair))
+            steps.append(Step[Pair].visit(Pair(a_hi, b_hi)))
+            steps.append(Step[Pair].visit(Pair(a_lo, b_lo)))
+        else:
+            var lo, hi = popped_branches(results)
+            var made = arena.make(step.bit, lo, hi)
+            memoise[op](arena, sorted_pair(step.item.a, step.item.b), made)
+            results.append(made)
+    var result = results.pop()
+    arena.spare.pair_steps = emptied(steps^)
+    arena.spare.results = emptied(results^)
+    return result
+
+
+@always_inline
+def known[
+    op: Op
+](mut arena: Arena, a: Id, b: Id) raises Interrupted -> Optional[Id]:
+    # Every step of apply's walk calls it.
+    var answer = trivial[op](arena, a, b)
+    if answer:
+        return answer
+    var memoised: Optional[UInt32]
+    comptime if op == Op.INTERSECTION:
+        memoised = arena.memos.intersection.get(sorted_pair(a, b))
+    elif op == Op.UNION:
+        memoised = arena.memos.union.get(sorted_pair(a, b))
+    else:
+        memoised = arena.memos.symmetric_difference.get(sorted_pair(a, b))
+    if memoised:
+        return Id(memoised.value())
+    return None
+
+
+@always_inline
+def trivial[
+    op: Op
+](mut arena: Arena, a: Id, b: Id) raises Interrupted -> Optional[Id]:
+    comptime if op == Op.INTERSECTION:
+        if a == REJECT or b == ACCEPT or a == b:
+            return a
+        if b == REJECT or a == ACCEPT:
+            return b
+    elif op == Op.UNION:
+        if a == ACCEPT or b == REJECT or a == b:
+            return a
+        if b == ACCEPT or a == REJECT:
+            return b
+    else:
+        if a == b:
+            return REJECT
+        if a == REJECT:
+            return b
+        if b == REJECT:
+            return a
+        if a == ACCEPT:
+            return complement(arena, b)
+        if b == ACCEPT:
+            return complement(arena, a)
+    return None
+
+
+@always_inline
+def memoise[op: Op](mut arena: Arena, key: UInt64, result: Id):
+    comptime if op == Op.INTERSECTION:
+        arena.memos.intersection.insert(key, result.value)
+    elif op == Op.UNION:
+        arena.memos.union.insert(key, result.value)
+    else:
+        arena.memos.symmetric_difference.insert(key, result.value)
+
+
+def complement(mut arena: Arena, root: Id) raises Interrupted -> Id:
+    var answer = negated(arena, root)
+    if answer:
+        return answer.value()
+    var steps = List[Step[Id]]()
+    swap(steps, arena.spare.node_steps)
+    var results = List[Id]()
+    swap(results, arena.spare.results)
+    steps.append(Step[Id].visit(root))
+    while steps:
+        arena.tick()
+        var step = steps.pop()
+        if step.is_visit():
+            var negation = negated(arena, step.item)
+            if negation:
+                results.append(negation.value())
+            else:
+                push_branches(arena, steps, step.item)
+        else:
+            var lo, hi = popped_branches(results)
+            var made = arena.make(step.bit, lo, hi)
+            arena.memos.complement.insert(single(step.item), made.value)
+            results.append(made)
+    var result = results.pop()
+    arena.spare.node_steps = emptied(steps^)
+    arena.spare.results = emptied(results^)
+    return result
+
+
+@always_inline
+def negated(arena: Arena, id: Id) -> Optional[Id]:
+    if id == REJECT:
+        return ACCEPT
+    if id == ACCEPT:
+        return REJECT
+    var memoised = arena.memos.complement.get(single(id))
+    if memoised:
+        return Id(memoised.value())
+    return None

@@ -1,6 +1,6 @@
 [project]
 name = "bitpattern"
-dynamic = ["version"]
+version = "0.2.0"
 description = "Very large sets of floats, IP addresses and other structured data, backed by binary decision diagrams"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -11,16 +11,19 @@ keywords = ["bdd", "binary decision diagram", "set", "bitmask", "cidr", "ieee754
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Implementation :: CPython",
     "Topic :: Scientific/Engineering :: Mathematics",
     "Topic :: Software Development :: Testing",
     "Typing :: Typed",
 ]
-dependencies = []
+# The module loads the Mojo runtime library from the mojo-compiler that built it.
+dependencies = ["mojo-compiler==1.1.0"]
 
 [project.optional-dependencies]
 hypothesis = ["hypothesis>=6"]
@@ -30,20 +33,28 @@ Source = "https://github.com/bethebunny/bitpattern"
 Issues = "https://github.com/bethebunny/bitpattern/issues"
 
 [dependency-groups]
-dev = ["pytest>=8", "hypothesis>=6"]
+# hatchling so ty can check hatch_build.py.
+dev = ["pytest>=8", "hypothesis>=6", "numpy>=2.1", "max>=26.6", "hatchling"]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "mojo-compiler==1.1.0"]
 build-backend = "hatchling.build"
-
-[tool.hatch.version]
-path = "bitpattern/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["bitpattern"]
 
+[tool.hatch.build.targets.wheel.hooks.custom]
+
 [tool.hatch.build.targets.sdist]
 exclude = [".jj"]  # hatchling only skips .git
+
+[tool.uv]
+# uv rebuilds the extension when one of these changes.
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "hatch_build.py" },
+    { file = "src/**/*.mojo" },
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -267,7 +267,7 @@ immutable set of non-negative integers below `2 ** width`. It's a `collections.a
 and a `Sequence` of its members in sorted order. Slicing gives back a set.
 
 An `IntSet` is a reduced, ordered binary decision diagram, or BDD ([Bryant, 1986]).
-`bitpattern.BDD` is the diagram itself.
+`bitpattern.BDD` is the diagram itself, implemented in Mojo.
 
 ```python
 >>> from bitpattern import IntSet
@@ -284,6 +284,13 @@ IntSet([3, 4], width=5)
 IntSet([0, 2], width=2)
 
 ```
+
+## Development
+
+The diagrams are in Mojo: the arena and its algorithms in `src/arena/`, the Python module
+in `src/python/`, and the module's entry point in `src/lib.mojo`. Building bitpattern from
+source takes the Mojo compiler, which uv installs, and `uv run pytest` builds the module
+before it tests.
 
 [Bryant, 1986]: https://doi.org/10.1109/TC.1986.1676819
 

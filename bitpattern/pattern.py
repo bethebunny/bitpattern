@@ -2,18 +2,19 @@
 
 Text like `*1.0000` expands to bits like `???10000`, one character per bit:
   - `expanded` and `dotted` convert between text and bits
-  - `diagram` and `paths` convert between bits and diagrams
+  - `diagram` and `paths`, from `bitpattern.bdd`, convert between bits and diagrams
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
 
-from .bdd import BDD, render_count, weak_cache
+from .bdd import count_repr, diagram, path_count, paths
 from .intset import IntSet
 
 __all__ = ["Pattern"]
+
+LEADING, QUARTET = re.compile("[01?]{1,4}"), re.compile("[01?]{4}")
 
 
 def expanded(text: str) -> str:
@@ -27,7 +28,7 @@ def expanded(text: str) -> str:
     for at, quartet in enumerate(text.strip().split(".")):
         head, glob, tail = quartet.partition("*")
         expanded = head + "?" * (4 - len(head) - len(tail)) + tail if glob else quartet
-        if not re.fullmatch("[01?]{1,4}" if at == 0 else "[01?]{4}", expanded):
+        if not (LEADING if at == 0 else QUARTET).fullmatch(expanded):
             raise ValueError(
                 f"bad quartet {quartet!r} in {text!r}. Quartets are 4 bits of 0, 1 "
                 "or ?, and * fills out the rest. Only the leading quartet can be "
@@ -39,38 +40,9 @@ def expanded(text: str) -> str:
 
 def dotted(bits: str) -> str:
     """Bits written as pattern text, eg. `???10000` is `???1.0000`."""
-    head, tail = bits[:-4], bits[-4:]
-    return f"{dotted(head)}.{tail}" if head else tail
-
-
-def diagram(bits: str) -> BDD:
-    """The diagram matching `bits`. Free bits don't need any nodes."""
-    node = BDD.ACCEPT
-    for bit, char in enumerate(reversed(bits)):
-        match char:
-            case "0":
-                node = BDD(bit, node, BDD.REJECT)
-            case "1":
-                node = BDD(bit, BDD.REJECT, node)
-    return node
-
-
-def paths(node: BDD, width: int) -> Iterator[str]:
-    """The bits of each path from `node` to ACCEPT, which never overlap."""
-    free = "?" * (width - 1 - node.bit)  # the bits above the node
-    if node is BDD.ACCEPT:
-        yield free
-    elif node:
-        yield from (f"{free}0{path}" for path in paths(node.left, node.bit))
-        yield from (f"{free}1{path}" for path in paths(node.right, node.bit))
-
-
-@weak_cache
-def path_count(node: BDD) -> int:
-    """How many paths `paths` would give, counted without walking the diagram."""
-    if node.leaf:
-        return int(node is BDD.ACCEPT)
-    return path_count(node.left) + path_count(node.right)
+    head = len(bits) % 4 or 4  # the leading quartet can be shorter
+    quartets = [bits[at : at + 4] for at in range(head, len(bits), 4)]
+    return ".".join([bits[:head], *quartets])
 
 
 class Pattern(IntSet):
@@ -92,8 +64,8 @@ class Pattern(IntSet):
     >>> Pattern("1?1") | Pattern("?1?")
     Pattern('01?') | Pattern('101') | Pattern('11?')
 
-    Only fixed bits need nodes, so memory is bounded by the length of the pattern's
-    text.
+    A pattern has a node per fixed bit. Past 128 bits each node's count is about as
+    wide as its bit, so memory grows with the square of the width.
     """
 
     __slots__ = ()
@@ -105,14 +77,14 @@ class Pattern(IntSet):
     @property
     def branches(self) -> tuple[str, ...]:
         """Disjoint single-branch patterns that make up this one."""
-        return tuple(map(dotted, paths(self.bdd, self.width)))
+        return tuple(map(dotted, paths(self.bdd, width=self.width)))
 
     @property
     def bits(self) -> str:
         """The expanded bits of a single-branch pattern."""
         if (count := path_count(self.bdd)) != 1:
             raise ValueError(f"pattern has {count} branches, not 1")
-        return next(paths(self.bdd, self.width))
+        return next(paths(self.bdd, width=self.width))
 
     @property
     def free(self) -> int:
@@ -127,12 +99,11 @@ class Pattern(IntSet):
             return f"<Pattern: width=0, size={self.size}>"
         if not (count := path_count(self.bdd)):
             return f"~Pattern({dotted('?' * self.width)!r})"
-        # A union reprs as the expression that builds the union, if short enough.
         if count <= 8:
             text = " | ".join(f"Pattern({branch!r})" for branch in self.branches)
             if len(text) <= 200:
                 return text
         return (
-            f"<Pattern: {render_count(count)} branches, "
-            f"width={self.width}, size={render_count(self.size)}>"
+            f"<Pattern: {count_repr(count)} branches, "
+            f"width={self.width}, size={count_repr(self.size)}>"
         )

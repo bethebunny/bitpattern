@@ -11,6 +11,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from bitpattern import IntSet
+from bitpattern.codecs import Char, uint8
 from bitpattern.codecs.char import _category_points, char
 
 SURROGATES = range(0xD800, 0xE000)
@@ -69,6 +70,19 @@ def test_chars_refuse_what_isnt_a_string(value):
     with pytest.raises(TypeError):
         char.encode(value)
     assert value not in char.all
+
+
+def test_narrow_chars_refuse_code_points_past_their_width():
+    ascii = Char(7, "ascii")
+    for value in ["\x80", "é", "😀"]:
+        with pytest.raises(ValueError):
+            ascii.encode(value)
+    with pytest.raises(ValueError):
+        ascii.range("a", "é")
+    # Inside a tuple, "é" would spill into the field above and read as (1, "i").
+    pairs = uint8.set([1]) * ascii.all
+    assert (1, "é") not in pairs
+    assert (1, "i") in pairs
 
 
 def test_char_decode_refuses_bits_past_the_last_code_point():

@@ -9,9 +9,8 @@ from enum import Enum, Flag
 from functools import cached_property
 from typing import TypeVar
 
-from ..bdd import BDD
+from ..bdd import BDD, diagram
 from ..intset import IntSet
-from ..pattern import diagram
 from .codec import BDDSet, Codec
 
 __all__ = ["Flags", "Members"]
@@ -23,6 +22,8 @@ F = TypeVar("F", bound=Flag)
 @dataclass(frozen=True, repr=False, init=False)
 class Members(Codec[E]):
     """An Enum's members, in definition order.
+
+    Sets export each member's index, not its value, even for an IntEnum.
 
     >>> from enum import Enum
     >>> class Color(Enum):
@@ -54,9 +55,9 @@ class Members(Codec[E]):
         if not isinstance(value, self.enum):
             raise TypeError(f"{self} can't encode {value!r}")
         # A Flag's combinations are instances too, but aren't members.
-        if value not in self._indices:
+        if (index := self._indices.get(value)) is None:
             raise ValueError(f"{self} can't encode {value!r}")
-        return self._indices[value]
+        return index
 
     def decode(self, bits: int) -> E:
         return self._members[bits]  # raises IndexError past the last member
@@ -94,13 +95,23 @@ class Flags(Codec[F]):
         ).bit_length()
         vars(self).update(width=width, name=enum.__name__, enum=enum)
 
+    @cached_property
+    def _single(self) -> int:
+        """The bits that are each a flag of their own."""
+        single = 0
+        for member in self.enum.__members__.values():
+            if member.value.bit_count() == 1:
+                single |= member.value
+        return single
+
     def encode(self, value: object) -> int:
         if not isinstance(value, self.enum):
             raise TypeError(f"{self} can't encode {value!r}")
-        # Python Flag can make values that aren't legal combinations. Check that it is.
-        if value.value not in self.all.storage:
+        # Python Flag can make values that aren't legal combinations. A value whose bits
+        # are each a flag is one, and anything else has to be checked.
+        if (bits := value._value_) & ~self._single and bits not in self.all.storage:
             raise ValueError(f"{self} can't encode {value!r}")
-        return value.value
+        return bits
 
     def decode(self, bits: int) -> F:
         try:

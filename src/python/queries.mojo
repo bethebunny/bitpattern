@@ -1,0 +1,333 @@
+"""Questions about diagrams, as Python functions."""
+
+from std.bit import count_leading_zeros
+from std.python._cpython import PyObjectPtr
+
+from arena import (
+    ACCEPT,
+    Arena,
+    Id,
+    Interrupted,
+    NARROW_WIDTH,
+    narrow_bit,
+    wide_bit,
+)
+from arena import node_count as counted_nodes
+from arena.compare import disjoint as is_disjoint, subset as is_subset
+from arena.members import accepts as accepted, nth as nth_wide, nth_narrow
+from arena.members import rank as rank_wide, rank_narrow
+from arena.nodes import path_count as counted_paths
+from bigint import BigUInt
+
+from .args import Arguments, Signature, node, width
+from .capi import Py_DecRef, PyBool_FromLong, PyLong_FromSsize_t, new_string
+from .errors import PyError, index_error, value_error
+from .ints import (
+    count_repr as written_count,
+    indexed,
+    int_from_big,
+    int_from_u128,
+)
+from .ints import Ints, big_of, i128_of
+from .state import StatePointer, give_back, taken_arena
+
+
+@fieldwise_init
+struct Count(Movable, Writable):
+    """A count, in a UInt128 when it fits."""
+
+    var narrow: UInt128
+    var wide: Optional[BigUInt]
+
+    def write_to(self, mut writer: Some[Writer]):
+        if self.wide:
+            writer.write(self.wide.value())
+        else:
+            writer.write(self.narrow)
+
+
+@always_inline
+def count_fits_u128(id: Id, width: Int32) -> Bool:
+    return width < NARROW_WIDTH or (width == NARROW_WIDTH and id != ACCEPT)
+
+
+def member_count(arena: Arena, id: Id, width: Int32) -> Count:
+    if count_fits_u128(id, width):
+        return Count(arena.count_narrow(id, width), None)
+    return Count(0, arena.count(id, width))
+
+
+def int_from_count(ints: Ints, count: Count) raises PyError -> PyObjectPtr:
+    var int = int_from_big(
+        ints, count.wide.value()
+    ) if count.wide else int_from_u128(ints, count.narrow)
+    if not int:
+        raise PyError()
+    return int
+
+
+@fieldwise_init
+struct OutsideWidth(ImplicitlyCopyable, TrivialRegisterPassable, Writable):
+    """A node tests `bit`, which isn't below the set's `width`. A call raises it as a
+    ValueError once it gives back the arena, since making one can run Python."""
+
+    var bit: Int32
+    var width: Int32
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write(
+            "node tests bit ", self.bit, ", outside width ", self.width
+        )
+
+
+def checked_width(
+    arena: Arena, id: Id, width: Int32
+) raises OutsideWidth -> Int32:
+    if not id.is_leaf() and arena.decision(id).bit >= width:
+        raise OutsideWidth(arena.decision(id).bit, width)
+    return width
+
+
+comptime COUNT = Signature("count", 2, 1, ["node", "width", "", "", ""])
+
+
+def count(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
+    var id = node(state, args[0])
+    var at = width(state[].ints, args[1])
+    var arena = taken_arena(state)
+    var total: Count
+    try:
+        total = member_count(arena[], id, checked_width(arena[], id, at))
+    except outside:
+        give_back(state, arena)
+        raise value_error(String(outside))
+    give_back(state, arena)
+    return int_from_count(state[].ints, total)
+
+
+comptime NODE_COUNT = Signature("node_count", 1, 1, ["node", "", "", "", ""])
+
+
+def node_count(
+    state: StatePointer, args: Arguments
+) raises PyError -> PyObjectPtr:
+    """Leaves aren't counted."""
+    var id = node(state, args[0])
+    var arena = taken_arena(state)
+    var nodes: Int
+    try:
+        nodes = counted_nodes(arena[], id)
+    except:
+        give_back(state, arena)
+        raise PyError()
+    give_back(state, arena)
+    return PyLong_FromSsize_t(nodes)
+
+
+comptime COUNT_REPR = Signature("count_repr", 1, 1, ["total", "", "", "", ""])
+
+
+def count_repr(
+    state: StatePointer, args: Arguments
+) raises PyError -> PyObjectPtr:
+    """A count as reprs write it:
+    - `2**k` for powers of two from `2**10`
+    - `~2**k` for ints too long to write out
+    - the digits otherwise
+    """
+    var total = indexed(state[].ints, args[0])
+    var written: String
+    try:
+        if big_of(state[].ints, total)[0]:
+            raise value_error("counts aren't negative")
+        written = written_count(state[].ints, total)
+    except e:
+        Py_DecRef(total)
+        raise e
+    Py_DecRef(total)
+    return new_string(written)
+
+
+@fieldwise_init
+struct Integer(Movable):
+    """An int as its sign and bits: its own if it isn't negative, else its complement's
+    (`~int`, which isn't). The bits are in a UInt128 when they fit."""
+
+    var negative: Bool
+    var narrow: UInt128
+    var wide: Optional[BigUInt]
+    """The bits, if they don't fit a UInt128."""
+
+    def bit_length(self) -> Int:
+        if self.wide:
+            return self.wide.value().bits()
+        return 128 - Int(count_leading_zeros(self.narrow))
+
+    def widened(self) -> BigUInt:
+        """The bits in a BigUInt."""
+        if self.wide:
+            return self.wide.value().copy()
+        return BigUInt(self.narrow)
+
+
+def integer(ints: Ints, o: PyObjectPtr) raises PyError -> Integer:
+    """Runs `o.__index__` at most once, so its errors come out as they are."""
+    var int = indexed(ints, o)
+    var small = i128_of(ints, int)
+    if small:
+        Py_DecRef(int)
+        var value = small.value()
+        return Integer(value < 0, UInt128(~value if value < 0 else value), None)
+    var read = big_of(ints, int)
+    Py_DecRef(int)
+    # A negative int's complement is its magnitude less one.
+    var bits = read[1] - BigUInt(1) if read[0] else read[1].copy()
+    var narrow = bits.fitting_uint128()
+    if narrow:
+        return Integer(read[0], narrow.value(), None)
+    return Integer(read[0], 0, bits^)
+
+
+def integer_bit(value: Integer, bit: Int32) -> Bool:
+    """As Python reads ints: two's complement, so a negative int's bits are its
+    complement's flipped."""
+    if value.wide:
+        return wide_bit(value.wide.value(), bit) != value.negative
+    return narrow_bit(value.narrow, bit) != value.negative
+
+
+comptime ACCEPTS = Signature("accepts", 2, 2, ["node", "value", "", "", ""])
+
+
+def accepts(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
+    var id = node(state, args[0])
+    var value = integer(state[].ints, args[1])
+    var arena = taken_arena(state)
+    var answer = accepted[integer_bit](arena[], id, value)
+    give_back(state, arena)
+    return PyBool_FromLong(Int(answer))
+
+
+def member_at(
+    arena: Arena, id: Id, width: Int32, index: Integer
+) -> Optional[Count]:
+    """None if `index` is out of range. `~i` is the `i`th from the end."""
+    if not index.wide and count_fits_u128(id, width):
+        var total = arena.count_narrow(id, width)
+        if index.narrow >= total:
+            return None
+        var at = total - 1 - index.narrow if index.negative else index.narrow
+        return Count(nth_narrow(arena, id, at), None)
+    var total = arena.count(id, width)
+    var at = index.widened()
+    if at >= total:
+        return None
+    if index.negative:
+        at = total - (at + 1)
+    return Count(0, nth_wide(arena, id, at))
+
+
+comptime NTH = Signature("nth", 3, 2, ["node", "n", "width", "", ""])
+
+
+def nth(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
+    """Negative `n` counts from the end, as for lists."""
+    var id = node(state, args[0])
+    var at = width(state[].ints, args[2])
+    var index = integer(state[].ints, args[1])
+    var arena = taken_arena(state)
+    var member: Optional[Count]
+    try:
+        member = member_at(arena[], id, checked_width(arena[], id, at), index)
+    except outside:
+        give_back(state, arena)
+        raise value_error(String(outside))
+    give_back(state, arena)
+    if not member:
+        raise index_error(args[1])
+    return int_from_count(state[].ints, member.value())
+
+
+def members_below(arena: Arena, id: Id, width: Int32, value: Integer) -> Count:
+    if value.negative:
+        return Count(0, None)  # below every member
+    if value.bit_length() > Int(width):
+        return member_count(arena, id, width)  # above every member
+    if width <= NARROW_WIDTH:
+        return Count(rank_narrow(arena, id, value.narrow, width), None)
+    return Count(0, rank_wide(arena, id, value.widened(), width))
+
+
+comptime RANK = Signature("rank", 3, 2, ["node", "value", "width", "", ""])
+
+
+def rank(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
+    """How many members are below `value`."""
+    var id = node(state, args[0])
+    var value = integer(state[].ints, args[1])
+    var at = width(state[].ints, args[2])
+    var arena = taken_arena(state)
+    var below: Count
+    try:
+        below = members_below(
+            arena[], id, checked_width(arena[], id, at), value
+        )
+    except outside:
+        give_back(state, arena)
+        raise value_error(String(outside))
+    give_back(state, arena)
+    return int_from_count(state[].ints, below)
+
+
+def answered[
+    walk: def(mut Arena, Id, Id) thin raises Interrupted -> Bool
+](state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
+    var a = node(state, args[0])
+    var b = node(state, args[1])
+    var arena = taken_arena(state)
+    var answer: Bool
+    try:
+        answer = walk(arena[], a, b)
+    except:
+        give_back(state, arena)
+        raise PyError()
+    give_back(state, arena)
+    return PyBool_FromLong(Int(answer))
+
+
+comptime SUBSET = Signature("subset", 2, 2, ["a", "b", "", "", ""])
+
+
+def subset(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
+    return answered[is_subset](state, args)
+
+
+comptime DISJOINT = Signature("disjoint", 2, 2, ["a", "b", "", "", ""])
+
+
+def disjoint(
+    state: StatePointer, args: Arguments
+) raises PyError -> PyObjectPtr:
+    return answered[is_disjoint](state, args)
+
+
+comptime PATH_COUNT = Signature("path_count", 1, 1, ["node", "", "", "", ""])
+
+
+def path_count(
+    state: StatePointer, args: Arguments
+) raises PyError -> PyObjectPtr:
+    """Counted without walking each path to `BDD.ACCEPT`."""
+    var id = node(state, args[0])
+    var arena = taken_arena(state)
+    var paths: BigUInt
+    try:
+        paths = counted_paths(arena[], id)
+    except:
+        give_back(state, arena)
+        raise PyError()
+    give_back(state, arena)
+    var int = int_from_big(state[].ints, paths)
+    if not int:
+        raise PyError()
+    return int

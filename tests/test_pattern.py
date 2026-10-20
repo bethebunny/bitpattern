@@ -4,12 +4,13 @@ import functools
 import itertools
 import operator
 import pickle
+import random
 from collections.abc import Set as AbstractSet
 
 import pytest
 
 from bitpattern import IntSet, Pattern
-from bitpattern.bdd import node_count
+from bitpattern.bdd import BDD, diagram, node_count, paths
 from bitpattern.pattern import dotted
 
 # The pattern the interface was designed around.
@@ -321,3 +322,58 @@ def test_any_intset_can_be_read_as_a_pattern():
     source = IntSet([1, 4, 9, 16, 25], width=8)
     pattern = Pattern.from_bdd(source.bdd, source.width)
     assert type(pattern) is Pattern and pattern == source
+
+
+def reference_diagram(bits):
+    """diagram as it was in Python, a call to BDD per fixed bit."""
+    node = BDD.ACCEPT
+    for bit, char in enumerate(reversed(bits)):
+        if char == "0":
+            node = BDD(bit, node, BDD.REJECT)
+        elif char == "1":
+            node = BDD(bit, BDD.REJECT, node)
+    return node
+
+
+@pytest.mark.parametrize("width", [1, 5, 127, 128, 129, 200])
+def test_diagram_matches_its_bits(width):
+    rng = random.Random(width)
+    for _ in range(20):
+        bits = "".join(rng.choice("01?") for _ in range(width))
+        assert diagram(bits) is reference_diagram(bits)
+
+
+def test_diagram_takes_only_bits():
+    assert diagram("") is BDD.ACCEPT
+    assert diagram("???") is BDD.ACCEPT
+    with pytest.raises(ValueError, match="'2'"):
+        diagram("012")
+
+
+def reference_paths(node, width):
+    """paths as it was in Python, recursing down each branch."""
+    free = "?" * (width - 1 - node.bit)
+    if node is BDD.ACCEPT:
+        yield free
+    elif node:
+        yield from (f"{free}0{path}" for path in reference_paths(node.left, node.bit))
+        yield from (f"{free}1{path}" for path in reference_paths(node.right, node.bit))
+
+
+@pytest.mark.parametrize("width", [3, 8, 130])
+def test_paths_match_the_recursion(width):
+    rng = random.Random(width)
+    free = diagram("?" * (width - 3) + "1?0")  # free bits above the node
+    for _ in range(30):
+        values = [rng.getrandbits(width) for _ in range(rng.randrange(12))]
+        node = IntSet(values, width=width).bdd | free
+        assert list(paths(node, width=width)) == list(reference_paths(node, width))
+
+
+def test_wide_patterns_write_themselves_out():
+    """5,000 bits is deeper than Python could recurse, quartet by quartet or bit by bit."""
+    text = ".".join(["01?0"] * 1250)
+    pattern = Pattern(text)
+    assert str(pattern) == text
+    assert repr(pattern).startswith("<Pattern: 1 branches, width=5000")
+    assert pattern.bits == text.replace(".", "")

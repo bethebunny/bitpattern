@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import operator
 from dataclasses import dataclass
+from functools import cached_property
 from typing import SupportsIndex
 
+from ..dlpack import DType, signed
 from ..intset import IntSet
 from .codec import BDDSet, OrderedCodec
 
@@ -34,29 +36,39 @@ class Int(OrderedCodec[int]):
 
     signed: bool
 
-    @property
+    @cached_property
     def min(self) -> int:
         return -(1 << (self.width - 1)) if self.signed else 0
 
-    @property
+    @cached_property
     def max(self) -> int:
         return self.min + (1 << self.width) - 1
 
     def encode(self, value: object) -> int:
-        if not isinstance(value, SupportsIndex):
+        # Checking for an int first skips the slower protocol check for most values.
+        if isinstance(value, int):
+            integer = value
+        elif isinstance(value, SupportsIndex):
+            integer = operator.index(value)
+        else:
             raise TypeError(f"{self} can't encode {value!r}")
-        if not self.min <= (integer := operator.index(value)) <= self.max:
+        if not self.min <= integer <= self.max:
             raise ValueError(f"{self} can't encode {value!r}")
         return integer % (1 << self.width)
 
     def decode(self, bits: int) -> int:
         return bits - (1 << self.width) if bits > self.max else bits
 
+    def dtype(self) -> DType:
+        if self.signed and self.width <= 64:
+            return signed(self.width)
+        # Wider ones export as rows of their two's complement bytes.
+        return super().dtype()
+
     def range(self, start: int | None = None, stop: int | None = None) -> BDDSet[int]:
-        """Integers in `[start, stop)`. A bound of `None` leaves that end unbounded."""
+        """Integers in `[start, stop)`. `None` is unbounded."""
         low = self.min if start is None else max(start, self.min)
         high = self.max + 1 if stop is None else min(stop, self.max + 1)
-        # Negative integers are encoded above the rest, offset by 2**width.
         offset = 1 << self.width
         negative = IntSet.range(low + offset, min(high, 0) + offset, width=self.width)
         nonnegative = IntSet.range(max(low, 0), high, width=self.width)

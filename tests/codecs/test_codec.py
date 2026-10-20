@@ -13,6 +13,7 @@ from bitpattern import IntSet, Pattern
 from bitpattern.codecs import (
     BDDSet,
     Flags,
+    Int,
     Members,
     OrderedCodec,
     Tuple,
@@ -218,6 +219,17 @@ def test_bdd_set_reprs():
         "BDDSet(float64, [0.0, 5e-324, 1e-323, 1.5e-323, ..., "
     )
     assert "size=2**24" in repr(ipv4.cidr("10.0.0.0/8"))
+
+
+def test_bdd_set_reprs_write_ints_too_long_for_decimal_in_hex():
+    wide, top = Int(20_000, "u20000", signed=False), 1 << 19_999
+    assert repr(wide.set([1, top])) == f"BDDSet(u20000, [1, {top:#x}])"
+    many = wide.set([*range(10), top])
+    assert repr(many) == f"BDDSet(u20000, [0, 1, 2, 3, ..., 9, {top:#x}], size=11)"
+    pairs, alone = Tuple(int8, wide), Tuple(wide)
+    written = f"BDDSet({pairs}, [(1, {top:#x}), (2, 3)])"
+    assert repr(pairs.set([(1, top), (2, 3)])) == written
+    assert repr(alone.set([(top,)])) == f"BDDSet({alone}, [({top:#x},)])"
 
 
 def test_big_bdd_sets_dont_go_through_len():

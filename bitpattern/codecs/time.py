@@ -69,7 +69,9 @@ class DateTime(OrderedCodec[dt.datetime]):
         return dt.datetime.min.replace(tzinfo=None if self.tz is None else dt.UTC)
 
     def _microseconds(self, value: dt.datetime) -> int:
-        return (value - self._epoch) // MICROSECOND
+        # Adding up the fields is quicker than dividing by a timedelta.
+        delta = value - self._epoch
+        return (delta.days * 86_400 + delta.seconds) * 1_000_000 + delta.microseconds
 
     def encode(self, value: object) -> int:
         if not isinstance(value, dt.datetime):
@@ -77,7 +79,7 @@ class DateTime(OrderedCodec[dt.datetime]):
         # Datetimes having a tzinfo with no UTC offset are naive
         if (value.utcoffset() is None) != (self.tz is None):
             raise ValueError(f"{self} can't encode {value!r}")
-        if (microseconds := self._microseconds(value)) not in self.all.storage:
+        if (microseconds := self._microseconds(value)) not in self._instants:
             raise ValueError(f"{self} can't encode {value!r}")
         return microseconds
 
@@ -89,15 +91,23 @@ class DateTime(OrderedCodec[dt.datetime]):
             raise IndexError(f"{self} has no value encoded as {bits}") from e
 
     @cached_property
-    def all(self) -> BDDSet[dt.datetime]:
-        """Every datetime. Instants at either end that overflow `datetime` in `tz`
-        are omitted."""
+    def _instants(self) -> range:
+        """The instants a `datetime` can hold in `tz`, in microseconds."""
         low = max(self._microseconds(dt.datetime.min.replace(tzinfo=self.tz)), 0)
         high = min(
             self._microseconds(dt.datetime.max.replace(tzinfo=self.tz)),
             LARGEST_DATETIME_US,
         )
-        return BDDSet(self, IntSet.range(low, high + 1, width=self.width))
+        return range(low, high + 1)
+
+    @cached_property
+    def all(self) -> BDDSet[dt.datetime]:
+        """Every datetime. Instants at either end that overflow `datetime` in `tz`
+        are omitted."""
+        instants = self._instants
+        return BDDSet(
+            self, IntSet.range(instants.start, instants.stop, width=self.width)
+        )
 
 
 dates = Date(LARGEST_DATE_DAYS.bit_length(), "dates")

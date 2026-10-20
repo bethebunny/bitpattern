@@ -1,0 +1,164 @@
+"""The module's state: the arena, the BDD type and the nodes' objects.
+
+Mojo has no global variables, so all of it lives in CPython's per-module state, which
+also gives each interpreter that imports the module an arena of its own. The module
+requires the GIL, which keeps every call into it on one thread at a time.
+"""
+
+from std.ffi import c_int, external_call
+from std.memory.alloc import unsafe_alloc
+from std.python._cpython import PyObjectPtr
+
+from arena import Arena
+
+from .ints import Ints
+
+from .capi import (
+    Py_DecRef,
+    PyCallable_Check,
+    PyErr_CheckSignals,
+    PyImport_ImportModule,
+    PyModule_GetState,
+    PyOS_InterruptOccurred,
+    PyType_GetModuleState,
+    cstr,
+    object_symbol,
+    ob_type,
+)
+from .errors import PyError, runtime_error
+
+
+struct State(Movable):
+    var arena: Int
+    """The arena's address, or 0 while a call has it."""
+    var depth: Int
+    """Calls under way. Only the outermost collects, since an outer call can hold a
+    node it hasn't wrapped yet."""
+    var wrappers: List[PyObjectPtr]
+    """Each node's object by index (borrowed: an object clears its entry as it dies),
+    or null. A node has at most one, so `is` compares diagrams."""
+    var bdd_type: PyObjectPtr
+    var batches_type: PyObjectPtr
+    """The iterator type `members`, `blocks` and `paths` return."""
+    var from_iterable: PyObjectPtr
+    """`itertools.chain.from_iterable`, or null until a walk first needs it."""
+    var range_type: PyObjectPtr
+    var none: PyObjectPtr
+    var not_implemented: PyObjectPtr
+    var version: UInt64
+    """The running Python's Py_Version, eg. 0x030E00F0."""
+    var ints: Ints
+
+    def __init__(out self, version: UInt64):
+        self.arena = 0
+        self.depth = 0
+        self.wrappers = List[PyObjectPtr]()
+        self.bdd_type = PyObjectPtr()
+        self.batches_type = PyObjectPtr()
+        self.from_iterable = PyObjectPtr()
+        self.range_type = object_symbol("PyRange_Type")
+        self.none = object_symbol("_Py_NoneStruct")
+        self.not_implemented = object_symbol("_Py_NotImplementedStruct")
+        self.version = version
+        self.ints = Ints(version)
+
+
+comptime StatePointer = Pointer[State, MutUntrackedOrigin]
+comptime ArenaPointer = Pointer[Arena, MutUntrackedOrigin]
+
+
+@always_inline
+def module_state(module: PyObjectPtr) -> StatePointer:
+    """The module's state holds the address of a State."""
+    var slot = Pointer[Int, MutUntrackedOrigin](
+        unsafe_from_address=PyModule_GetState(module)
+    )
+    return StatePointer(unsafe_from_address=slot[])
+
+
+@always_inline
+def type_state(type: PyObjectPtr) -> StatePointer:
+    """The state of the module that made `type`."""
+    var slot = Pointer[Int, MutUntrackedOrigin](
+        unsafe_from_address=PyType_GetModuleState(type)
+    )
+    return StatePointer(unsafe_from_address=slot[])
+
+
+@always_inline
+def object_state(o: PyObjectPtr) -> StatePointer:
+    return type_state(ob_type(o))
+
+
+def taken_arena(state: StatePointer) raises PyError -> ArenaPointer:
+    """Python code that runs while a call has the arena (eg. an `__index__`) could call
+    back in, so no Python may run until it's given back."""
+    var address = state[].arena
+    if address == 0:
+        raise runtime_error("a call has the arena")
+    state[].arena = 0
+    return ArenaPointer(unsafe_from_address=address)
+
+
+@always_inline
+def give_back(state: StatePointer, arena: ArenaPointer):
+    state[].arena = Int(arena)
+
+
+def paused(mut arena: Arena, context: Int) -> Bool:
+    """Runs Python's SIGINT handler after a Ctrl-C, and stops the walk if it raised.
+
+    The handler can use the arena, so the walk lends it the real one and holds a
+    placeholder meanwhile. Nothing collects while the handler runs, since the walk holds
+    nodes nothing else reaches. What the handler raised stays in Python's error
+    indicator for the call to return.
+    """
+    # Clears SIGINT's flag, so Python won't run the handler itself.
+    if PyOS_InterruptOccurred() == 0:
+        return True
+    var state = StatePointer(unsafe_from_address=context)
+    var lent = unsafe_alloc[Arena](1)
+    lent.unsafe_write(Arena.placeholder())
+    swap(arena, lent[])
+    state[].arena = Int(lent)
+    state[].depth += 1  # so the handler's calls aren't outermost
+    var handled = handle_sigint()
+    state[].depth -= 1
+    # Every call the handler made has given the arena back.
+    swap(arena, lent[])
+    state[].arena = 0
+    lent.unsafe_deinit_pointee()
+    lent.unsafe_free()
+    return handled
+
+
+def handle_sigint() -> Bool:
+    """False if the handler raised. Raising SIGINT again instead would look like a second
+    Ctrl-C to an event loop."""
+    var signal = PyImport_ImportModule(cstr("signal"))
+    if not signal:
+        return False
+    var handler = external_call[
+        "PyObject_CallMethod", PyObjectPtr, num_fixed_args=3
+    ](signal, "getsignal".ptr(), "i".ptr(), c_int(2))
+    Py_DecRef(signal)
+    if not handler:
+        return False
+    if PyCallable_Check(handler) != 0:
+        # The frame the signal came in, as Python passes it. Borrowed.
+        var frame = external_call["PyEval_GetFrame", PyObjectPtr]()
+        var result = external_call[
+            "PyObject_CallFunction", PyObjectPtr, num_fixed_args=2
+        ](
+            handler,
+            "iO".ptr(),
+            c_int(2),
+            frame if frame else object_symbol("_Py_NoneStruct"),
+        )
+        Py_DecRef(handler)
+        if not result:
+            return False
+        Py_DecRef(result)
+    else:
+        Py_DecRef(handler)
+    return PyErr_CheckSignals() == 0

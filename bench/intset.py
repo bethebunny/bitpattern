@@ -1,11 +1,10 @@
-"""IntSet workloads, timed against any implementation with the same API.
+"""IntSet workloads.
 
 Each repetition builds fresh random inputs outside the timer, so caches keyed on
 diagram identity can't answer a repeated question. Prints the best time per workload.
 
-    python bench/intset.py py              # bitpattern.intset.IntSet
-    python bench/intset.py rs              # the Rust spike, bitpattern_rs.IntSet
-    python bench/intset.py py --only 's[i]'
+    python bench/intset.py
+    python bench/intset.py --only 's[i]' --profile
 """
 
 from __future__ import annotations
@@ -13,7 +12,6 @@ from __future__ import annotations
 import argparse
 import cProfile
 import functools
-import importlib
 import json
 import operator
 import pstats
@@ -28,13 +26,6 @@ REPEAT = 5
 
 Setup = Callable[[random.Random], Any]
 Run = Callable[[Any], object]
-
-
-def implementation(name: str) -> type[IntSet]:
-    """The IntSet class to time. The Rust spike's matches the Python one's API."""
-    if name == "py":
-        return IntSet
-    return importlib.import_module("bitpattern_rs").IntSet
 
 
 def timed(setup: Setup, run: Run, profiler: cProfile.Profile | None = None) -> float:
@@ -131,7 +122,6 @@ def workloads(cls: type[IntSet]) -> Iterator[tuple[str, Setup, Run]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("implementation", choices=["py", "rs"])
     parser.add_argument(
         "--only", default="", help="run workloads whose name contains this"
     )
@@ -141,7 +131,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     results = {}
-    for label, setup, run in workloads(implementation(args.implementation)):
+    for label, setup, run in workloads(IntSet):
         if args.only in label:
             profiler = cProfile.Profile() if args.profile else None
             results[label] = timed(setup, run, profiler)

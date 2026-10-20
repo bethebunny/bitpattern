@@ -165,3 +165,33 @@ def test_set_algebra_across_blocks():
     assert ipv4.cidr("10.0.0.0/8") <= private
     assert ipv4.cidr("10.0.0.0/8").isdisjoint(ipv4.cidr("192.168.0.0/16"))
     assert (private & ipv4.cidr("10.1.0.0/16")).size == 2**16
+
+
+def test_ipv6_sets_index_and_iterate_in_their_top_half():
+    upper = ipv6.cidr("8000::/1")
+    address = ipaddress.IPv6Address(2**127 + 1)
+    assert upper[1] == address and upper.index(address) == 1
+    assert upper[-1] == ipaddress.IPv6Address(2**128 - 1)
+    tail = ipv6.range("ffff:ffff:ffff:ffff:ffff:ffff:ffff:fffd")
+    assert [int(address) for address in tail] == [2**128 - 3, 2**128 - 2, 2**128 - 1]
+    assert repr(ipv6.all).startswith("BDDSet(ipv6, [IPv6Address('::'), ")
+
+
+def test_addresses_encode_as_their_ints():
+    scoped = ipaddress.IPv6Address("fe80::1%eth0")
+    assert ipv6.encode(scoped) == ipv6.encode("fe80::1") == int(scoped)
+    assert ipv4.encode(ipaddress.IPv4Address("10.1.2.3")) == 0x0A010203
+
+
+@pytest.mark.parametrize(
+    "codec, interface",
+    [
+        (ipv4, ipaddress.IPv4Interface("10.1.2.3/8")),
+        (ipv6, ipaddress.IPv6Interface("2001:db8::1/64")),
+    ],
+)
+def test_interfaces_arent_addresses(codec, interface):
+    """ipaddress doesn't count an interface equal to its address."""
+    with pytest.raises(ValueError):
+        codec.encode(interface)
+    assert interface not in codec.all

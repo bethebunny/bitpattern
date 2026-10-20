@@ -2,17 +2,62 @@
 
 from __future__ import annotations
 
-import functools
 import itertools
-import operator
 import random
 from collections.abc import Iterable, Iterator, Sequence
 from collections.abc import Set as AbstractSet
-from typing import Self, overload
+from typing import TYPE_CHECKING, Self, overload
 
-from .bdd import BDD, accepts, count, exactly, iota, members, nth, render_count
+from .bdd import (
+    BDD,
+    accepts,
+    count,
+    count_repr,
+    disjoint,
+    exactly_these,
+    interval,
+    members,
+    narrowed,
+    nth,
+    rank,
+    subset,
+)
+from .dlpack import CPU, exported, unsigned
+
+if TYPE_CHECKING:
+    from typing_extensions import CapsuleType
 
 __all__ = ["IntSet"]
+
+
+def written(value: object) -> str:
+    """`repr(value)`, with ints too long for decimal in hex (alone or in a plain
+    tuple)."""
+    try:
+        return repr(value)
+    except ValueError:
+        if isinstance(value, int):
+            return hex(value)
+        if type(value) is tuple:
+            items = ", ".join(map(written, value))
+            return f"({items},)" if len(value) == 1 else f"({items})"
+        raise
+
+
+def described(value: int) -> str:
+    """`str(value)`, or its size if it's too long for `str`."""
+    try:
+        return str(value)
+    except ValueError:
+        return f"an int of {value.bit_length()} bits"
+
+
+def listed(values: Iterable[object]) -> str:
+    values = list(values)
+    try:
+        return repr(values)[1:-1]  # quicker than writing each one out
+    except ValueError:
+        return ", ".join(map(written, values))
 
 
 class IntSet(AbstractSet[int], Sequence[int]):
@@ -64,12 +109,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
     width: int
 
     def __init__(self, iterable: Iterable[int] = (), *, width: int = 0) -> None:
-        values = list(iterable)
-        if values and (lowest := min(values)) < 0:
-            raise ValueError(f"IntSets can't hold negative numbers, got {lowest}")
-        self.width = max(width, max(values, default=0).bit_length())
-        singles = (exactly(value, width=self.width) for value in values)
-        self.bdd = functools.reduce(operator.or_, singles, BDD.REJECT)
+        self.bdd, self.width = exactly_these(iterable, width=width)
 
     @classmethod
     def from_bdd(cls, bdd: BDD, width: int) -> Self:
@@ -82,18 +122,19 @@ class IntSet(AbstractSet[int], Sequence[int]):
     @classmethod
     def range(cls, start: int, stop: int, *, width: int | None = None) -> Self:
         if start < 0:
-            raise ValueError(f"IntSets can't hold negative numbers, got {start}")
+            raise ValueError(
+                f"IntSets can't hold negative numbers, got {described(start)}"
+            )
         if width is None:
             width = max(stop - 1, 0).bit_length()
-        return cls.from_bdd(iota(stop, width=width) - iota(start, width=width), width)
+        return cls.from_bdd(interval(start, stop, width=width), width)
 
     def _extended(self, width: int) -> BDD:
-        # The width bounds the members, but the diagram doesn't encode the bound.
-        # {0} at width 1 is "bit 0 is clear", which read at width 4 would be every
-        # even number. So reading a diagram wider needs the bound added explicitly.
+        # The diagram doesn't encode the width, eg. {0} at width 1 is "bit 0 is clear",
+        # which at width 4 is every even number.
         if width <= self.width:
             return self.bdd
-        return self.bdd & iota(1 << self.width, width=width)
+        return self.bdd & interval(0, 1 << self.width, width=width)
 
     def _align(self, other: Iterable[int]) -> tuple[BDD, BDD, int]:
         if not isinstance(other, IntSet):
@@ -104,10 +145,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
     def _canonical(self) -> tuple[BDD, int]:
         """The diagram at the narrowest width that fits, so equal sets match."""
         width = self[-1].bit_length() if self else 0
-        bdd = self.bdd
-        while bdd.bit >= width:
-            bdd = bdd.left  # all the members fit in width, so the right branch is empty
-        return bdd, width
+        return narrowed(self.bdd, width=width), width
 
     def widened(self, width: int) -> Self:
         """The same members, over at least `width` bits."""
@@ -118,7 +156,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
     @property
     def size(self) -> int:
         """How many members there are. Unlike len(), this can go past `2**63 - 1`."""
-        return count(self.bdd, self.width)
+        return count(self.bdd, width=self.width)
 
     def __len__(self) -> int:
         return self.size
@@ -138,6 +176,29 @@ class IntSet(AbstractSet[int], Sequence[int]):
         # Sequence's goes through len() which can overflow.
         return map(self.__getitem__, reversed(range(self.size)))
 
+    def __dlpack__(
+        self,
+        *,
+        stream: int | None = None,
+        max_version: tuple[int, int] | None = None,
+        dl_device: tuple[int, int] | None = None,
+        copy: bool | None = None,
+    ) -> CapsuleType:
+        """The members as a DLPack tensor of the narrowest unsigned int that fits. Past
+        64 bits each member is a row of bytes, most significant first."""
+        return exported(
+            self.bdd,
+            width=self.width,
+            dtype=unsigned(self.width),
+            stream=stream,
+            max_version=max_version,
+            dl_device=dl_device,
+            copy=copy,
+        )
+
+    def __dlpack_device__(self) -> tuple[int, int]:
+        return (CPU, 0)
+
     @overload
     def __getitem__(self, item: int) -> int: ...
     @overload
@@ -145,18 +206,16 @@ class IntSet(AbstractSet[int], Sequence[int]):
     def __getitem__(self, item: int | slice) -> int | Self:
         if not isinstance(item, slice):
             return nth(self.bdd, item, width=self.width)
-        # A slice is the set of members at the sliced positions, so a negative step
-        # doesn't reverse anything.
+        # A set, so a negative step doesn't reverse anything.
         positions = range(self.size)[item]
-        if positions.step == 1 and positions:  # one range, so no need to find each one
+        if positions.step == 1 and positions:
             return self & IntSet.range(self[positions[0]], self[positions[-1]] + 1)
         return self & IntSet(map(self.__getitem__, positions))
 
     def index(self, value: object, start: int = 0, stop: int | None = None) -> int:
-        """Where `value` is among the members, counted without searching."""
+        """O(w), without searching."""
         if isinstance(value, int) and value in self:
-            # The position is how many members are below value.
-            at = count(self.bdd & iota(value, width=self.width), self.width)
+            at = rank(self.bdd, value, width=self.width)
             if at in range(self.size)[start:stop]:
                 return at
         raise ValueError(f"{value!r} is not in the set")
@@ -165,10 +224,10 @@ class IntSet(AbstractSet[int], Sequence[int]):
         return int(value in self)
 
     def choice(self, *, rng: random.Random | None = None) -> int:
-        """A uniformly random member, like random.choice() but at any size."""
-        if not self:
+        """Like `random.choice`, but at any size."""
+        if not (size := self.size):
             raise IndexError("can't choose from an empty set")
-        return self[(rng or random).randrange(self.size)]
+        return nth(self.bdd, (rng or random).randrange(size), width=self.width)
 
     def __and__(self, other: Iterable[int]) -> Self:
         a, b, width = self._align(other)
@@ -184,7 +243,7 @@ class IntSet(AbstractSet[int], Sequence[int]):
 
     def __xor__(self, other: Iterable[int]) -> Self:
         a, b, width = self._align(other)
-        return type(self).from_bdd((a | b) - (a & b), width)
+        return type(self).from_bdd(a ^ b, width)
 
     # Set's own reflected operators iterate both sides, so {1} | huge would hang.
     __rand__ = __and__
@@ -203,12 +262,14 @@ class IntSet(AbstractSet[int], Sequence[int]):
     def __le__(self, other: object) -> bool:
         if not isinstance(other, IntSet):
             return NotImplemented
-        return not self - other
+        a, b, _ = self._align(other)
+        return subset(a, b)
 
     def __ge__(self, other: object) -> bool:
         if not isinstance(other, IntSet):
             return NotImplemented
-        return not other - self
+        a, b, _ = self._align(other)
+        return subset(b, a)
 
     def __lt__(self, other: object) -> bool:
         if not isinstance(other, IntSet):
@@ -231,14 +292,14 @@ class IntSet(AbstractSet[int], Sequence[int]):
         return hash(self._canonical())
 
     def isdisjoint(self, other: Iterable[int]) -> bool:
-        return not self & other
+        a, b, _ = self._align(other)
+        return disjoint(a, b)
 
     def __repr__(self) -> str:
-        # Small sets repr every member, and bigger ones just a few from each end.
         if (size := self.size) <= 10:
-            return f"IntSet({list(self)}, width={self.width})"
-        head = ", ".join(map(str, itertools.islice(self, 4)))
+            return f"IntSet([{listed(self)}], width={self.width})"
+        head, tail = listed(itertools.islice(self, 4)), listed([self[-2], self[-1]])
         return (
-            f"IntSet([{head}, ..., {self[-2]}, {self[-1]}], "
-            f"size={render_count(size)}, width={self.width})"
+            f"IntSet([{head}, ..., {tail}], "
+            f"size={count_repr(size)}, width={self.width})"
         )

@@ -7,8 +7,9 @@ import struct
 from dataclasses import dataclass
 from functools import cached_property
 
+from ..bdd import diagram
+from ..dlpack import DType, unsigned
 from ..intset import IntSet
-from ..pattern import diagram
 from .codec import BDDSet, OrderedCodec
 
 __all__ = [
@@ -21,6 +22,15 @@ __all__ = [
     "float32",
     "float64",
 ]
+
+# Formats whose encodings are a C type's bits, by (width, exponent, struct format).
+FLOAT_DTYPES = {
+    (8, 5, ">e"): DType.FLOAT8_E5M2,
+    (16, 5, ">e"): DType.FLOAT16,
+    (16, 8, ">f"): DType.BFLOAT16,
+    (32, 8, ">f"): DType.FLOAT32,
+    (64, 11, ">d"): DType.FLOAT64,
+}
 
 
 @dataclass(frozen=True, repr=False)
@@ -36,18 +46,25 @@ class Float(OrderedCodec[float]):
     exponent: int
     format: str  # `struct` format, eg. ">d"
 
-    @property
+    @cached_property
     def mantissa(self) -> int:
         return self.width - 1 - self.exponent
+
+    # struct caches compiled formats, and a codec holding one couldn't be pickled.
+    @cached_property
+    def _bytes(self) -> int:
+        """How many bytes `format` packs a float into."""
+        return struct.calcsize(self.format)
 
     @cached_property
     def _spare(self) -> int:
         """How many bits `format` has below this format's."""
-        return 8 * struct.calcsize(self.format) - self.width
+        return 8 * self._bytes - self.width
 
     def _double(self, value: object) -> float:
-        """`value` as a Python float, for `encode`."""
         try:
+            if isinstance(value, int):  # struct would call one too big a non-number
+                return float(value)
             return struct.unpack(">d", struct.pack(">d", value))[0]
         except struct.error as e:  # not a number
             raise TypeError(f"{self} can't encode {value!r}") from e
@@ -55,23 +72,28 @@ class Float(OrderedCodec[float]):
             raise ValueError(f"{self} can't encode {value!r}") from e
 
     def encode(self, value: object) -> int:
-        double = self._double(value)
+        double = value if type(value) is float else self._double(value)
         try:
-            # Round to this format before packing. struct would round to the wider
-            # format, and rounding twice can go the wrong way.
-            packed = struct.pack(self.format, self._round(double))
+            # A narrower format rounds to its own precision first, since struct's
+            # rounding to `format` on top could round twice the wrong way.
+            rounded = self._round(double) if self._spare else double
+            packed = struct.pack(self.format, rounded)
         except OverflowError as e:
             raise ValueError(f"{self} can't encode {value!r}") from e
         return int.from_bytes(packed) >> self._spare
 
     def decode(self, bits: int) -> float:
         try:
-            packed = (bits << self._spare).to_bytes(struct.calcsize(self.format))
+            packed = (bits << self._spare).to_bytes(self._bytes)
         except OverflowError as e:  # wider than this format
             raise IndexError(f"{self} has no value encoded as {bits}") from e
         return struct.unpack(self.format, packed)[0]
 
-    @property
+    def dtype(self) -> DType:
+        key = (self.width, self.exponent, self.format)
+        return FLOAT_DTYPES[key] if key in FLOAT_DTYPES else super().dtype()
+
+    @cached_property
     def _lowest(self) -> int:
         """The exponent of the smallest subnormal, eg. -24 for a float16."""
         return 2 - (1 << (self.exponent - 1)) - self.mantissa
@@ -137,8 +159,7 @@ class Float(OrderedCodec[float]):
         return bits ^ mask if bits & sign else bits | sign
 
     def _bound(self, value: float) -> int:
-        """The key of the first float at or above `value`, where a range bounded by
-        `value` starts or stops."""
+        """The key of the first float at or above `value`."""
         if value > self.max:  # inf if there is one, or else past the end
             return self._key(self.encode(self.max)) + 1
         if -math.inf < value < self.min:
@@ -147,12 +168,12 @@ class Float(OrderedCodec[float]):
         # encode rounds to the nearest float, which can be the one below.
         return key + 1 if self.decode(bits) < value else key
 
-    @property
+    @cached_property
     def min(self) -> float:
         """The most negative finite float, like `np.finfo`'s."""
         return (self.finite & self.negative)[-1]
 
-    @property
+    @cached_property
     def max(self) -> float:
         """The largest finite float, like `np.finfo`'s."""
         return (self.finite & self.positive)[-1]
@@ -160,15 +181,14 @@ class Float(OrderedCodec[float]):
     def range(
         self, start: float | None = None, stop: float | None = None
     ) -> BDDSet[float]:
-        """Floats in `[start, stop)`, never NaN. A bound of `None` includes the
-        infinity at that end. `-0.0` sorts just below `0.0`, so `range(0.0)` leaves
-        out `-0.0`."""
+        """Floats in `[start, stop)`, never NaN. `None` includes that end's infinity.
+        `-0.0` sorts just below `0.0`, so `range(0.0)` leaves it out."""
         if any(bound is not None and math.isnan(bound) for bound in (start, stop)):
             raise ValueError("NaN isn't ordered, so it can't bound a range")
         sign, mask = 1 << (self.width - 1), (1 << self.width) - 1
         low = self._bound(-math.inf if start is None else start)
         high = self._bound(self.positive[-1]) + 1 if stop is None else self._bound(stop)
-        # Keys below sign are the negative floats (reversed) and the rest are positive.
+        # Keys below `sign` are the negative floats, reversed.
         negative = IntSet.range(
             mask - min(high, sign) + 1, mask - low + 1, width=self.width
         )
@@ -186,12 +206,18 @@ class FloatFN(Float):
 
     format: str = ""  # unused, since struct has no format for these
 
+    def dtype(self) -> DType:
+        if (self.width, self.exponent) == (8, 4):
+            return DType.FLOAT8_E4M3FN
+        # Float's dtypes have infinities where these formats have numbers.
+        return unsigned(self.width)
+
     @cached_property
     def _largest(self) -> float:
         return self.positive[-1]
 
     def encode(self, value: object) -> int:
-        double = self._double(value)
+        double = value if type(value) is float else self._double(value)
         try:
             magnitude = abs(self._round(double))  # rounding up can overflow a double
         except OverflowError as e:
@@ -202,8 +228,8 @@ class FloatFN(Float):
         elif magnitude > self._largest:
             raise ValueError(f"{self} can't encode {value!r}")
         else:
-            # Values are whole steps of the smallest subnormal. Subnormals and the
-            # first exponent share that step. Each exponent after doubles the step.
+            # Whole steps of the smallest subnormal, which double with each exponent
+            # after the first.
             steps = int(math.ldexp(magnitude, -self._lowest))
             exponent = max(steps.bit_length() - self.mantissa, 0)
             mantissa = steps >> max(exponent - 1, 0)  # with the implicit leading 1

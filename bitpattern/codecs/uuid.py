@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from functools import cached_property
 from uuid import UUID
 
+from ..bdd import diagram
 from ..intset import IntSet
-from ..pattern import diagram
 from .codec import BDDSet, OrderedCodec
 
 __all__ = ["UUIDCodec", "uuid128"]
