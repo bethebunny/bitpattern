@@ -7,7 +7,7 @@ from std.hashlib import Hasher
 from std.memory import unsafe_memcmp, unsafe_memcpy, unsafe_memset_zero
 from std.os import abort
 from std.sys import inlined_assembly
-from std.sys.info import CompilationTarget, is_little_endian
+from std.sys.info import CompilationTarget
 
 # The largest power of ten in a limb.
 comptime DECIMAL_CHUNK = UInt64(10_000_000_000_000_000_000)
@@ -181,30 +181,6 @@ struct BigUInt(
             limbs.append(_low_mask(bits & 63))
         return Self(limbs=limbs^)
 
-    @staticmethod
-    def from_bytes_le(bytes: Span[UInt8, _]) -> Self:
-        comptime assert is_little_endian()
-        var n = len(bytes)
-        var limbs = Limbs(length=(n + 7) >> 3, fill=0)
-        unsafe_memcpy(
-            dest=limbs.unsafe_ptr().unsafe_bitcast[UInt8](),
-            src=bytes.unsafe_ptr(),
-            count=n,
-        )
-        return Self(limbs=limbs^)
-
-    def to_bytes_le(self) -> List[UInt8]:
-        """The fewest bytes that hold it, so none for zero."""
-        comptime assert is_little_endian()
-        var n = (self.bits() + 7) >> 3
-        var bytes = List[UInt8](unsafe_uninit_length=n)
-        unsafe_memcpy(
-            dest=bytes.unsafe_ptr(),
-            src=self.limbs.unsafe_ptr().unsafe_bitcast[UInt8](),
-            count=n,
-        )
-        return bytes^
-
     def fitting_uint64(self) -> Optional[UInt64]:
         if len(self.limbs) > 1:
             return None
@@ -218,9 +194,6 @@ struct BigUInt(
     @always_inline
     def _limb(self, i: Int) -> UInt64:
         return self.limbs.unsafe_get(i) if i < len(self.limbs) else 0
-
-    def is_zero(self) -> Bool:
-        return not self.limbs
 
     def __bool__(self) -> Bool:
         return Bool(self.limbs)
@@ -281,18 +254,6 @@ struct BigUInt(
 
     # Comparisons
 
-    def _order(self, rhs: Self) -> Int:
-        """Negative, zero or positive as `self` is below, at or above `rhs`."""
-        var n = len(self.limbs)
-        if n != len(rhs.limbs):
-            return n - len(rhs.limbs)
-        for i in range(n - 1, -1, -1):
-            var a = self.limbs.unsafe_get(i)
-            var b = rhs.limbs.unsafe_get(i)
-            if a != b:
-                return 1 if a > b else -1
-        return 0
-
     def __eq__(self, rhs: Self) -> Bool:
         var n = len(self.limbs)
         return n == len(rhs.limbs) and (
@@ -304,38 +265,13 @@ struct BigUInt(
             == 0
         )
 
-    def __ne__(self, rhs: Self) -> Bool:
-        return not self == rhs
-
     def __lt__(self, rhs: Self) -> Bool:
-        return self._order(rhs) < 0
-
-    def __le__(self, rhs: Self) -> Bool:
-        return self._order(rhs) <= 0
-
-    def __gt__(self, rhs: Self) -> Bool:
-        return self._order(rhs) > 0
-
-    def __ge__(self, rhs: Self) -> Bool:
-        return self._order(rhs) >= 0
+        var n = len(self.limbs)
+        if n != len(rhs.limbs):
+            return n < len(rhs.limbs)
+        return _less(self.limbs, rhs.limbs)
 
     # Bitwise
-
-    def __and__(self, rhs: Self) -> Self:
-        var n = min(len(self.limbs), len(rhs.limbs))
-        var limbs = Limbs(unsafe_uninit_length=n)
-        for i in range(n):
-            limbs.unsafe_get(i) = self.limbs.unsafe_get(
-                i
-            ) & rhs.limbs.unsafe_get(i)
-        return Self(limbs=limbs^)
-
-    def __iand__(mut self, rhs: Self):
-        var n = min(len(self.limbs), len(rhs.limbs))
-        self.limbs.shrink(n)
-        for i in range(n):
-            self.limbs.unsafe_get(i) &= rhs.limbs.unsafe_get(i)
-        _trim(self.limbs)
 
     def __or__(self, rhs: Self) -> Self:
         if len(self.limbs) < len(rhs.limbs):
@@ -378,9 +314,6 @@ struct BigUInt(
             )
         return Self(limbs=limbs^)
 
-    def __ilshift__(mut self, shift: Int):
-        self = self << shift
-
     def __rshift__(self, shift: Int) -> Self:
         assert shift >= 0
         var whole = shift >> 6
@@ -394,29 +327,6 @@ struct BigUInt(
         else:
             unsafe_memcpy(dest=limbs.unsafe_ptr(), src=low, count=n)
         return Self(limbs=limbs^)
-
-    def __irshift__(mut self, shift: Int):
-        assert shift >= 0
-        var whole = shift >> 6
-        var n = len(self.limbs) - whole
-        if n <= 0:
-            self.limbs.clear()
-            return
-        var limbs = self.limbs.unsafe_ptr()
-        var part = UInt64(shift & 63)
-        if part:
-            for i in range(n - 1):
-                limbs[unsafe_offset=i] = limbs[
-                    unsafe_offset=i + whole
-                ] >> part | (limbs[unsafe_offset=i + whole + 1] << (64 - part))
-            limbs[unsafe_offset=n - 1] = (
-                limbs[unsafe_offset=n - 1 + whole] >> part
-            )
-        elif whole:
-            for i in range(n):
-                limbs[unsafe_offset=i] = limbs[unsafe_offset=i + whole]
-        self.limbs.shrink(n)
-        _trim(self.limbs)
 
     # Arithmetic
 
@@ -445,9 +355,6 @@ struct BigUInt(
             self.limbs.resize(n, 0)
         var carry = _add_to(self.limbs.unsafe_ptr(), rhs.limbs.unsafe_ptr(), n)
         self._carry_from(n, carry)
-
-    def __iadd__(mut self, rhs: UInt64):
-        self._carry_from(0, rhs)
 
     def _carry_from(mut self, i: Int, carry: UInt64):
         """Adds `carry` at limb `i`."""
@@ -491,43 +398,6 @@ struct BigUInt(
             )
         return Self(limbs=limbs^)
 
-    def __mul__(self, rhs: UInt64) -> Self:
-        var n = len(self.limbs)
-        if n == 0 or rhs == 0:
-            return Self()
-        var limbs = Limbs(capacity=n + 1)
-        limbs.resize(unsafe_uninit_length=n)
-        var top = _multiplied(
-            limbs.unsafe_ptr(), self.limbs.unsafe_ptr(), n, rhs
-        )
-        if top:
-            limbs.append(top)
-        return Self(limbs=limbs^)
-
-    def __imul__(mut self, rhs: Self):
-        self = self * rhs
-
-    def __imul__(mut self, rhs: UInt64):
-        if rhs == 0:
-            self.limbs.clear()
-            return
-        var limbs = self.limbs.unsafe_ptr()
-        var carry = UInt64(0)
-        for i in range(len(self.limbs)):
-            var p = UInt128(limbs[unsafe_offset=i]) * UInt128(rhs) + UInt128(
-                carry
-            )
-            limbs[unsafe_offset=i] = UInt64(p)
-            carry = UInt64(p >> 64)
-        if carry:
-            self.limbs.append(carry)
-
-    def __divmod__(self, divisor: Self) -> Tuple[Self, Self]:
-        var quotient = Self()
-        var remainder = Self()
-        _divide(self.limbs, divisor.limbs, quotient.limbs, remainder.limbs)
-        return (quotient^, remainder^)
-
     def __floordiv__(self, divisor: Self) -> Self:
         var quotient = Self()
         var remainder = Self()
@@ -568,9 +438,6 @@ struct BigUInt(
                 digits[at] = pairs[unsafe_offset=pair + 1]
                 digits[at - 1] = pairs[unsafe_offset=pair]
             writer.write_string(StringSlice(unsafe_from_utf8=Span(digits)))
-
-    def write_repr_to(self, mut writer: Some[Writer]):
-        writer.write("BigUInt(", self, ")")
 
 
 # Limb kernels. Pointers name `n` limbs, least significant first.
