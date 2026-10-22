@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sysconfig
 import tempfile
+from importlib.metadata import distribution
 from pathlib import Path
 from typing import Any
 
@@ -36,9 +37,11 @@ class MojoBuildHook(BuildHookInterface):
             # The module stays in the project, away from site-packages, so it gets
             # copies of the runtime libraries.
             module = root / "bitpattern" / "bdd.abi3.so"
-            lib = Path(sysconfig.get_path("platlib")) / "modular" / "lib"
+            # The build environment's mojo-compiler: the target environment may not
+            # have it yet.
+            lib = distribution("mojo-compiler").locate_file("modular/lib")
             for name in RUNTIME:
-                shutil.copy(lib / name, module.parent)
+                shutil.copy(str(lib / name), module.parent)
             rpath = "$ORIGIN"
         else:
             # Built outside the project, so a wheel doesn't replace an editable
@@ -53,9 +56,9 @@ class MojoBuildHook(BuildHookInterface):
         # environment, which an isolated build deletes.
         shared_libs = f"-Xlinker,-rpath,-Xlinker,{rpath}"
         env = dict(os.environ, MODULAR_MOJO_MAX_SHARED_LIBS=shared_libs)
-        mojo = Path(sysconfig.get_path("scripts")) / "mojo"
         source = root / "src" / "lib.mojo"
-        build = [mojo, "build", source, "--emit", "shared-lib", "-o", module, *flags]
+        # The build environment's mojo, which pip and uv put first on PATH.
+        build = ["mojo", "build", source, "--emit", "shared-lib", "-o", module, *flags]
         subprocess.run(build, check=True, env=env)
         build_data["pure_python"] = False
         # The stable ABI, from CPython 3.11 on: one wheel per platform.
