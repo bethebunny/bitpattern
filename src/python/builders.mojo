@@ -394,13 +394,51 @@ struct Distinct[T: KeyElement & Copyable & Comparable & Deinitable](Movable):
 
 
 def deduplicate[T: Copyable & Comparable & Deinitable](mut values: List[T]):
-    sort(Span(values))
+    comptime if T == UInt128:
+        radix_sort(rebind[List[UInt128]](values))
+    else:
+        sort(Span(values))
     var kept = 0
     for index in range(len(values)):
         if kept == 0 or values[kept - 1] != values[index]:
             values[kept] = values[index].copy()
             kept += 1
     values.shrink(kept)
+
+
+def radix_sort(mut values: List[UInt128]):
+    """Least significant byte first."""
+    var n = len(values)
+    # Counting costs more than comparing a few values.
+    if n < 64:
+        sort(Span(values))
+        return
+    # How many values have each byte at each of the 16 places.
+    var counts = List[Int](length=16 * 256, fill=0)
+    for value in values:
+        comptime for place in range(16):
+            counts.unsafe_get(256 * place + byte_at(value, place)) += 1
+    var moved = List[UInt128](length=n, fill=0)
+    for place in range(16):
+        var start = 256 * place
+        # Every value has the same byte here, so the pass would move nothing.
+        if counts.unsafe_get(start + byte_at(values.unsafe_get(0), place)) == n:
+            continue
+        var total = 0
+        for index in range(start, start + 256):
+            var count = counts.unsafe_get(index)
+            counts.unsafe_set(index, total)
+            total += count
+        for value in values:
+            ref at = counts.unsafe_get(start + byte_at(value, place))
+            moved.unsafe_set(at, value)
+            at += 1
+        swap(values, moved)
+
+
+@always_inline
+def byte_at(value: UInt128, place: Int) -> Int:
+    return Int((value >> UInt128(8 * place)) & 0xFF)
 
 
 struct Members(Movable):
