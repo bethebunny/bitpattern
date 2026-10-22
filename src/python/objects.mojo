@@ -114,9 +114,8 @@ def leave(state: StatePointer):
 def made[
     F: def(mut Arena) raises Interrupted -> Id
 ](state: StatePointer, walk: F) raises PyError -> PyObjectPtr:
-    """Runs `walk` with the arena and returns its node's object (rust-spike's
-    wrap_result). If a pause stopped the walk, Python's error is the handler's.
-    """
+    """Runs `walk` with the arena and returns its node's object. If a pause stopped
+    the walk, Python's error is the handler's."""
     var arena = enter(state)
     var id: Id
     try:

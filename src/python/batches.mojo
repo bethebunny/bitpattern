@@ -363,9 +363,9 @@ def walked[
     made.root = Py_NewRef(root)
     Pointer(to=made.walker).unsafe_write(walker(id, at))
     made.sizes = BatchSizes(at)
-    var chained = external_call["PyObject_CallOneArg", PyObjectPtr](
-        chain, batches
-    )
+    var chained = external_call[
+        "PyObject_CallFunctionObjArgs", PyObjectPtr, num_fixed_args=1
+    ](chain, batches, PyObjectPtr())
     Py_DecRef(batches)
     if not chained:
         raise PyError()

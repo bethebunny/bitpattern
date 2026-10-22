@@ -47,6 +47,7 @@ from python.capi import (
     ModuleSlot,
     Py_DecRef,
     Py_MOD_PER_INTERPRETER_GIL_SUPPORTED,
+    Py_NewRef,
     Py_mod_exec,
     Py_mod_multiple_interpreters,
     PyList_New,
@@ -67,6 +68,7 @@ from python.capi import (
 )
 from python.dlpack import TENSOR, tensor
 from python.errors import PyError, raised
+from python.ints import c_function
 from python.objects import collect, stats, wrap
 from python.queries import (
     ACCEPTS,
@@ -214,8 +216,8 @@ def PyInit_bdd() abi("C") -> PyObjectPtr:
         8,  # the address of a State
         methods(),
         Int(slots),
-        0,
-        0,
+        address(module_traverse),
+        address(module_clear),
         address(module_free),
     )
     return PyModuleDef_Init(Int(definition))
@@ -239,7 +241,7 @@ def module_exec(module: PyObjectPtr) abi("C") -> c_int:
         state[].arena = Int(arena)
         state[].bdd_type = bdd_type(module)
         state[].batches_type = batches_type(module)
-        added(module, "BDD", state[].bdd_type)
+        added(module, "BDD", Py_NewRef(state[].bdd_type))
         added(state[].bdd_type, "ACCEPT", wrap(state, ACCEPT))
         added(state[].bdd_type, "REJECT", wrap(state, REJECT))
         added(state[].bdd_type, "__match_args__", match_args())
@@ -287,7 +289,48 @@ def match_args() -> PyObjectPtr:
     return names
 
 
+def module_traverse(
+    module: PyObjectPtr, visit: Int, arg: Int
+) abi("C") -> c_int:
+    var slot = Pointer[Int, MutUntrackedOrigin](
+        unsafe_from_address=PyModule_GetState(module)
+    )
+    if slot[] == 0:
+        return 0
+    var state = StatePointer(unsafe_from_address=slot[])
+    var visited = c_function[def(PyObjectPtr, Int) thin abi("C") -> c_int](
+        visit
+    )
+    for o in [state[].bdd_type, state[].batches_type, state[].from_iterable]:
+        if o:
+            var failed = visited(o, arg)
+            if failed:
+                return failed
+    return 0
+
+
+def module_clear(module: PyObjectPtr) abi("C") -> c_int:
+    var slot = Pointer[Int, MutUntrackedOrigin](
+        unsafe_from_address=PyModule_GetState(module)
+    )
+    if slot[] == 0:
+        return 0
+    var state = StatePointer(unsafe_from_address=slot[])
+    clear(state[].bdd_type)
+    clear(state[].batches_type)
+    clear(state[].from_iterable)
+    return 0
+
+
+def clear(mut o: PyObjectPtr):
+    """Nulls `o`, then drops it (as Py_CLEAR does)."""
+    var dropped = o
+    o = PyObjectPtr()
+    Py_DecRef(dropped)
+
+
 def module_free(module: PyObjectPtr) abi("C"):
+    _ = module_clear(module)
     var slot = Pointer[Int, MutUntrackedOrigin](
         unsafe_from_address=PyModule_GetState(module)
     )

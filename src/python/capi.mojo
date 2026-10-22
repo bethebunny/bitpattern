@@ -1,8 +1,8 @@
 """The parts of CPython's C API the module calls, and the structs it shares with C.
 
 `external_call` binds each name when Python loads the module, as for any C extension, so
-only names that every supported version (3.11 on) exports are called that way. Data
-symbols and newer functions are looked up with `symbol` at init.
+only functions in 3.11's stable ABI are called that way. Data symbols and other functions
+are looked up with `symbol` at init.
 
 Pointers in the structs are plain Ints (addresses), which C reads the same way. Memory
 passed to a call is a `Buffer`, never an Int: the compiler can't see C read or write
