@@ -1,15 +1,21 @@
-"""Open-addressing hash tables keyed by node ids.
+"""Hash tables keyed by node ids, laid out as Swiss tables.
 
-Both tables probe linearly in a power-of-two array, and grow before they're 3/4 full.
+Each slot has a control byte (EMPTY, DELETED, or 7 bits of its key's hash) in a separate
+array, and a probe matches GROUP of them at once. A miss reads only control bytes, which
+stay in cache when the slots don't.
 """
 
-from std.bit import count_leading_zeros
+from std.bit import count_trailing_zeros
+from std.memory import pack_bits, unsafe_memset
 
-from .arena import Decision, Id, REJECT
+from .arena import Decision, Id
 
 
-comptime EMPTY: UInt64 = 0
-comptime MIN_SLOTS = 8
+comptime GROUP = 16
+comptime MIN_SLOTS = GROUP
+comptime EMPTY: UInt8 = 0xFF
+comptime DELETED: UInt8 = 0x80
+comptime Group = SIMD[DType.uint8, GROUP]
 
 
 @always_inline
@@ -18,29 +24,148 @@ def mixed(key: UInt64) -> UInt64:
     return key * 0x9E3779B97F4A7C15
 
 
+def room(slots: Int) -> Int:
+    """How many entries fit in `slots` before the table grows."""
+    # Probes match a group at a time, so they stay short up to 7/8 full.
+    return slots * 7 // 8
+
+
 def slots_for(entries: Int) -> Int:
-    """The fewest slots that hold `entries` under the load limit."""
+    """The fewest slots with room for `entries`."""
     if entries == 0:
         return 0
-    var needed = max(MIN_SLOTS, (entries * 4 + 2) // 3)
-    return 1 << (64 - Int(count_leading_zeros(UInt64(needed - 1))))
+    var slots = MIN_SLOTS
+    while room(slots) < entries:
+        slots *= 2
+    return slots
+
+
+@always_inline
+def matches(group: Group, byte: UInt8) -> UInt16:
+    return pack_bits(group.eq(Group(byte)))
+
+
+@always_inline
+def free_in(group: Group) -> UInt16:
+    """EMPTY or DELETED, which have the high bit set."""
+    return pack_bits((group & Group(0x80)).eq(Group(0x80)))
+
+
+@always_inline
+def lowest(bits: UInt16) -> Int:
+    return Int(count_trailing_zeros(bits))
+
+
+struct Control(Movable):
+    """A byte for each slot, then a copy of the first GROUP, so a group can start at any
+    slot."""
+
+    var bytes: List[UInt8]
+    var shift: UInt64
+
+    def __init__(out self, slots: Int):
+        var count = slots + GROUP if slots else 0
+        self.bytes = List[UInt8](length=count, fill=EMPTY)
+        self.shift = 64 - UInt64(count_trailing_zeros(slots)) if slots else 64
+
+    @always_inline
+    def home(self, hash: UInt64) -> Int:
+        return Int(hash >> self.shift)
+
+    @always_inline
+    def byte(self, hash: UInt64) -> UInt8:
+        # Not the top bits, which keys with the same home share.
+        return UInt8((hash >> (self.shift - 7)) & 0x7F)
+
+    @always_inline
+    def group(self, slot: Int) -> Group:
+        return self.bytes.unsafe_ptr().unsafe_load[width=GROUP](slot)
+
+    @always_inline
+    def set(mut self, slot: Int, byte: UInt8):
+        self.bytes.unsafe_set(slot, byte)
+        if slot < GROUP:
+            self.bytes.unsafe_set(len(self.bytes) - GROUP + slot, byte)
+
+    @always_inline
+    def is_full(self, slot: Int) -> Bool:
+        return self.bytes.unsafe_get(slot) < 0x80
+
+    def empty_slot(self, hash: UInt64) -> Int:
+        """The first EMPTY slot from `hash`'s home."""
+        var mask = len(self.bytes) - GROUP - 1
+        var slot = self.home(hash)
+        while self.bytes.unsafe_get(slot) != EMPTY:
+            slot = (slot + 1) & mask
+        return slot
+
+    def clear(mut self):
+        unsafe_memset(self.bytes.unsafe_ptr(), EMPTY, len(self.bytes))
+
+
+trait Key(Equatable, ImplicitlyCopyable, TrivialRegisterPassable):
+    """How a table keeps its UInt64 keys."""
+
+    def __init__(out self, key: UInt64):
+        ...
+
+    def hash(self) -> UInt64:
+        ...
+
+
+struct PairKey(Key):
+    """In halves, so an entry takes 12 bytes rather than 16."""
+
+    var high: UInt32
+    var low: UInt32
+
+    @always_inline
+    def __init__(out self, key: UInt64):
+        self.high = UInt32(key >> 32)
+        self.low = UInt32(key & 0xFFFFFFFF)
+
+    @always_inline
+    def __eq__(self, other: Self) -> Bool:
+        return self.high == other.high and self.low == other.low
+
+    @always_inline
+    def hash(self) -> UInt64:
+        return mixed(UInt64(self.high) << 32 | UInt64(self.low))
+
+
+struct IdKey(Key):
+    var id: UInt32
+
+    @always_inline
+    def __init__(out self, key: UInt64):
+        assert key >> 32 == 0, "an IdTable's keys are single ids"
+        self.id = UInt32(key)
+
+    @always_inline
+    def __eq__(self, other: Self) -> Bool:
+        return self.id == other.id
+
+    @always_inline
+    def hash(self) -> UInt64:
+        return mixed(UInt64(self.id))
 
 
 @fieldwise_init
-struct Entry(ImplicitlyCopyable, TrivialRegisterPassable):
-    var key: UInt64
+struct Entry[K: Key](ImplicitlyCopyable, TrivialRegisterPassable):
+    var key: Self.K
     var value: UInt32
 
 
-struct Table(Movable, Sized):
-    """Maps nonzero UInt64 keys (an id, or two packed by `pair`) to UInt32 values.
-    """
+struct HashTable[K: Key](Movable, Sized):
+    """Maps UInt64 keys (an id, or two packed by `pair`) to UInt32 values."""
 
-    var entries: List[Entry]
+    var control: Control
+    var entries: List[Entry[Self.K]]
     var held: Int
 
-    def __init__(out self):
-        self.entries = List[Entry]()
+    def __init__(out self, slots: Int = 0):
+        self.control = Control(slots)
+        self.entries = List[Entry[Self.K]](unsafe_uninit_length=slots)
         self.held = 0
 
     def __len__(self) -> Int:
@@ -48,43 +173,60 @@ struct Table(Movable, Sized):
 
     def capacity(self) -> Int:
         """How many entries fit before the table grows."""
-        return len(self.entries) * 3 // 4
+        return room(len(self.entries))
 
     @always_inline
-    def _slot(self, key: UInt64) -> Int:
-        var bits = count_leading_zeros(UInt64(len(self.entries)))
-        return Int(mixed(key) >> (bits + 1))
-
     def get(self, key: UInt64) -> Optional[UInt32]:
         if self.held == 0:
             return None
+        var k = Self.K(key)
+        var hash = k.hash()
+        var byte = self.control.byte(hash)
         var mask = len(self.entries) - 1
-        var slot = self._slot(key)
+        var entries = self.entries.unsafe_ptr()
+        var start = self.control.home(hash)
         while True:
-            var entry = self.entries.unsafe_get(slot)
-            if entry.key == key:
-                return entry.value
-            if entry.key == EMPTY:
+            var group = self.control.group(start)
+            var found = matches(group, byte)
+            while found:
+                var slot = (start + lowest(found)) & mask
+                var entry = entries[unsafe_offset=slot]
+                if entry.key == k:
+                    return entry.value
+                found &= found - 1
+            if matches(group, EMPTY):
                 return None
-            slot = (slot + 1) & mask
+            start = (start + GROUP) & mask
 
+    # The walks of apply and ~ call it for each node they make.
+    @always_inline
     def insert(mut self, key: UInt64, value: UInt32):
-        if (self.held + 1) * 4 > len(self.entries) * 3:
-            self._resize(
-                slots_for(self.held + 1) * 2 if self.held else MIN_SLOTS
-            )
+        if self.held >= room(len(self.entries)):
+            self._resize(max(MIN_SLOTS, 2 * len(self.entries)))
+        var k = Self.K(key)
+        var hash = k.hash()
+        var byte = self.control.byte(hash)
         var mask = len(self.entries) - 1
-        var slot = self._slot(key)
+        var entries = self.entries.unsafe_ptr()
+        var start = self.control.home(hash)
         while True:
-            ref entry = self.entries.unsafe_get(slot)
-            if entry.key == key:
-                entry.value = value
-                return
-            if entry.key == EMPTY:
-                entry = Entry(key, value)
+            var group = self.control.group(start)
+            var found = matches(group, byte)
+            while found:
+                var slot = (start + lowest(found)) & mask
+                ref entry = entries[unsafe_offset=slot]
+                if entry.key == k:
+                    entry.value = value
+                    return
+                found &= found - 1
+            var empty = matches(group, EMPTY)
+            if empty:
+                var slot = (start + lowest(empty)) & mask
+                self.control.set(slot, byte)
+                entries[unsafe_offset=slot] = Entry(k, value)
                 self.held += 1
                 return
-            slot = (slot + 1) & mask
+            start = (start + GROUP) & mask
 
     def add(mut self, key: UInt64) -> Bool:
         """Adds `key` to a table used as a set. Returns whether it's new."""
@@ -93,32 +235,37 @@ struct Table(Movable, Sized):
         self.insert(key, 1)
         return True
 
+    @no_inline
     def _resize(mut self, slots: Int):
-        var old = List[Entry](length=slots, fill=Entry(EMPTY, 0))
-        swap(old, self.entries)
-        var mask = slots - 1
-        for entry in old:
-            if entry.key == EMPTY:
-                continue
-            var slot = self._slot(entry.key)
-            while self.entries.unsafe_get(slot).key != EMPTY:
-                slot = (slot + 1) & mask
-            self.entries.unsafe_set(slot, entry)
+        var old = Self(slots)
+        swap(old, self)
+        self.held = old.held
+        for i in range(len(old.entries)):
+            if old.control.is_full(i):
+                var entry = old.entries.unsafe_get(i)
+                var hash = entry.key.hash()
+                var slot = self.control.empty_slot(hash)
+                self.control.set(slot, self.control.byte(hash))
+                self.entries.unsafe_set(slot, entry)
 
     def clear(mut self):
         """Keeps room for twice what it held, so similar walks needn't grow it.
         """
-        var room = min(len(self.entries), slots_for(2 * self.held))
-        self.held = 0
-        if room == len(self.entries):
-            for i in range(len(self.entries)):
-                self.entries.unsafe_set(i, Entry(EMPTY, 0))
+        var slots = min(len(self.entries), slots_for(2 * self.held))
+        if slots < len(self.entries):
+            self = Self(slots)
         else:
-            self.entries = List[Entry](length=room, fill=Entry(EMPTY, 0))
+            self.control.clear()
+            self.held = 0
 
     def shrink_to_fit(mut self):
         if slots_for(self.held) < len(self.entries):
             self._resize(slots_for(self.held))
+
+
+comptime Table = HashTable[PairKey]
+comptime IdTable = HashTable[IdKey]
+"""A Table for keys from `single`, in 8-byte entries."""
 
 
 @always_inline
@@ -147,9 +294,6 @@ def node_hash(node: Decision) -> UInt64:
 
 @fieldwise_init
 struct Unique(ImplicitlyCopyable, TrivialRegisterPassable):
-    """A slot of the unique table. `lo == hi` (no node's branches are equal) is empty.
-    """
-
     var node: Decision
     var id: Id
 
@@ -157,87 +301,96 @@ struct Unique(ImplicitlyCopyable, TrivialRegisterPassable):
 struct UniqueTable(Movable, Sized):
     """Maps each decision node to its id."""
 
+    var control: Control
     var slots: List[Unique]
     var held: Int
+    var deleted: Int
 
-    def __init__(out self):
-        self.slots = List[Unique]()
+    def __init__(out self, slots: Int = 0):
+        self.control = Control(slots)
+        self.slots = List[Unique](unsafe_uninit_length=slots)
         self.held = 0
+        self.deleted = 0
 
     def __len__(self) -> Int:
         return self.held
 
-    def capacity(self) -> Int:
-        return len(self.slots) * 3 // 4
+    @always_inline
+    def _find(self, node: Decision) -> Int:
+        """`node`'s slot, or -1."""
+        if self.held == 0:
+            return -1
+        var hash = node_hash(node)
+        var byte = self.control.byte(hash)
+        var mask = len(self.slots) - 1
+        var slots = self.slots.unsafe_ptr()
+        var start = self.control.home(hash)
+        while True:
+            var group = self.control.group(start)
+            var found = matches(group, byte)
+            while found:
+                var slot = (start + lowest(found)) & mask
+                if slots[unsafe_offset=slot].node == node:
+                    return slot
+                found &= found - 1
+            if matches(group, EMPTY):
+                return -1
+            start = (start + GROUP) & mask
 
     @always_inline
-    def _slot(self, node: Decision) -> Int:
-        var bits = count_leading_zeros(UInt64(len(self.slots)))
-        return Int(node_hash(node) >> (bits + 1))
-
     def get(self, node: Decision) -> Optional[Id]:
-        if self.held == 0:
+        var slot = self._find(node)
+        if slot < 0:
             return None
-        var mask = len(self.slots) - 1
-        var slot = self._slot(node)
-        while True:
-            var unique = self.slots.unsafe_get(slot)
-            if unique.node == node:
-                return unique.id
-            if unique.node.lo == unique.node.hi:
-                return None
-            slot = (slot + 1) & mask
+        return self.slots.unsafe_get(slot).id
 
     def insert(mut self, node: Decision, id: Id):
         """`node` isn't in the table."""
-        if (self.held + 1) * 4 > len(self.slots) * 3:
+        if self.held + self.deleted >= room(len(self.slots)):
+            # Dropping the DELETED slots makes room enough unless nodes fill half of it.
+            var grow = self.held >= room(len(self.slots)) // 2
             self._resize(
-                slots_for(self.held + 1) * 2 if self.held else MIN_SLOTS
+                max(MIN_SLOTS, 2 * len(self.slots)) if grow else len(self.slots)
             )
-        self._place(node, id)
-        self.held += 1
-
-    def _place(mut self, node: Decision, id: Id):
+        var hash = node_hash(node)
         var mask = len(self.slots) - 1
-        var slot = self._slot(node)
-        while (
-            self.slots.unsafe_get(slot).node.lo
-            != self.slots.unsafe_get(slot).node.hi
-        ):
-            slot = (slot + 1) & mask
-        self.slots.unsafe_set(slot, Unique(node, id))
+        var start = self.control.home(hash)
+        while True:
+            var free = free_in(self.control.group(start))
+            if free:
+                var slot = (start + lowest(free)) & mask
+                if self.control.bytes.unsafe_get(slot) == DELETED:
+                    self.deleted -= 1
+                self.control.set(slot, self.control.byte(hash))
+                self.slots.unsafe_set(slot, Unique(node, id))
+                self.held += 1
+                return
+            start = (start + GROUP) & mask
 
     def remove(mut self, node: Decision):
-        """Backward-shift deletion, so lookups never need tombstones."""
-        var mask = len(self.slots) - 1
-        var slot = self._slot(node)
-        while self.slots.unsafe_get(slot).node != node:
-            slot = (slot + 1) & mask
-        var hole = slot
-        while True:
-            slot = (slot + 1) & mask
-            var moving = self.slots.unsafe_get(slot)
-            if moving.node.lo == moving.node.hi:
-                break
-            # Move it into the hole unless its home slot lies in (hole, slot].
-            var home = self._slot(moving.node)
-            if (slot - home) & mask >= (slot - hole) & mask:
-                self.slots.unsafe_set(hole, moving)
-                hole = slot
-        self.slots.unsafe_set(hole, Unique(Decision(0, REJECT, REJECT), REJECT))
+        """`node` is in the table."""
+        var slot = self._find(node)
+        assert slot >= 0, "removing a node the table doesn't hold"
+        # DELETED rather than EMPTY, so lookups go on to the nodes placed past it.
+        self.control.set(slot, DELETED)
         self.held -= 1
+        self.deleted += 1
 
+    @no_inline
     def _resize(mut self, slots: Int):
-        var old = List[Unique](
-            length=slots, fill=Unique(Decision(0, REJECT, REJECT), REJECT)
-        )
-        swap(old, self.slots)
-        for unique in old:
-            if unique.node.lo != unique.node.hi:
-                self._place(unique.node, unique.id)
+        var old = UniqueTable(slots)
+        swap(old, self)
+        self.held = old.held
+        for i in range(len(old.slots)):
+            if old.control.is_full(i):
+                var unique = old.slots.unsafe_get(i)
+                var hash = node_hash(unique.node)
+                var slot = self.control.empty_slot(hash)
+                self.control.set(slot, self.control.byte(hash))
+                self.slots.unsafe_set(slot, unique)
 
     def shrink_to(mut self, entries: Int):
-        """Keeps room for at least `entries`."""
-        var slots = slots_for(max(entries, self.held))
-        if slots < len(self.slots):
+        """Keeps room for at least `entries`, and drops the DELETED slots."""
+        var slots = min(len(self.slots), slots_for(max(entries, self.held)))
+        if slots < len(self.slots) or self.deleted:
             self._resize(slots)

@@ -1,6 +1,6 @@
 """Operations' memoised results."""
 
-from .table import Table
+from .table import IdTable, Table
 
 
 struct Memos(Movable, Sized):
@@ -10,7 +10,7 @@ struct Memos(Movable, Sized):
     var intersection: Table
     var union: Table
     var symmetric_difference: Table
-    var complement: Table
+    var complement: IdTable
     var subset: Table
     var disjoint: Table
 
@@ -18,7 +18,7 @@ struct Memos(Movable, Sized):
         self.intersection = Table()
         self.union = Table()
         self.symmetric_difference = Table()
-        self.complement = Table()
+        self.complement = IdTable()
         self.subset = Table()
         self.disjoint = Table()
 
