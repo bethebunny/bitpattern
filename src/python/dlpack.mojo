@@ -12,8 +12,9 @@ from std.python._cpython import PyObjectPtr
 from arena import Arena, Id, Interrupted
 from arena.export import Slots, write_rows, write_words
 
-from .args import Arguments, Signature, node, not_an_instance, width
+from .args import Arguments, Signature, described, node, not_an_instance, width
 from .capi import (
+    Py_DecRef,
     PyTuple_GetItem,
     PyTuple_Size,
     PyType_GetFlags,
@@ -24,7 +25,7 @@ from .capi import (
 )
 from .errors import PyError, raised, value_error
 from .ints import fitting
-from .queries import Count, checked_width, member_count
+from .queries import Count, checked_width, int_from_count, member_count
 from .state import StatePointer, give_back, taken_arena
 
 
@@ -275,10 +276,12 @@ def written(
     var made = room(members, columns, Int(dtype.bits // 8))
     if not made:
         give_back(state, arena)
-        raise raised(
-            pointer_symbol("PyExc_MemoryError"),
-            String(members, " members don't fit in memory"),
+        var total = int_from_count(state[].ints, members)
+        var message = String(
+            described(state[].ints, total), " members don't fit in memory"
         )
+        Py_DecRef(total)
+        raise raised(pointer_symbol("PyExc_MemoryError"), message)
     var words = made.take()
     var sign_shift: UInt64 = 0
     if dtype.code == INT:

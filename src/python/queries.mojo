@@ -33,17 +33,11 @@ from .state import StatePointer, give_back, taken_arena
 
 
 @fieldwise_init
-struct Count(Movable, Writable):
+struct Count(Movable):
     """A count, in a UInt128 when it fits."""
 
     var narrow: UInt128
     var wide: Optional[BigUInt]
-
-    def write_to(self, mut writer: Some[Writer]):
-        if self.wide:
-            writer.write(self.wide.value())
-        else:
-            writer.write(self.narrow)
 
 
 @always_inline

@@ -9,15 +9,6 @@ from std.os import abort
 from std.sys import inlined_assembly
 from std.sys.info import CompilationTarget
 
-# The largest power of ten in a limb.
-comptime DECIMAL_CHUNK = UInt64(10_000_000_000_000_000_000)
-comptime DECIMAL_CHUNK_DIGITS = 19
-comptime DIGIT_PAIRS = StaticString(
-    "00010203040506070809101112131415161718192021222324252627282930313233343536"
-    "37383940414243444546474849505152535455565758596061626364656667686970717273"
-    "7475767778798081828384858687888990919293949596979899"
-)
-
 
 struct Limbs(Boolable, Copyable, Movable, Sized):
     """A growable array of limbs.
@@ -128,7 +119,6 @@ struct BigUInt(
     Defaultable,
     Hashable,
     Movable,
-    Writable,
 ):
     """An unsigned integer of any size."""
 
@@ -410,35 +400,6 @@ struct BigUInt(
         _divide(self.limbs, divisor.limbs, quotient.limbs, remainder.limbs)
         return remainder^
 
-    # Text
-
-    def write_to(self, mut writer: Some[Writer]):
-        var n = len(self.limbs)
-        if n <= 2:
-            writer.write(UInt128(self._limb(0)) | UInt128(self._limb(1)) << 64)
-            return
-        # Chunks of 19 digits, least significant first.
-        var rest = self.limbs.copy()
-        var chunks = Limbs(capacity=n + n // 64 + 2)
-        while rest:
-            chunks.append(
-                _divide_by(rest.unsafe_ptr(), len(rest), DECIMAL_CHUNK)
-            )
-            _trim(rest)
-        writer.write(chunks.unsafe_get(len(chunks) - 1))
-        var digits = Array[UInt8, DECIMAL_CHUNK_DIGITS](uninitialized=True)
-        var pairs = DIGIT_PAIRS.unsafe_ptr()
-        for i in range(len(chunks) - 2, -1, -1):
-            var chunk = chunks.unsafe_get(i)
-            digits[0] = UInt8(48) + UInt8(chunk // 10**18)
-            chunk %= 10**18
-            for at in range(DECIMAL_CHUNK_DIGITS - 1, 0, -2):
-                var pair = Int(chunk % 100) * 2
-                chunk //= 100
-                digits[at] = pairs[unsafe_offset=pair + 1]
-                digits[at - 1] = pairs[unsafe_offset=pair]
-            writer.write_string(StringSlice(unsafe_from_utf8=Span(digits)))
-
 
 # Limb kernels. Pointers name `n` limbs, least significant first.
 
@@ -637,16 +598,6 @@ def _divided(
     for i in range(n - 1, -1, -1):
         var step = _two_by_one(rest, a[unsafe_offset=i], divisor)
         dest[unsafe_offset=i] = step.quotient
-        rest = step.remainder
-    return rest
-
-
-def _divide_by(a: MutPointer[UInt64, _], n: Int, divisor: UInt64) -> UInt64:
-    """Divides `a` by `divisor`, and returns the remainder."""
-    var rest = UInt64(0)
-    for i in range(n - 1, -1, -1):
-        var step = _two_by_one(rest, a[unsafe_offset=i], divisor)
-        a[unsafe_offset=i] = step.quotient
         rest = step.remainder
     return rest
 
