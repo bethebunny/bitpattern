@@ -11,18 +11,13 @@ from arena import (
     Id,
     Interrupted,
     MAX_WIDTH,
+    Misordered,
     NARROW_WIDTH,
     REJECT,
-    narrow_bit,
-    wide_bit,
 )
-from arena import Misordered
-from arena import exactly_these as built
-from arena.build import diagram as built_diagram, interval as built_interval
+from arena import build, reshape, rows
 from arena.reshape import ShiftedOut
-from arena.reshape import freed_between as freed, lshift as shifted
-from arena.reshape import narrowed as narrowed_node
-from arena.rows import Row, rows as rows_of, rebuilt as rebuilt_node
+from arena.rows import Row
 from bigint import BigUInt
 
 from .args import (
@@ -86,7 +81,7 @@ def reduced(state: StatePointer, o: PyObjectPtr) raises PyError -> PyObjectPtr:
     var found: List[Row]
     try:
         with lease^ as arena:
-            found = rows_of(arena[], id)
+            found = rows.rows(arena[], id)
     except:
         raise PyError()
     var written = PyList_New(len(found))
@@ -141,7 +136,7 @@ def lshift(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
         var moved: Id
         try:
             with lease^ as arena:
-                moved = shifted(arena[], id, Int32(by.value))
+                moved = reshape.lshift(arena[], id, Int32(by.value))
         except e:
             if e.isa[ShiftedOut]():
                 raise shifted_out(String(by.value), e[ShiftedOut].bit)
@@ -178,7 +173,7 @@ def freed_between(
     def walk(
         mut arena: Arena,
     ) raises Interrupted {var id, var low, var high} -> Id:
-        return freed(arena, id, low, high)
+        return reshape.freed_between(arena, id, low, high)
 
     return made(state, walk)
 
@@ -200,7 +195,7 @@ def narrowed(
         return Py_NewRef(args[0])
 
     def walk(mut arena: Arena) raises Interrupted {var id, var at} -> Id:
-        return narrowed_node(arena, id, at)
+        return reshape.narrowed(arena, id, at)
 
     return made(state, walk)
 
@@ -245,10 +240,10 @@ def diagram(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     if size > Int(MAX_WIDTH):
         raise value_error(String(size, " bits is too many"))
 
-    def build(mut arena: Arena) raises Interrupted {var bits} -> Id:
-        return built_diagram(arena, bits)
+    def walk(mut arena: Arena) raises Interrupted {var bits} -> Id:
+        return build.diagram(arena, bits)
 
-    return made(state, build)
+    return made(state, walk)
 
 
 def quoted(symbol: Codepoint) -> String:
@@ -320,12 +315,14 @@ def exactly_these(
         )
     var at = max(least, Int32(bits))
 
-    def build(mut arena: Arena) raises Interrupted {imm members, var at} -> Id:
+    def walk(mut arena: Arena) raises Interrupted {imm members, var at} -> Id:
         if members.wide:
-            return built[wide_bit](arena, members.wide.value(), at)
-        return built[narrow_bit](arena, members.narrow, at)
+            return build.exactly_these[build.wide_bit](
+                arena, members.wide.value(), at
+            )
+        return build.exactly_these[build.narrow_bit](arena, members.narrow, at)
 
-    var node = made(state, build)
+    var node = made(state, walk)
     var pair = PyTuple_New(2)
     var width_int = PyLong_FromLongLong(Int64(at))
     if not pair or not width_int:
@@ -554,23 +551,23 @@ def interval(
             at,
         )
 
-    def build(
+    def walk(
         mut arena: Arena,
     ) raises Interrupted {imm first, imm last, var at} -> Id:
-        return built_interval[wide_bit](arena, first, last, at)
+        return build.interval[build.wide_bit](arena, first, last, at)
 
-    return made(state, build)
+    return made(state, walk)
 
 
 def narrow_interval(
     state: StatePointer, first: UInt128, last: UInt128, at: Int32
 ) raises PyError -> PyObjectPtr:
-    def build(
+    def walk(
         mut arena: Arena,
     ) raises Interrupted {var first, var last, var at} -> Id:
-        return built_interval[narrow_bit](arena, first, last, at)
+        return build.interval[build.narrow_bit](arena, first, last, at)
 
-    return made(state, build)
+    return made(state, walk)
 
 
 def big_int(ints: Ints, o: PyObjectPtr) raises PyError -> Tuple[Bool, BigUInt]:
@@ -585,15 +582,15 @@ comptime REBUILT = Signature("_rebuilt", positional=["rows"])
 
 
 def rebuilt(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    var rows = read_rows(state, args[0])
-    if not rows or not formed(rows):
+    var given = read_rows(state, args[0])
+    if not given or not formed(given):
         raise value_error("rows don't make a diagram")
     with Call(state):
         var lease = Lease(state)
         var built: Id
         try:
             with lease^ as arena:
-                built = rebuilt_node(arena[], rows)
+                built = rows.rebuilt(arena[], given)
         except e:
             if e.isa[Misordered]():
                 raise value_error(String(e[Misordered]))

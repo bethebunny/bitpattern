@@ -2,10 +2,16 @@
 
 from std.python._cpython import PyObjectPtr
 
-from arena import Arena, Id, Interrupted, collection_due, memos_full
-from arena import collect as collected
-from arena import shrink_to_fit, slots, stats as arena_stats
-from arena.collect import shrunk
+from arena import Arena, Id, Interrupted
+from arena.collect import (
+    collect as arena_collect,
+    collection_due,
+    memos_full,
+    shrink_to_fit,
+    shrunk,
+    slots,
+    stats as arena_stats,
+)
 
 from .capi import (
     Py_DecRef,
@@ -17,13 +23,7 @@ from .capi import (
     cstr,
 )
 from .errors import PyError
-from .state import (
-    Lease,
-    StatePointer,
-    give_back,
-    module_state,
-    taken_arena,
-)
+from .state import Lease, StatePointer, give_back, taken_arena
 
 
 struct BddObject:
@@ -79,7 +79,7 @@ def wrapped_nodes(state: StatePointer) -> List[Id]:
 
 
 def collect_garbage(state: StatePointer, mut arena: Arena) -> Int:
-    var freed, room = collected(arena, wrapped_nodes(state))
+    var freed, room = arena_collect(arena, wrapped_nodes(state))
     var wrappers = List[PyObjectPtr]()
     swap(wrappers, state[].wrappers)
     wrappers.shrink(min(len(wrappers), slots(arena)))

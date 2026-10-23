@@ -3,20 +3,8 @@
 from std.bit import count_leading_zeros
 from std.python._cpython import PyObjectPtr
 
-from arena import (
-    ACCEPT,
-    Arena,
-    Id,
-    Interrupted,
-    NARROW_WIDTH,
-    narrow_bit,
-    wide_bit,
-)
-from arena import node_count as counted_nodes
-from arena.compare import disjoint as is_disjoint, subset as is_subset
-from arena.members import accepts as accepted, nth as nth_wide, nth_narrow
-from arena.members import rank as rank_wide, rank_narrow
-from arena.nodes import path_count as counted_paths
+from arena import ACCEPT, Arena, Id, Interrupted, NARROW_WIDTH
+from arena import build, compare, members, nodes
 from bigint import BigUInt
 
 from .args import Arguments, Signature, node, width
@@ -95,13 +83,13 @@ def node_count(
 ) raises PyError -> PyObjectPtr:
     var id = node(state, args[0])
     var lease = Lease(state)
-    var nodes: Int
+    var found: Int
     try:
         with lease^ as arena:
-            nodes = counted_nodes(arena[], id)
+            found = nodes.node_count(arena[], id)
     except:
         raise PyError()
-    return PyLong_FromSsize_t(nodes)
+    return PyLong_FromSsize_t(found)
 
 
 comptime COUNT_REPR = Signature(
@@ -176,8 +164,8 @@ def integer_bit(value: Integer, bit: Int32) -> Bool:
     """As Python reads ints: two's complement, so a negative int's bits are its
     complement's flipped."""
     if value.wide:
-        return wide_bit(value.wide.value(), bit) != value.negative
-    return narrow_bit(value.narrow, bit) != value.negative
+        return build.wide_bit(value.wide.value(), bit) != value.negative
+    return build.narrow_bit(value.narrow, bit) != value.negative
 
 
 comptime ACCEPTS = Signature("accepts", positional=["node", "value"])
@@ -187,7 +175,7 @@ def accepts(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node(state, args[0])
     var value = integer(state[].ints, args[1])
     var arena = taken_arena(state)
-    var answer = accepted[integer_bit](arena[], id, value)
+    var answer = members.accepts[integer_bit](arena[], id, value)
     give_back(state, arena)
     return PyBool_FromLong(Int(answer))
 
@@ -201,14 +189,14 @@ def member_at(
         if index.narrow >= total:
             return None
         var at = total - 1 - index.narrow if index.negative else index.narrow
-        return Count(nth_narrow(arena, id, at), None)
+        return Count(members.nth_narrow(arena, id, at), None)
     var total = arena.count(id, width)
     var at = index.widened()
     if at >= total:
         return None
     if index.negative:
         at = total - (at + 1)
-    return Count(0, nth_wide(arena, id, at))
+    return Count(0, members.nth(arena, id, at))
 
 
 comptime NTH = Signature(
@@ -238,8 +226,8 @@ def members_below(arena: Arena, id: Id, width: Int32, value: Integer) -> Count:
     if value.bit_length() > Int(width):
         return member_count(arena, id, width)  # above every member
     if width <= NARROW_WIDTH:
-        return Count(rank_narrow(arena, id, value.narrow, width), None)
-    return Count(0, rank_wide(arena, id, value.widened(), width))
+        return Count(members.rank_narrow(arena, id, value.narrow, width), None)
+    return Count(0, members.rank(arena, id, value.widened(), width))
 
 
 comptime RANK = Signature(
@@ -279,7 +267,7 @@ comptime SUBSET = Signature("subset", positional=["a", "b"])
 
 
 def subset(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    return answered[is_subset](state, args)
+    return answered[compare.subset](state, args)
 
 
 comptime DISJOINT = Signature("disjoint", positional=["a", "b"])
@@ -288,7 +276,7 @@ comptime DISJOINT = Signature("disjoint", positional=["a", "b"])
 def disjoint(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
-    return answered[is_disjoint](state, args)
+    return answered[compare.disjoint](state, args)
 
 
 comptime PATH_COUNT = Signature(
@@ -306,7 +294,7 @@ def path_count(
     var paths: BigUInt
     try:
         with lease^ as arena:
-            paths = counted_paths(arena[], id)
+            paths = nodes.path_count(arena[], id)
     except:
         raise PyError()
     var int = int_from_big(state[].ints, paths)

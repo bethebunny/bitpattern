@@ -5,19 +5,8 @@ from std.memory.alloc import unsafe_alloc
 from std.python._cpython import PyObjectPtr
 from std.sys.info import size_of
 
-from arena import (
-    ACCEPT,
-    Arena,
-    Id,
-    Interrupted,
-    REJECT,
-    complement,
-    difference,
-    intersection,
-    node_count,
-    symmetric_difference,
-    union,
-)
+from arena import ACCEPT, Arena, Id, Interrupted, REJECT
+from arena import apply, nodes
 from bigint import BigUInt
 
 from .args import Signature, bit, node, parsed
@@ -170,7 +159,7 @@ def bdd_invert(o: PyObjectPtr) abi("C") -> PyObjectPtr:
     var id = node_of(o)
 
     def negated(mut arena: Arena) raises Interrupted {var id} -> Id:
-        return complement(arena, id)
+        return apply.complement(arena, id)
 
     try:
         return made(object_state(o), negated)
@@ -199,19 +188,19 @@ def binary[
 
 
 def bdd_and(a: PyObjectPtr, b: PyObjectPtr) abi("C") -> PyObjectPtr:
-    return binary[intersection](a, b)
+    return binary[apply.intersection](a, b)
 
 
 def bdd_or(a: PyObjectPtr, b: PyObjectPtr) abi("C") -> PyObjectPtr:
-    return binary[union](a, b)
+    return binary[apply.union](a, b)
 
 
 def bdd_sub(a: PyObjectPtr, b: PyObjectPtr) abi("C") -> PyObjectPtr:
-    return binary[difference](a, b)
+    return binary[apply.difference](a, b)
 
 
 def bdd_xor(a: PyObjectPtr, b: PyObjectPtr) abi("C") -> PyObjectPtr:
-    return binary[symmetric_difference](a, b)
+    return binary[apply.symmetric_difference](a, b)
 
 
 def bdd_bit(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
@@ -279,12 +268,12 @@ def bdd_repr(o: PyObjectPtr) abi("C") -> PyObjectPtr:
             written = leaf_name(id)
         else:
             var lease = Lease(state)
-            var nodes: Int
+            var found: Int
             var tested: Int32
             var size: BigUInt
             try:
                 with lease^ as arena:
-                    nodes = node_count(arena[], id)
+                    found = nodes.node_count(arena[], id)
                     tested = arena[].decision(id).bit
                     size = arena[].size(id)
             except:
@@ -303,7 +292,7 @@ def bdd_repr(o: PyObjectPtr) abi("C") -> PyObjectPtr:
                 "<BDD bit=",
                 tested,
                 ", ",
-                nodes,
+                found,
                 " nodes, ",
                 counted,
                 " members>",
