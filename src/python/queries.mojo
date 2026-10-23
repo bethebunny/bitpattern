@@ -16,7 +16,7 @@ from .ints import (
     int_from_big,
     int_from_u128,
 )
-from .ints import Ints, big_of, i128_of
+from .ints import Ints, Signed, i128_of
 from .state import Lease, StatePointer, give_back, take_arena
 
 
@@ -110,7 +110,7 @@ def count_repr(
     var total = indexed(state[].ints, args[0])
     var written: String
     try:
-        if big_of(state[].ints, total)[0]:
+        if Signed.from_int(state[].ints, total).negative:
             raise value_error("counts aren't negative")
         written = written_count(state[].ints, total)
     except e:
@@ -150,14 +150,16 @@ def integer(ints: Ints, o: PyObjectPtr) raises PyError -> Integer:
         Py_DecRef(int)
         var value = small.value()
         return Integer(value < 0, UInt128(~value if value < 0 else value), None)
-    var read = big_of(ints, int)
+    var signed = Signed.from_int(ints, int)
     Py_DecRef(int)
     # A negative int's complement is its magnitude less one.
-    var bits = read[1] - BigUInt(1) if read[0] else read[1].copy()
+    var bits = signed.magnitude.copy()
+    if signed.negative:
+        bits -= BigUInt(1)
     var narrow = bits.fitting_uint128()
     if narrow:
-        return Integer(read[0], narrow.value(), None)
-    return Integer(read[0], 0, bits^)
+        return Integer(signed.negative, narrow.value(), None)
+    return Integer(signed.negative, 0, bits^)
 
 
 def integer_bit(value: Integer, bit: Int32) -> Bool:

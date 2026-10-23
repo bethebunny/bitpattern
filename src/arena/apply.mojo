@@ -129,7 +129,7 @@ def memoise[op: Op](mut arena: Arena, key: UInt64, result: Id):
 
 
 def complement(mut arena: Arena, root: Id) raises Interrupted -> Id:
-    var answer = negated(arena, root)
+    var answer = known_complement(arena, root)
     if answer:
         return answer.value()
     var steps = List[Step[Id]]()
@@ -141,7 +141,7 @@ def complement(mut arena: Arena, root: Id) raises Interrupted -> Id:
         arena.tick()
         var step = steps.pop()
         if step.is_visit():
-            var negation = negated(arena, step.item)
+            var negation = known_complement(arena, step.item)
             if negation:
                 results.append(negation.value())
             else:
@@ -158,7 +158,7 @@ def complement(mut arena: Arena, root: Id) raises Interrupted -> Id:
 
 
 @always_inline
-def negated(arena: Arena, id: Id) -> Optional[Id]:
+def known_complement(arena: Arena, id: Id) -> Optional[Id]:
     if id == REJECT:
         return ACCEPT
     if id == ACCEPT:

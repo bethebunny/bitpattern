@@ -56,7 +56,7 @@ from .capi import (
     ob_type,
 )
 from .errors import PyError, type_error, value_error
-from .ints import Int64OrOverflow, Ints, big_of, indexed, u128_of
+from .ints import Int64OrOverflow, Ints, Signed, indexed, u128_of
 from .objects import Call, node_of, wrap, wrap_result
 from .state import Lease, StatePointer, give_back, take_arena
 
@@ -469,8 +469,8 @@ struct Members(Movable):
                 narrow.push(small.value())
                 Py_DecRef(int)
                 continue
-            var signed = big_of(ints, int)
-            if signed[0]:
+            var signed = Signed.from_int(ints, int)
+            if signed.negative:
                 var error = value_error(
                     String(
                         "IntSets can't hold negative numbers, got ",
@@ -487,7 +487,7 @@ struct Members(Movable):
                     promoted.append(BigUInt(value))
                 narrow = Distinct[UInt128]()
                 wide = Distinct[BigUInt](sorted=promoted^)
-            wide.value().push(signed[1].copy())
+            wide.value().push(signed.magnitude.copy())
         Py_DecRef(iterator)
         if PyErr_Occurred():
             raise PyError()
@@ -533,14 +533,14 @@ def interval(
         if first > last:
             return wrap(state, REJECT)
         return narrow_interval(state, first, last, width)
-    var low = big_int(state[].ints, args[0])
-    var high = big_int(state[].ints, args[1])
-    if high[0] or not high[1]:
+    var low = Signed.from_python(state[].ints, args[0])
+    var high = Signed.from_python(state[].ints, args[1])
+    if high.negative or not high.magnitude:
         return wrap(state, REJECT)
-    var last = high[1] - BigUInt(1)
+    var last = high.magnitude - BigUInt(1)
     if last.bits() > Int(width):
         last = BigUInt.mask(Int(width))
-    var first = BigUInt() if low[0] else low[1].copy()
+    var first = BigUInt() if low.negative else low.magnitude.copy()
     if first > last:
         return wrap(state, REJECT)
     if width <= NARROW_WIDTH:
@@ -568,14 +568,6 @@ def narrow_interval(
         return build.interval[build.narrow_bit](arena, first, last, width)
 
     return wrap_result(state, walk)
-
-
-def big_int(ints: Ints, o: PyObjectPtr) raises PyError -> Tuple[Bool, BigUInt]:
-    """`o`'s sign (True if negative) and magnitude."""
-    var int = indexed(ints, o)
-    var signed = big_of(ints, int)
-    Py_DecRef(int)
-    return signed^
 
 
 comptime REBUILT = Signature("_rebuilt", positional=["rows"])

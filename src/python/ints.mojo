@@ -184,35 +184,52 @@ def i128_of(ints: Ints, int: PyObjectPtr) -> Optional[Int128]:
     return Int128(wide)
 
 
-def big_of(ints: Ints, int: PyObjectPtr) -> Tuple[Bool, BigUInt]:
-    """`int`'s sign (True if negative) and magnitude."""
-    var overflow = c_int(0)
-    var small = PyLong_AsLongLongAndOverflow(int, overflow)
-    if overflow == 0:
-        var magnitude = UInt64(small) if small >= 0 else 0 - UInt64(small)
-        return (small < 0, BigUInt(UInt128(magnitude)))
-    # Two's complement, with room for the sign.
-    var bytes: Int
-    if ints.native:
-        var unused = UInt64(0)
-        bytes = ints.as_native_bytes(int, buffer(unused), 0, LITTLE_ENDIAN)
-    else:
-        bytes = ints.num_bits(int) // 8 + 1
-    var limbs = Limbs(length=(bytes + 7) // 8, fill=0)
-    if ints.native:
-        _ = ints.as_native_bytes(
-            int, limbs_buffer(limbs), len(limbs) * 8, LITTLE_ENDIAN
-        )
-    else:
-        _ = ints.as_byte_array(int, limbs_buffer(limbs), len(limbs) * 8, 1, 1)
-    var negative = overflow < 0
-    if negative:
-        var carry = UInt64(1)
-        for i in range(len(limbs)):
-            var limb = ~limbs.unsafe_get(i) + carry
-            carry = 1 if carry == 1 and limb == 0 else 0
-            limbs.unsafe_get(i) = limb
-    return (negative, BigUInt(limbs=limbs^))
+@fieldwise_init
+struct Signed(Movable):
+    """An int as its sign and magnitude."""
+
+    var negative: Bool
+    var magnitude: BigUInt
+
+    @staticmethod
+    def from_int(ints: Ints, int: PyObjectPtr) -> Self:
+        var overflow = c_int(0)
+        var small = PyLong_AsLongLongAndOverflow(int, overflow)
+        if overflow == 0:
+            var magnitude = UInt64(small) if small >= 0 else 0 - UInt64(small)
+            return Self(small < 0, BigUInt(UInt128(magnitude)))
+        # Two's complement, with room for the sign.
+        var bytes: Int
+        if ints.native:
+            var unused = UInt64(0)
+            bytes = ints.as_native_bytes(int, buffer(unused), 0, LITTLE_ENDIAN)
+        else:
+            bytes = ints.num_bits(int) // 8 + 1
+        var limbs = Limbs(length=(bytes + 7) // 8, fill=0)
+        if ints.native:
+            _ = ints.as_native_bytes(
+                int, limbs_buffer(limbs), len(limbs) * 8, LITTLE_ENDIAN
+            )
+        else:
+            _ = ints.as_byte_array(
+                int, limbs_buffer(limbs), len(limbs) * 8, 1, 1
+            )
+        var negative = overflow < 0
+        if negative:
+            var carry = UInt64(1)
+            for i in range(len(limbs)):
+                var limb = ~limbs.unsafe_get(i) + carry
+                carry = 1 if carry == 1 and limb == 0 else 0
+                limbs.unsafe_get(i) = limb
+        return Self(negative, BigUInt(limbs=limbs^))
+
+    @staticmethod
+    def from_python(ints: Ints, o: PyObjectPtr) raises PyError -> Self:
+        """Runs `__index__` for an int-like."""
+        var int = indexed(ints, o)
+        var signed = Self.from_int(ints, int)
+        Py_DecRef(int)
+        return signed^
 
 
 @always_inline
@@ -252,7 +269,7 @@ def count_repr(ints: Ints, total: PyObjectPtr) raises PyError -> String:
     - `~2**k` for ints too long to write out
     - the digits otherwise
     """
-    var magnitude = big_of(ints, total)[1].copy()
+    var magnitude = Signed.from_int(ints, total).magnitude.copy()
     var bits = magnitude.bits()
     if bits > 10 and magnitude.count_ones() == 1:
         return String("2**", bits - 1)
