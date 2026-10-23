@@ -57,7 +57,7 @@ def lshift(
 
 
 def freed_between(
-    mut arena: Arena, root: Id, low: Int32, high: Int32
+    mut arena: Arena, root: Id, *, low_bit: Int32, high_bit: Int32
 ) raises Interrupted -> Id:
     var freed = Table()
     swap(freed, arena.spare.node_results)
@@ -70,7 +70,7 @@ def freed_between(
         arena.tick()
         var step = steps.pop()
         if step.is_visit():
-            if arena.tests_only_below(step.item, low):
+            if arena.tests_only_below(step.item, low_bit):
                 results.append(step.item)
                 continue
             var found = freed.get(single(step.item))
@@ -81,7 +81,7 @@ def freed_between(
         else:
             var lo, hi = pop_branches(results)
             var result: Id
-            if step.bit >= high:
+            if step.bit >= high_bit:
                 result = arena.make(step.bit, lo, hi)
             else:
                 result = union(arena, lo, hi)

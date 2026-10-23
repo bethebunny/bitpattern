@@ -233,7 +233,7 @@ def capsule[
     return made
 
 
-def room(members: Count, columns: Int, size: Int) -> Optional[Words]:
+def room(members: Count, *, columns: Int, size: Int) -> Optional[Words]:
     """None if the words don't fit in memory."""
     var rows = -1
     if members.wide:
@@ -280,7 +280,7 @@ def written(
     var arena = take_arena(state)
     var members = member_count(arena[], id, width)
     give_back(state, arena)
-    var made = room(members, columns, Int(dtype.bits // 8))
+    var made = room(members, columns=columns, size=Int(dtype.bits // 8))
     if not made:
         var total = int_from_count(state[].ints, members)
         var message = String(str_or_size(total), " members don't fit in memory")

@@ -59,11 +59,11 @@ def write_words[
             written += write_copies(
                 arena,
                 slots,
-                Int(step.at),
-                written,
-                step.low,
-                step.width,
-                sign_shift,
+                start=Int(step.at),
+                written=written,
+                low=step.low,
+                width=step.width,
+                sign_shift=sign_shift,
             )
             continue
         var first, free = descend(
@@ -107,6 +107,7 @@ def write_copies[
 ](
     mut arena: Arena,
     slots: Slots[word],
+    *,
     start: Int,
     written: Int,
     low: Int32,

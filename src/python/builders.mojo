@@ -173,7 +173,7 @@ def freed_between(
     def walk(
         mut arena: Arena,
     ) raises Interrupted {var id, var low, var high} -> Id:
-        return reshape.freed_between(arena, id, low, high)
+        return reshape.freed_between(arena, id, low_bit=low, high_bit=high)
 
     return wrap_result(state, walk)
 
