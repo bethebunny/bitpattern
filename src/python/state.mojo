@@ -102,6 +102,24 @@ def give_back(state: StatePointer, arena: ArenaPointer):
     state[].arena = Int(arena)
 
 
+struct Lease:
+    """The arena, taken for a `with` block and given back however the block ends.
+    """
+
+    var state: StatePointer
+    var arena: ArenaPointer
+
+    def __init__(out self, state: StatePointer) raises PyError:
+        self.arena = taken_arena(state)
+        self.state = state
+
+    def __enter__(self) -> ArenaPointer:
+        return self.arena
+
+    def __exit__(self):
+        give_back(self.state, self.arena)
+
+
 def paused(mut arena: Arena, context: Int) -> Bool:
     """Runs Python's SIGINT handler after a Ctrl-C, and stops the walk if it raised.
 

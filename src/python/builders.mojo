@@ -63,25 +63,13 @@ from .capi import (
 )
 from .errors import PyError, type_error, value_error
 from .ints import Ints, big_of, fitting, indexed, u128_of
-from .objects import enter, leave, made, node_of, wrap
-from .state import StatePointer, give_back, taken_arena
+from .objects import Call, made, node_of, wrap
+from .state import Lease, StatePointer, give_back, taken_arena
 
 
 comptime Py_TPFLAGS_LIST_SUBCLASS: UInt64 = 1 << 25
 comptime Py_TPFLAGS_TUPLE_SUBCLASS: UInt64 = 1 << 26
 comptime Py_TPFLAGS_UNICODE_SUBCLASS: UInt64 = 1 << 28
-
-
-def finished(state: StatePointer, id: Id) raises PyError -> PyObjectPtr:
-    """Leaves the call with `id`'s object, wrapped first so nothing collects `id`.
-    """
-    try:
-        var result = wrap(state, id)
-        leave(state)
-        return result
-    except e:
-        leave(state)
-        raise e
 
 
 def reduced(state: StatePointer, o: PyObjectPtr) raises PyError -> PyObjectPtr:
@@ -95,14 +83,13 @@ def reduced(state: StatePointer, o: PyObjectPtr) raises PyError -> PyObjectPtr:
         if not name:
             raise PyError()
         return name
-    var arena = taken_arena(state)
+    var lease = Lease(state)
     var found: List[Row]
     try:
-        found = rows_of(arena[], id)
+        with lease^ as arena:
+            found = rows_of(arena[], id)
     except:
-        give_back(state, arena)
         raise PyError()
-    give_back(state, arena)
     var written = PyList_New(len(found))
     if not written:
         raise PyError()
@@ -145,22 +132,20 @@ def lshift(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
         raise shifted_out(described(state[].ints, args[1]), top)
     if by.value == 0 or id.is_leaf():
         return Py_NewRef(args[0])
-    var arena = enter(state)
-    var moved: Variant[Id, ShiftedOut]
-    if Int64(Int32.MIN) <= by.value and by.value <= Int64(Int32.MAX):
+    with Call(state):
+        var lease = Lease(state)
+        var moved: Variant[Id, ShiftedOut]
         try:
-            moved = shifted(arena[], id, Int32(by.value))
+            with lease^ as arena:
+                if by.value < Int64(Int32.MIN) or by.value > Int64(Int32.MAX):
+                    moved = ShiftedOut(arena[].decision(id).bit)
+                else:
+                    moved = shifted(arena[], id, Int32(by.value))
         except:
-            give_back(state, arena)
-            leave(state)
             raise PyError()
-    else:
-        moved = ShiftedOut(arena[].decision(id).bit)
-    give_back(state, arena)
-    if moved.isa[ShiftedOut]():
-        leave(state)
-        raise shifted_out(String(by.value), moved[ShiftedOut].bit)
-    return finished(state, moved[Id])
+        if moved.isa[ShiftedOut]():
+            raise shifted_out(String(by.value), moved[ShiftedOut].bit)
+        return wrap(state, moved[Id])
 
 
 def shifted_out(by: String, bit: Int32) -> PyError:
@@ -589,19 +574,17 @@ def rebuilt(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var rows = read_rows(state, args[0])
     if not rows or not formed(rows):
         raise value_error("rows don't make a diagram")
-    var arena = enter(state)
-    var built: Variant[Id, Misordered]
-    try:
-        built = rebuilt_node(arena[], rows)
-    except:
-        give_back(state, arena)
-        leave(state)
-        raise PyError()
-    give_back(state, arena)
-    if built.isa[Misordered]():
-        leave(state)
-        raise value_error(String(built[Misordered]))
-    return finished(state, built[Id])
+    with Call(state):
+        var lease = Lease(state)
+        var built: Variant[Id, Misordered]
+        try:
+            with lease^ as arena:
+                built = rebuilt_node(arena[], rows)
+        except:
+            raise PyError()
+        if built.isa[Misordered]():
+            raise value_error(String(built[Misordered]))
+        return wrap(state, built[Id])
 
 
 def formed(rows: List[Row]) -> Bool:

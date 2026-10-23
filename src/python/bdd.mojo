@@ -18,6 +18,7 @@ from arena import (
     symmetric_difference,
     union,
 )
+from bigint import BigUInt
 
 from .args import Signature, bit, node, parsed
 from .builders import reduced
@@ -65,9 +66,10 @@ from .capi import (
 )
 from .errors import PyError, value_error
 from .ints import c_function, count_repr, int_from_big
-from .objects import BddObject, enter, forget, leave, made, node_of, wrap
+from .objects import BddObject, Call, forget, made, node_of, wrap
 from .queries import int_from_count, member_count
 from .state import (
+    Lease,
     StatePointer,
     give_back,
     object_state,
@@ -120,22 +122,15 @@ def bdd_new(
         var at = bit(state[].ints, given[0])
         var lo = node(state, given[1])
         var hi = node(state, given[2])
-        var arena = enter(state)
-        var id: Id
-        try:
-            id = arena[].make_checked(at, lo, hi)
-        except misordered:
-            give_back(state, arena)
-            leave(state)
-            raise value_error(String(misordered))
-        give_back(state, arena)
-        try:
-            var made_node = wrap(state, id)
-            leave(state)
-            return made_node
-        except e:
-            leave(state)
-            raise e
+        with Call(state):
+            var lease = Lease(state)
+            var id: Id
+            try:
+                with lease^ as arena:
+                    id = arena[].make_checked(at, lo, hi)
+            except misordered:
+                raise value_error(String(misordered))
+            return wrap(state, id)
     except:
         return PyObjectPtr()
 
@@ -285,16 +280,17 @@ def bdd_repr(o: PyObjectPtr) abi("C") -> PyObjectPtr:
         if id.is_leaf():
             written = leaf_name(id)
         else:
-            var arena = taken_arena(state)
+            var lease = Lease(state)
             var nodes: Int
+            var tested: Int32
+            var size: BigUInt
             try:
-                nodes = node_count(arena[], id)
+                with lease^ as arena:
+                    nodes = node_count(arena[], id)
+                    tested = arena[].decision(id).bit
+                    size = arena[].size(id)
             except:
-                give_back(state, arena)
                 raise PyError()
-            var tested = arena[].decision(id).bit
-            var size = arena[].size(id)
-            give_back(state, arena)
             var total = int_from_big(state[].ints, size)
             if not total:
                 raise PyError()

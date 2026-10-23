@@ -29,7 +29,7 @@ from .ints import (
     int_from_u128,
 )
 from .ints import Ints, big_of, i128_of
-from .state import StatePointer, give_back, taken_arena
+from .state import Lease, StatePointer, give_back, taken_arena
 
 
 @fieldwise_init
@@ -93,14 +93,13 @@ def node_count(
 ) raises PyError -> PyObjectPtr:
     """Leaves aren't counted."""
     var id = node(state, args[0])
-    var arena = taken_arena(state)
+    var lease = Lease(state)
     var nodes: Int
     try:
-        nodes = counted_nodes(arena[], id)
+        with lease^ as arena:
+            nodes = counted_nodes(arena[], id)
     except:
-        give_back(state, arena)
         raise PyError()
-    give_back(state, arena)
     return PyLong_FromSsize_t(nodes)
 
 
@@ -253,14 +252,13 @@ def answered[
 ](state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var a = node(state, args[0])
     var b = node(state, args[1])
-    var arena = taken_arena(state)
+    var lease = Lease(state)
     var answer: Bool
     try:
-        answer = walk(arena[], a, b)
+        with lease^ as arena:
+            answer = walk(arena[], a, b)
     except:
-        give_back(state, arena)
         raise PyError()
-    give_back(state, arena)
     return PyBool_FromLong(Int(answer))
 
 
@@ -288,14 +286,13 @@ def path_count(
 ) raises PyError -> PyObjectPtr:
     """Counted without walking each path to `BDD.ACCEPT`."""
     var id = node(state, args[0])
-    var arena = taken_arena(state)
+    var lease = Lease(state)
     var paths: BigUInt
     try:
-        paths = counted_paths(arena[], id)
+        with lease^ as arena:
+            paths = counted_paths(arena[], id)
     except:
-        give_back(state, arena)
         raise PyError()
-    give_back(state, arena)
     var int = int_from_big(state[].ints, paths)
     if not int:
         raise PyError()

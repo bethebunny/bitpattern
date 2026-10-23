@@ -18,7 +18,7 @@ from .capi import (
 )
 from .errors import PyError
 from .state import (
-    ArenaPointer,
+    Lease,
     StatePointer,
     give_back,
     module_state,
@@ -87,28 +87,29 @@ def collect_garbage(state: StatePointer, mut arena: Arena) -> Int:
     return freed
 
 
-def enter(state: StatePointer) raises PyError -> ArenaPointer:
-    """Starts a call that makes a node, and takes the arena. The outermost call collects
-    first, if due. Leave with `leave` whatever happens. Calls that make no node just take
-    the arena, and never collect."""
-    state[].depth += 1
-    var arena: ArenaPointer
-    try:
-        arena = taken_arena(state)
-    except e:
-        state[].depth -= 1
-        raise e
-    if state[].depth == 1:
-        if collection_due(arena[]):
-            _ = collect_garbage(state, arena[])
-        elif memos_full(arena[]):
-            arena[].memos.clear()
-    return arena
+struct Call:
+    """A call that makes a node, counted in `depth` for a `with` block. The outermost
+    call collects first, if due. Calls that make no node just take the arena and never
+    collect."""
 
+    var state: StatePointer
 
-@always_inline
-def leave(state: StatePointer):
-    state[].depth -= 1
+    def __init__(out self, state: StatePointer) raises PyError:
+        var arena = taken_arena(state)
+        if state[].depth == 0:
+            if collection_due(arena[]):
+                _ = collect_garbage(state, arena[])
+            elif memos_full(arena[]):
+                arena[].memos.clear()
+        give_back(state, arena)
+        state[].depth += 1
+        self.state = state
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self):
+        self.state[].depth -= 1
 
 
 def made[
@@ -116,23 +117,16 @@ def made[
 ](state: StatePointer, walk: F) raises PyError -> PyObjectPtr:
     """Runs `walk` with the arena and returns its node's object. If a pause stopped
     the walk, Python's error is the handler's."""
-    var arena = enter(state)
-    var id: Id
-    try:
-        id = walk(arena[])
-    except:
-        give_back(state, arena)
-        leave(state)
-        raise PyError()
-    give_back(state, arena)
-    # Inside the call, so nothing collects `id` first.
-    try:
-        var node = wrap(state, id)
-        leave(state)
-        return node
-    except e:
-        leave(state)
-        raise e
+    with Call(state):
+        var lease = Lease(state)
+        var id: Id
+        try:
+            with lease^ as arena:
+                id = walk(arena[])
+        except:
+            raise PyError()
+        # Inside the call, so nothing collects `id` first.
+        return wrap(state, id)
 
 
 def collect(state: StatePointer) raises PyError -> PyObjectPtr:

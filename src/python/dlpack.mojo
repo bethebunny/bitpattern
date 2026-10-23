@@ -26,7 +26,7 @@ from .capi import (
 from .errors import PyError, raised, value_error
 from .ints import fitting
 from .queries import Count, checked_width, int_from_count, member_count
-from .state import StatePointer, give_back, taken_arena
+from .state import Lease, StatePointer, give_back, taken_arena
 
 
 comptime CPU: Int32 = 1
@@ -269,9 +269,9 @@ def written(
     _ = checked_width(state, id, width)
     var arena = taken_arena(state)
     var members = member_count(arena[], id, width)
+    give_back(state, arena)
     var made = room(members, columns, Int(dtype.bits // 8))
     if not made:
-        give_back(state, arena)
         var total = int_from_count(state[].ints, members)
         var message = String(
             described(state[].ints, total), " members don't fit in memory"
@@ -282,19 +282,27 @@ def written(
     var sign_shift: UInt64 = 0
     if dtype.code == INT:
         sign_shift = UInt64(64 - max(width, 1))
+    var lease = Lease(state)
     try:
-        if dtype.bits == 8:
-            fill[DType.uint8](arena[], id, width, columns, sign_shift, words)
-        elif dtype.bits == 16:
-            fill[DType.uint16](arena[], id, width, columns, sign_shift, words)
-        elif dtype.bits == 32:
-            fill[DType.uint32](arena[], id, width, columns, sign_shift, words)
-        else:
-            fill[DType.uint64](arena[], id, width, columns, sign_shift, words)
+        with lease^ as arena:
+            if dtype.bits == 8:
+                fill[DType.uint8](
+                    arena[], id, width, columns, sign_shift, words
+                )
+            elif dtype.bits == 16:
+                fill[DType.uint16](
+                    arena[], id, width, columns, sign_shift, words
+                )
+            elif dtype.bits == 32:
+                fill[DType.uint32](
+                    arena[], id, width, columns, sign_shift, words
+                )
+            else:
+                fill[DType.uint64](
+                    arena[], id, width, columns, sign_shift, words
+                )
     except:
-        give_back(state, arena)
         raise PyError()  # the Ctrl-C handler's
-    give_back(state, arena)
     return words^
 
 
