@@ -49,6 +49,7 @@ from .capi import (
     TypeSlot,
     TypeSpec,
     address,
+    leaked,
     ob_type,
     object_symbol,
     text,
@@ -317,53 +318,41 @@ def bdd_reduce(o: PyObjectPtr, unused: PyObjectPtr) abi("C") -> PyObjectPtr:
 def bdd_type(module: PyObjectPtr) raises PyError -> PyObjectPtr:
     """Makes the BDD type for `module`. Its specs live as long as the process, as
     PyType_FromSpec needs."""
-    var getset = unsafe_alloc[GetSetDef](6)
-    getset[unsafe_offset=0] = GetSetDef(
-        text("bit"),
-        address(bdd_bit),
-        0,
-        text("The bit the node tests, or -1 for a leaf."),
-        0,
-    )
-    getset[unsafe_offset=1] = GetSetDef(
-        text("left"), address(bdd_left), 0, 0, 0
-    )
-    getset[unsafe_offset=2] = GetSetDef(
-        text("right"), address(bdd_right), 0, 0, 0
-    )
-    getset[unsafe_offset=3] = GetSetDef(
-        text("size"),
-        address(bdd_size),
-        0,
-        text("How many integers below `2 ** (bit + 1)` the node accepts."),
-        0,
-    )
-    getset[unsafe_offset=4] = GetSetDef(
-        text("leaf"), address(bdd_leaf), 0, 0, 0
-    )
-    getset[unsafe_offset=5] = GetSetDef(0, 0, 0, 0, 0)
+    var getset: List[GetSetDef] = [
+        GetSetDef(
+            text("bit"),
+            address(bdd_bit),
+            0,
+            text("The bit the node tests, or -1 for a leaf."),
+            0,
+        ),
+        GetSetDef(text("left"), address(bdd_left), 0, 0, 0),
+        GetSetDef(text("right"), address(bdd_right), 0, 0, 0),
+        GetSetDef(
+            text("size"),
+            address(bdd_size),
+            0,
+            text("How many integers below `2 ** (bit + 1)` the node accepts."),
+            0,
+        ),
+        GetSetDef(text("leaf"), address(bdd_leaf), 0, 0, 0),
+        GetSetDef(0, 0, 0, 0, 0),
+    ]
 
-    var methods = unsafe_alloc[MethodDef](4)
-    methods[unsafe_offset=0] = MethodDef(
-        text("__copy__"), address(bdd_copy), METH_NOARGS, 0
-    )
-    methods[unsafe_offset=1] = MethodDef(
-        text("__deepcopy__"), address(bdd_copy), METH_O, 0
-    )
-    methods[unsafe_offset=2] = MethodDef(
-        text("__reduce__"), address(bdd_reduce), METH_NOARGS, 0
-    )
-    methods[unsafe_offset=3] = MethodDef(0, 0, 0, 0)
+    var methods: List[MethodDef] = [
+        MethodDef(text("__copy__"), address(bdd_copy), METH_NOARGS, 0),
+        MethodDef(text("__deepcopy__"), address(bdd_copy), METH_O, 0),
+        MethodDef(text("__reduce__"), address(bdd_reduce), METH_NOARGS, 0),
+        MethodDef(0, 0, 0, 0),
+    ]
 
     # Weakrefs live just after the object header.
-    var members = unsafe_alloc[MemberDef](2)
-    members[unsafe_offset=0] = MemberDef(
-        text("__weaklistoffset__"), T_PYSSIZET, 16, READONLY, 0
-    )
-    members[unsafe_offset=1] = MemberDef(0, 0, 0, 0, 0)
+    var members: List[MemberDef] = [
+        MemberDef(text("__weaklistoffset__"), T_PYSSIZET, 16, READONLY, 0),
+        MemberDef(0, 0, 0, 0, 0),
+    ]
 
-    var slots = unsafe_alloc[TypeSlot](18)
-    var filled: List[TypeSlot] = [
+    var slots: List[TypeSlot] = [
         TypeSlot(Py_tp_new, address(bdd_new)),
         TypeSlot(Py_tp_dealloc, address(bdd_dealloc)),
         TypeSlot(Py_tp_hash, address(bdd_hash)),
@@ -375,21 +364,19 @@ def bdd_type(module: PyObjectPtr) raises PyError -> PyObjectPtr:
         TypeSlot(Py_nb_or, address(bdd_or)),
         TypeSlot(Py_nb_subtract, address(bdd_sub)),
         TypeSlot(Py_nb_xor, address(bdd_xor)),
-        TypeSlot(Py_tp_getset, Int(getset)),
-        TypeSlot(Py_tp_methods, Int(methods)),
-        TypeSlot(Py_tp_members, Int(members)),
+        TypeSlot(Py_tp_getset, leaked(getset^)),
+        TypeSlot(Py_tp_methods, leaked(methods^)),
+        TypeSlot(Py_tp_members, leaked(members^)),
         TypeSlot(Py_tp_doc, text(DOC)),
         TypeSlot(0, 0),
     ]
-    for index in range(len(filled)):
-        slots[unsafe_offset=index] = filled[index]
     var spec = unsafe_alloc[TypeSpec](1)
     spec[] = TypeSpec(
         text("bitpattern.bdd.BDD"),
         c_int(size_of[BddObject]()),
         0,
         Py_TPFLAGS_DEFAULT,
-        Int(slots),
+        leaked(slots^),
     )
     var type = PyType_FromModuleAndSpec(module, Int(spec), PyObjectPtr())
     if not type:

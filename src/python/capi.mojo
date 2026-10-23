@@ -145,6 +145,12 @@ def text(literal: StaticString) -> Int:
     return Int(literal.unsafe_ptr())
 
 
+def leaked[T: Copyable & Deinitable](var items: List[T]) -> Int:
+    """The address of `items`, which then live as long as the process (as C's
+    tables must)."""
+    return Int(items.unsafe_take_allocation().unsafe_leak())
+
+
 def symbol(name: StaticString) -> Int:
     # RTLD_DEFAULT is null on glibc.
     return external_call["dlsym", Int](Int(0), name.unsafe_ptr())

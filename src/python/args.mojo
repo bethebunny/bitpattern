@@ -2,8 +2,6 @@
 arguments before taking the arena."""
 
 from std.ffi import c_int
-from std.memory import unsafe_memcpy
-from std.memory.alloc import unsafe_alloc
 from std.python._cpython import PyObjectPtr
 
 from arena import Id, MAX_BIT, MAX_WIDTH
@@ -26,6 +24,7 @@ from .capi import (
     PyUnicode_AsUTF8AndSize,
     PyUnicode_CompareWithASCIIString,
     address,
+    leaked,
     ob_type,
     text,
 )
@@ -359,21 +358,14 @@ def no_arguments[
 
 
 def keywords_method[function: Function, signature: Signature]() -> MethodDef:
+    var doc = List(materialize[signature]().method_doc().as_bytes())
+    doc.append(0)  # C strings end in a NUL
     return MethodDef(
         text(signature.function),
         address(fastcall[function, signature]),
         METH_FASTCALL | METH_KEYWORDS,
-        kept(materialize[signature]().method_doc()),
+        leaked(doc^),
     )
-
-
-def kept(string: String) -> Int:
-    """A copy of `string` as a C string that lives as long as the process."""
-    var size = string.byte_length()
-    var copy = unsafe_alloc[UInt8](size + 1)
-    unsafe_memcpy(dest=copy, src=string.unsafe_ptr(), count=size)
-    copy[unsafe_offset=size] = 0
-    return Int(copy)
 
 
 def no_arguments_method[

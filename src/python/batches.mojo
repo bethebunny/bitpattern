@@ -37,6 +37,7 @@ from .capi import (
     TypeSlot,
     TypeSpec,
     address,
+    leaked,
     ob_type,
     text,
 )
@@ -398,11 +399,12 @@ def paths(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
 def batches_type(module: PyObjectPtr) raises PyError -> PyObjectPtr:
     """The iterator type `members`, `blocks` and `paths` return, made at init. Its
     specs live as long as the process, as PyType_FromSpec needs."""
-    var slots = unsafe_alloc[TypeSlot](4)
-    slots[unsafe_offset=0] = TypeSlot(Py_tp_dealloc, address(batches_dealloc))
-    slots[unsafe_offset=1] = TypeSlot(Py_tp_iter, address(batches_iter))
-    slots[unsafe_offset=2] = TypeSlot(Py_tp_iternext, address(batches_next))
-    slots[unsafe_offset=3] = TypeSlot(0, 0)
+    var slots: List[TypeSlot] = [
+        TypeSlot(Py_tp_dealloc, address(batches_dealloc)),
+        TypeSlot(Py_tp_iter, address(batches_iter)),
+        TypeSlot(Py_tp_iternext, address(batches_next)),
+        TypeSlot(0, 0),
+    ]
     var spec = unsafe_alloc[TypeSpec](1)
     spec[] = TypeSpec(
         text("bitpattern.bdd.Batches"),
@@ -410,7 +412,7 @@ def batches_type(module: PyObjectPtr) raises PyError -> PyObjectPtr:
         0,
         # Else `Batches()` would make an iterator with no walk.
         Py_TPFLAGS_DEFAULT | Py_TPFLAGS_DISALLOW_INSTANTIATION,
-        Int(slots),
+        leaked(slots^),
     )
     var type = PyType_FromModuleAndSpec(module, Int(spec), PyObjectPtr())
     if not type:

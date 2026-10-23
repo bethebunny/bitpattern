@@ -6,7 +6,7 @@ requires the GIL, which keeps every call into it on one thread at a time.
 """
 
 from std.ffi import c_int
-from std.memory.alloc import unsafe_alloc
+from std.memory.alloc import Layout, alloc, dealloc
 from std.python._cpython import PyObjectPtr
 
 from arena import Arena
@@ -134,18 +134,20 @@ def pause(mut arena: Arena, context: Int) -> Bool:
     if PyOS_InterruptOccurred() == 0:
         return True
     var state = StatePointer(unsafe_from_address=context)
-    var lent = unsafe_alloc[Arena](1)
-    lent.unsafe_write(Arena.placeholder())
-    swap(arena, lent[])
-    state[].arena = Int(lent)
+    # On the heap since the handler reaches it by an address the compiler can't track.
+    var lent = alloc(Layout[Arena].single())
+    var real = lent.unsafe_ptr()
+    real.unsafe_write(Arena.placeholder())
+    swap(arena, real[])
+    state[].arena = Int(real)
     state[].depth += 1  # so the handler's calls aren't outermost
     var handled = handle_sigint(state)
     state[].depth -= 1
     # Every call the handler made has given the arena back.
-    swap(arena, lent[])
+    swap(arena, real[])
     state[].arena = 0
-    lent.unsafe_deinit_pointee()
-    lent.unsafe_free()
+    real.unsafe_deinit_pointee()
+    dealloc(lent^)
     return handled
 
 

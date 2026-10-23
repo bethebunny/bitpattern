@@ -60,6 +60,7 @@ from python.capi import (
     PyUnicode_FromStringAndSize,
     PyUnicode_InternFromString,
     address,
+    leaked,
     pointer_symbol,
     symbol,
     text,
@@ -145,26 +146,25 @@ def methods() -> Int:
                 " - memo_room: memo entries allocated"
             ),
         ),
+        MethodDef(0, 0, 0, 0),
     ]
-    var entries = unsafe_alloc[MethodDef](len(table) + 1)
-    for index in range(len(table)):
-        entries[unsafe_offset=index] = table[index]
-    entries[unsafe_offset=len(table)] = MethodDef(0, 0, 0, 0)
-    return Int(entries)
+    return leaked(table^)
 
 
 @export
 def PyInit_bdd() abi("C") -> PyObjectPtr:
-    var slots = unsafe_alloc[ModuleSlot](3)
-    slots[unsafe_offset=0] = ModuleSlot(Py_mod_exec, address(module_exec))
+    var slots: List[ModuleSlot] = [
+        ModuleSlot(Py_mod_exec, address(module_exec))
+    ]
     # No globals, so each interpreter gets an arena of its own, even with its own GIL.
     if python_version() >= 0x030C0000:
-        slots[unsafe_offset=1] = ModuleSlot(
-            Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED
+        slots.append(
+            ModuleSlot(
+                Py_mod_multiple_interpreters,
+                Py_MOD_PER_INTERPRETER_GIL_SUPPORTED,
+            )
         )
-        slots[unsafe_offset=2] = ModuleSlot(0, 0)
-    else:
-        slots[unsafe_offset=1] = ModuleSlot(0, 0)
+    slots.append(ModuleSlot(0, 0))
     var definition = unsafe_alloc[ModuleDef](1)
     definition[] = ModuleDef(
         1,
@@ -176,7 +176,7 @@ def PyInit_bdd() abi("C") -> PyObjectPtr:
         text(DOC),
         8,  # the address of a State
         methods(),
-        Int(slots),
+        leaked(slots^),
         address(module_traverse),
         address(module_clear),
         address(module_free),
