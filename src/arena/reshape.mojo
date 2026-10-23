@@ -9,7 +9,7 @@ from .table import Table, single
 
 
 @fieldwise_init
-struct ShiftedOut(ImplicitlyCopyable, TrivialRegisterPassable):
+struct ShiftedOut(TrivialRegisterPassable):
     """Shifting would move a node's `bit` out of range."""
 
     var bit: Int32

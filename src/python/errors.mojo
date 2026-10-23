@@ -12,7 +12,7 @@ from .capi import (
 
 
 @fieldwise_init
-struct PyError(ImplicitlyCopyable, TrivialRegisterPassable, Writable):
+struct PyError(TrivialRegisterPassable, Writable):
     """Python's error indicator is set."""
 
     def write_to(self, mut writer: Some[Writer]):

@@ -8,7 +8,7 @@ from .table import Table, single
 
 
 @fieldwise_init
-struct Row(ImplicitlyCopyable, TrivialRegisterPassable):
+struct Row(TrivialRegisterPassable):
     """A node's bit and branches. A branch is 0 for REJECT, 1 for ACCEPT, or `2 + i`
     for row `i`."""
 

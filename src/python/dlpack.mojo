@@ -40,7 +40,7 @@ comptime Py_TPFLAGS_TUPLE_SUBCLASS: UInt64 = 1 << 26
 
 
 @fieldwise_init
-struct Device(ImplicitlyCopyable, TrivialRegisterPassable):
+struct Device(TrivialRegisterPassable):
     """DLDevice."""
 
     var device_type: Int32
@@ -48,7 +48,7 @@ struct Device(ImplicitlyCopyable, TrivialRegisterPassable):
 
 
 @fieldwise_init
-struct DataType(ImplicitlyCopyable, TrivialRegisterPassable):
+struct DataType(TrivialRegisterPassable):
     """DLDataType."""
 
     var code: UInt8
@@ -81,7 +81,7 @@ struct DataType(ImplicitlyCopyable, TrivialRegisterPassable):
 
 
 @fieldwise_init
-struct Tensor(ImplicitlyCopyable, TrivialRegisterPassable):
+struct Tensor(TrivialRegisterPassable):
     """DLTensor."""
 
     var data: Int
@@ -94,14 +94,14 @@ struct Tensor(ImplicitlyCopyable, TrivialRegisterPassable):
 
 
 @fieldwise_init
-struct Version(ImplicitlyCopyable, TrivialRegisterPassable):
+struct Version(TrivialRegisterPassable):
     """DLPackVersion."""
 
     var major: UInt32
     var minor: UInt32
 
 
-trait Managed(ImplicitlyCopyable, TrivialRegisterPassable):
+trait Managed(TrivialRegisterPassable):
     comptime NAME: StaticString
     """The capsule's name."""
 

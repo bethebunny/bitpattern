@@ -55,7 +55,7 @@ comptime MAX_BATCH = 1024
 comptime MAX_BATCH_BITS = 1 << 20
 
 
-struct BatchSizes(ImplicitlyCopyable, TrivialRegisterPassable):
+struct BatchSizes(TrivialRegisterPassable):
     var next: Int
     var most: Int
 

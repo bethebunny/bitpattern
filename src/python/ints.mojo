@@ -123,7 +123,7 @@ struct Ints(Movable):
 
 
 @fieldwise_init
-struct Fitting(ImplicitlyCopyable, TrivialRegisterPassable):
+struct Fitting(TrivialRegisterPassable):
     """An int read as an Int64: `value` if `overflow` is 0, else just its sign.
     """
 

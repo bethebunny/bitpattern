@@ -22,7 +22,7 @@ trait Prefix(Copyable, Defaultable, Deinitable):
 
 
 @fieldwise_init
-struct Narrow(ImplicitlyCopyable, Prefix, TrivialRegisterPassable):
+struct Narrow(Prefix, TrivialRegisterPassable):
     var value: UInt128
 
     def __init__(out self):
@@ -82,7 +82,7 @@ comptime HI_BRANCH: Int32 = -2
 
 
 @fieldwise_init
-struct Frame(ImplicitlyCopyable, TrivialRegisterPassable):
+struct Frame(TrivialRegisterPassable):
     var id: Id
     var low: Int32
     """VISIT, HI_BRANCH, or the lowest free bit."""

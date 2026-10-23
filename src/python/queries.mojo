@@ -61,7 +61,7 @@ def int_from_count(ints: Ints, count: Count) raises PyError -> PyObjectPtr:
 
 
 @fieldwise_init
-struct OutsideWidth(ImplicitlyCopyable, TrivialRegisterPassable, Writable):
+struct OutsideWidth(TrivialRegisterPassable, Writable):
     """A node tests `bit`, which isn't below the set's `width`. A call raises it as a
     ValueError once it gives back the arena, since making one can run Python."""
 

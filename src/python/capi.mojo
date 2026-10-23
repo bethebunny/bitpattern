@@ -53,13 +53,13 @@ comptime READONLY: c_int = 1
 
 
 @fieldwise_init
-struct TypeSlot(ImplicitlyCopyable, TrivialRegisterPassable):
+struct TypeSlot(TrivialRegisterPassable):
     var slot: c_int
     var pfunc: Int
 
 
 @fieldwise_init
-struct TypeSpec(ImplicitlyCopyable, TrivialRegisterPassable):
+struct TypeSpec(TrivialRegisterPassable):
     var name: Int
     var basicsize: c_int
     var itemsize: c_int
@@ -68,7 +68,7 @@ struct TypeSpec(ImplicitlyCopyable, TrivialRegisterPassable):
 
 
 @fieldwise_init
-struct MethodDef(ImplicitlyCopyable, TrivialRegisterPassable):
+struct MethodDef(TrivialRegisterPassable):
     var name: Int
     var meth: Int
     var flags: c_int
@@ -76,7 +76,7 @@ struct MethodDef(ImplicitlyCopyable, TrivialRegisterPassable):
 
 
 @fieldwise_init
-struct GetSetDef(ImplicitlyCopyable, TrivialRegisterPassable):
+struct GetSetDef(TrivialRegisterPassable):
     var name: Int
     var get: Int
     var set: Int
@@ -85,7 +85,7 @@ struct GetSetDef(ImplicitlyCopyable, TrivialRegisterPassable):
 
 
 @fieldwise_init
-struct MemberDef(ImplicitlyCopyable, TrivialRegisterPassable):
+struct MemberDef(TrivialRegisterPassable):
     var name: Int
     var type: c_int
     var offset: Int
@@ -94,13 +94,13 @@ struct MemberDef(ImplicitlyCopyable, TrivialRegisterPassable):
 
 
 @fieldwise_init
-struct ModuleSlot(ImplicitlyCopyable, TrivialRegisterPassable):
+struct ModuleSlot(TrivialRegisterPassable):
     var slot: c_int
     var value: Int
 
 
 @fieldwise_init
-struct ModuleDef(ImplicitlyCopyable, TrivialRegisterPassable):
+struct ModuleDef(TrivialRegisterPassable):
     # PyModuleDef_HEAD_INIT
     var ob_refcnt: Int
     var ob_type: Int

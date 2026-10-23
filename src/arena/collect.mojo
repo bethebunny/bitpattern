@@ -1,5 +1,7 @@
 """Garbage collection, and bounds on the memo tables."""
 
+from bigint import BigUInt
+
 from .arena import ACCEPT, Arena, Id, REJECT
 
 comptime FREED: Int32 = Int32.MIN
@@ -10,7 +12,7 @@ comptime MIN_COLLECTION_INTERVAL = 1 << 20
 
 
 @fieldwise_init
-struct Schedule(ImplicitlyCopyable, TrivialRegisterPassable):
+struct Schedule(TrivialRegisterPassable):
     """Nodes made since the last garbage collection, and how many make the next one
     due."""
 
@@ -19,7 +21,7 @@ struct Schedule(ImplicitlyCopyable, TrivialRegisterPassable):
 
 
 @fieldwise_init
-struct Stats(ImplicitlyCopyable, TrivialRegisterPassable):
+struct Stats(TrivialRegisterPassable):
     var nodes: Int
     var free: Int
     var room: Int
@@ -92,11 +94,7 @@ def swept(mut arena: Arena, marks: List[Bool]) -> Int:
         var node = arena.nodes.unsafe_get(index)
         if not marks[index] and node.bit != FREED:
             arena.unique.remove(node)
-            if index in arena.sizes.wide:
-                try:
-                    _ = arena.sizes.wide.pop(index)
-                except:
-                    pass
+            _ = arena.sizes.wide.pop(index, BigUInt())
             arena.nodes.unsafe_get(index).bit = FREED
             freed += 1
     return freed

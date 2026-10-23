@@ -6,15 +6,12 @@ from .table import Table, single, sorted_pair
 
 
 @fieldwise_init
-struct Op(Equatable, ImplicitlyCopyable, TrivialRegisterPassable):
+struct Op(Equatable, TrivialRegisterPassable):
     var value: Int
 
     comptime INTERSECTION = Op(0)
     comptime UNION = Op(1)
     comptime SYMMETRIC_DIFFERENCE = Op(2)
-
-    def __eq__(self, other: Self) -> Bool:
-        return self.value == other.value
 
 
 def intersection(mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:

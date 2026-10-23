@@ -15,7 +15,7 @@ says how to read them."""
 
 
 @fieldwise_init
-struct WriteStep(ImplicitlyCopyable, TrivialRegisterPassable):
+struct WriteStep(TrivialRegisterPassable):
     var id: Id
     """The node to visit, or REJECT for copies."""
     var low: Int32
@@ -203,7 +203,7 @@ comptime FREE_BITS: Int32 = 2
 
 
 @fieldwise_init
-struct Frame(ImplicitlyCopyable, TrivialRegisterPassable):
+struct Frame(TrivialRegisterPassable):
     """Walks `id` below bit `low`: as it is (a visit), after setting bit `low` (a `hi`
     branch), or after counting up the free bits in `[low, width)`."""
 

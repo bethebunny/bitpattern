@@ -12,9 +12,7 @@ comptime VISIT: Int32 = -1
 
 
 @fieldwise_init
-struct Step[T: TrivialRegisterPassable](
-    ImplicitlyCopyable, TrivialRegisterPassable
-):
+struct Step[T: TrivialRegisterPassable](TrivialRegisterPassable):
     """A walk pushes a make and then a visit for each branch. The visits pop first, so
     the make finds the branches' results on top of the results stack."""
 
@@ -38,13 +36,13 @@ struct Step[T: TrivialRegisterPassable](
 
 
 @fieldwise_init
-struct Pair(ImplicitlyCopyable, TrivialRegisterPassable):
+struct Pair(TrivialRegisterPassable):
     var a: Id
     var b: Id
 
 
 @fieldwise_init
-struct Span(ImplicitlyCopyable, TrivialRegisterPassable):
+struct Span(TrivialRegisterPassable):
     """`values[start:end]`, which share every bit above `bit`."""
 
     var start: Int

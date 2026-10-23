@@ -103,7 +103,7 @@ struct Control(Movable):
         unsafe_memset(self.bytes.unsafe_ptr(), EMPTY, len(self.bytes))
 
 
-trait Key(Equatable, ImplicitlyCopyable, TrivialRegisterPassable):
+trait Key(Equatable, TrivialRegisterPassable):
     """How a table keeps its UInt64 keys."""
 
     def __init__(out self, key: UInt64):
@@ -125,10 +125,6 @@ struct PairKey(Key):
         self.low = UInt32(key & 0xFFFFFFFF)
 
     @always_inline
-    def __eq__(self, other: Self) -> Bool:
-        return self.high == other.high and self.low == other.low
-
-    @always_inline
     def hash(self) -> UInt64:
         return mixed(UInt64(self.high) << 32 | UInt64(self.low))
 
@@ -142,16 +138,12 @@ struct IdKey(Key):
         self.id = UInt32(key)
 
     @always_inline
-    def __eq__(self, other: Self) -> Bool:
-        return self.id == other.id
-
-    @always_inline
     def hash(self) -> UInt64:
         return mixed(UInt64(self.id))
 
 
 @fieldwise_init
-struct Entry[K: Key](ImplicitlyCopyable, TrivialRegisterPassable):
+struct Entry[K: Key](TrivialRegisterPassable):
     var key: Self.K
     var value: UInt32
 
@@ -293,7 +285,7 @@ def node_hash(node: Decision) -> UInt64:
 
 
 @fieldwise_init
-struct Unique(ImplicitlyCopyable, TrivialRegisterPassable):
+struct Unique(TrivialRegisterPassable):
     var node: Decision
     var id: Id
 

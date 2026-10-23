@@ -19,7 +19,7 @@ from .table import UniqueTable
 
 
 @fieldwise_init
-struct Id(Equatable, ImplicitlyCopyable, TrivialRegisterPassable, Writable):
+struct Id(Equatable, TrivialRegisterPassable, Writable):
     """A node's index in the arena."""
 
     var value: UInt32
@@ -35,10 +35,6 @@ struct Id(Equatable, ImplicitlyCopyable, TrivialRegisterPassable, Writable):
     @always_inline
     def is_leaf(self) -> Bool:
         return self.value <= 1
-
-    @always_inline
-    def __eq__(self, other: Self) -> Bool:
-        return self.value == other.value
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("Id(", self.value, ")")
@@ -59,20 +55,12 @@ comptime PAUSE_INTERVAL = 1 << 14
 
 
 @fieldwise_init
-struct Decision(Equatable, ImplicitlyCopyable, TrivialRegisterPassable):
+struct Decision(Equatable, TrivialRegisterPassable):
     """Invariants: `lo != hi`, and both test bits below `bit`."""
 
     var bit: Int32
     var lo: Id
     var hi: Id
-
-    @always_inline
-    def __eq__(self, other: Self) -> Bool:
-        return (
-            self.bit == other.bit
-            and self.lo == other.lo
-            and self.hi == other.hi
-        )
 
     @always_inline
     def sole_branch(self) -> Id:
@@ -86,7 +74,7 @@ comptime LEAF_SLOT = Decision(-1, REJECT, REJECT)
 
 
 @fieldwise_init
-struct Interrupted(ImplicitlyCopyable, TrivialRegisterPassable, Writable):
+struct Interrupted(TrivialRegisterPassable, Writable):
     """A pause stopped the walk (Python's Ctrl-C handler raised)."""
 
     def write_to(self, mut writer: Some[Writer]):
@@ -94,7 +82,7 @@ struct Interrupted(ImplicitlyCopyable, TrivialRegisterPassable, Writable):
 
 
 @fieldwise_init
-struct Misordered(ImplicitlyCopyable, TrivialRegisterPassable, Writable):
+struct Misordered(TrivialRegisterPassable, Writable):
     """A node's branch tests `child_bit`, which isn't below the node's `bit`."""
 
     var bit: Int32
