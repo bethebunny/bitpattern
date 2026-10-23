@@ -114,7 +114,7 @@ def reduced(state: StatePointer, o: PyObjectPtr) raises PyError -> PyObjectPtr:
     return reduction
 
 
-comptime LSHIFT = Signature("lshift", 2, 2, ["node", "by", "", "", ""])
+comptime LSHIFT = Signature("lshift", positional=["node", "by"])
 
 
 def lshift(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
@@ -156,15 +156,19 @@ def shifted_out(by: String, bit: Int32) -> PyError:
 
 
 comptime FREED_BETWEEN = Signature(
-    "freed_between", 3, 1, ["node", "low_bit", "high_bit", "", ""]
+    "freed_between",
+    positional=["node"],
+    keywords=["low_bit", "high_bit"],
+    doc=(
+        "Accepts `i` when `node` accepts any `i'` with the same bits outside\n"
+        "`[low_bit, high_bit)`."
+    ),
 )
 
 
 def freed_between(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
-    """Accepts `i` when `node` accepts any `i'` with the same bits outside
-    `[low_bit, high_bit)`."""
     var id = node(state, args[0])
     var low = clamped(args[1])
     var high = clamped(args[2])
@@ -179,7 +183,9 @@ def freed_between(
     return made(state, walk)
 
 
-comptime NARROWED = Signature("narrowed", 2, 1, ["node", "width", "", "", ""])
+comptime NARROWED = Signature(
+    "narrowed", positional=["node"], keywords=["width"]
+)
 
 
 def narrowed(
@@ -199,11 +205,14 @@ def narrowed(
     return made(state, walk)
 
 
-comptime DIAGRAM = Signature("diagram", 1, 1, ["bits", "", "", "", ""])
+comptime DIAGRAM = Signature(
+    "diagram",
+    positional=["bits"],
+    doc="`bits` is most significant first, with `?` for free bits.",
+)
 
 
 def diagram(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    """`bits` is most significant first, with `?` for free bits."""
     var o = args[0]
     if PyType_GetFlags(ob_type(o)) & Py_TPFLAGS_UNICODE_SUBCLASS == 0:
         raise not_an_instance(state, o, "str")
@@ -289,15 +298,19 @@ def escaped(code: UInt32) -> Bool:
 
 
 comptime EXACTLY_THESE = Signature(
-    "exactly_these", 2, 1, ["values", "width", "", "", ""]
+    "exactly_these",
+    positional=["values"],
+    keywords=["width"],
+    doc=(
+        "The set of `values`, and its width (at least `width`). Errors are"
+        " IntSet's."
+    ),
 )
 
 
 def exactly_these(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
-    """The set of `values`, and its width (at least `width`). Errors are IntSet's.
-    """
     var least = least_width(state[].ints, args[1])
     var members = Members.read(state[].ints, args[0])
     var bits = members.bits()
@@ -501,7 +514,7 @@ struct Members(Movable):
 
 
 comptime INTERVAL = Signature(
-    "interval", 3, 2, ["start", "stop", "width", "", ""]
+    "interval", positional=["start", "stop"], keywords=["width"]
 )
 
 
@@ -568,7 +581,7 @@ def big_int(ints: Ints, o: PyObjectPtr) raises PyError -> Tuple[Bool, BigUInt]:
     return signed^
 
 
-comptime REBUILT = Signature("_rebuilt", 1, 1, ["rows", "", "", "", ""])
+comptime REBUILT = Signature("_rebuilt", positional=["rows"])
 
 
 def rebuilt(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:

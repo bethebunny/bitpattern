@@ -130,8 +130,6 @@ def made[
 
 
 def collect(state: StatePointer) raises PyError -> PyObjectPtr:
-    """Frees unreachable nodes and gives back all spare room. Returns how many it freed.
-    """
     var arena = taken_arena(state)
     var freed = 0
     # An outer call might be about to wrap a node.
@@ -146,14 +144,6 @@ def collect(state: StatePointer) raises PyError -> PyObjectPtr:
 
 
 def stats(state: StatePointer) raises PyError -> PyObjectPtr:
-    """The arena's counts:
-    - nodes: slots in use
-    - free: freed slots
-    - wrapped: nodes with a Python object
-    - room: slots allocated
-    - memo: memo entries
-    - memo_room: memo entries allocated
-    """
     var arena = taken_arena(state)
     var counts = arena_stats(arena[])
     give_back(state, arena)

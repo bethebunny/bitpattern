@@ -2,6 +2,8 @@
 arguments before taking the arena."""
 
 from std.ffi import external_call
+from std.memory import unsafe_memcpy
+from std.memory.alloc import unsafe_alloc
 from std.python._cpython import PyObjectPtr
 
 from arena import Id, MAX_BIT, MAX_WIDTH
@@ -33,15 +35,47 @@ from .state import StatePointer, module_state
 comptime MAX_ARGUMENTS = 5
 
 
-@fieldwise_init
 struct Signature(Copyable):
-    """A function's parameters: the first `positional` can be given by position or by
-    name, the rest only by name. All of them are required."""
+    """A Python function's parameters and doc. Parameters in `positional` can be given
+    by position or by name, those in `keywords` only by name. All of them are
+    required."""
 
     var function: StaticString
-    var arity: Int
-    var positional: Int
-    var names: Array[StaticString, MAX_ARGUMENTS]
+    var positional: List[StaticString]
+    var keywords: List[StaticString]
+    var doc: StaticString
+
+    def __init__(
+        out self,
+        function: StaticString,
+        *,
+        var positional: List[StaticString],
+        var keywords: List[StaticString] = [],
+        doc: StaticString = "",
+    ):
+        self.function = function
+        self.positional = positional^
+        self.keywords = keywords^
+        self.doc = doc
+
+    def arity(self) -> Int:
+        return len(self.positional) + len(self.keywords)
+
+    def name(self, index: Int) -> StaticString:
+        if index < len(self.positional):
+            return self.positional[index]
+        return self.keywords[index - len(self.positional)]
+
+    def method_doc(self) -> String:
+        """`doc` after the text signature that `inspect.signature` reads."""
+        var written = String(self.function, "(")
+        for index in range(self.arity()):
+            if index > 0:
+                written += ", "
+            if index == len(self.positional):
+                written += "*, "
+            written += self.name(index)
+        return String(written, ")\n--\n\n", self.doc)
 
 
 struct Arguments(Movable):
@@ -75,7 +109,8 @@ def parsed[
     signature: Signature
 ](args: Int, nargs: Int, kwnames: PyObjectPtr) raises PyError -> Arguments:
     """METH_FASTCALL | METH_KEYWORDS arguments, matched to `signature`."""
-    if nargs > signature.positional:
+    comptime positional = len(signature.positional)
+    if nargs > positional:
         raise too_many[signature](nargs)
     var vector = Pointer[PyObjectPtr, MutUntrackedOrigin](
         unsafe_from_address=args
@@ -94,8 +129,9 @@ def parsed[
     signature: Signature
 ](args: PyObjectPtr, kwargs: PyObjectPtr) raises PyError -> Arguments:
     """tp_new's arguments (a tuple and a dict), matched to `signature`."""
+    comptime positional = len(signature.positional)
     var given = PyTuple_Size(args)
-    if given > signature.positional:
+    if given > positional:
         raise too_many[signature](given)
     var arguments = Arguments()
     for index in range(given):
@@ -114,8 +150,8 @@ def add_keyword[
 ](
     mut arguments: Arguments, key: PyObjectPtr, value: PyObjectPtr
 ) raises PyError:
-    comptime for index in range(signature.arity):
-        comptime name = signature.names[index]
+    comptime for index in range(signature.arity()):
+        comptime name = signature.name(index)
         if PyUnicode_CompareWithASCIIString(key, cstr(name)) == 0:
             if arguments.items[index]:
                 raise type_error(
@@ -141,7 +177,8 @@ def add_keyword[
 def completed[
     signature: Signature
 ](var arguments: Arguments) raises PyError -> Arguments:
-    comptime for index in range(signature.arity):
+    comptime assert signature.arity() <= MAX_ARGUMENTS
+    comptime for index in range(signature.arity()):
         if not arguments.items[index]:
             raise missing[signature](arguments)
     return arguments^
@@ -149,11 +186,12 @@ def completed[
 
 @no_inline
 def too_many[signature: Signature](given: Int) -> PyError:
+    comptime positional = len(signature.positional)
     return type_error(
         String(
             signature.function,
             "() takes ",
-            signature.positional,
+            positional,
             " positional arguments but ",
             given,
             " were given",
@@ -165,15 +203,16 @@ def too_many[signature: Signature](given: Int) -> PyError:
 def missing[signature: Signature](arguments: Arguments) -> PyError:
     """PyO3's TypeError, which names every missing positional argument, or if there are
     none, every missing keyword one."""
+    var declared = materialize[signature]()
     var names = List[StaticString]()
     var kind: StaticString = "positional"
-    for index in range(signature.arity):
-        if index == signature.positional:
+    for index in range(declared.arity()):
+        if index == len(declared.positional):
             if names:
                 break
             kind = "keyword"
         if not arguments[index]:
-            names.append(materialize[signature.names]()[index])
+            names.append(declared.name(index))
     var message = String(
         signature.function, "() missing ", len(names), " required ", kind
     )
@@ -307,15 +346,22 @@ def no_arguments[
         return PyObjectPtr()
 
 
-def keywords_method[
-    function: Function, signature: Signature
-](doc: StaticString) -> MethodDef:
+def keywords_method[function: Function, signature: Signature]() -> MethodDef:
     return MethodDef(
         text(signature.function),
         address(fastcall[function, signature]),
         METH_FASTCALL | METH_KEYWORDS,
-        text(doc),
+        kept(materialize[signature]().method_doc()),
     )
+
+
+def kept(string: String) -> Int:
+    """A copy of `string` as a C string that lives as long as the process."""
+    var size = string.byte_length()
+    var copy = unsafe_alloc[UInt8](size + 1)
+    unsafe_memcpy(dest=copy, src=string.unsafe_ptr(), count=size)
+    copy[unsafe_offset=size] = 0
+    return Int(copy)
 
 
 def no_arguments_method[

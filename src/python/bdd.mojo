@@ -110,7 +110,7 @@ def leaf_name(id: Id) -> StaticString:
     return "BDD.ACCEPT" if id == ACCEPT else "BDD.REJECT"
 
 
-comptime NEW = Signature("BDD.__new__", 3, 3, ["bit", "left", "right", "", ""])
+comptime NEW = Signature("BDD.__new__", positional=["bit", "left", "right"])
 
 
 def bdd_new(
@@ -215,7 +215,6 @@ def bdd_xor(a: PyObjectPtr, b: PyObjectPtr) abi("C") -> PyObjectPtr:
 
 
 def bdd_bit(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
-    """The bit the node tests, or -1 for a leaf."""
     var id = node_of(o)
     if id.is_leaf():
         return PyLong_FromLongLong(-1)
@@ -254,7 +253,6 @@ def bdd_right(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
 
 
 def bdd_size(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
-    """How many integers below `2 ** (bit + 1)` the node accepts."""
     var id = node_of(o)
     var state = object_state(o)
     try:

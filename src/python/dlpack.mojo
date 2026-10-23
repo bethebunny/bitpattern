@@ -344,14 +344,18 @@ def version_of(
 
 
 comptime TENSOR = Signature(
-    "tensor", 5, 1, ["node", "width", "code", "bits", "version"]
+    "tensor",
+    positional=["node"],
+    keywords=["width", "code", "bits", "version"],
+    doc=(
+        "The members as a capsule for `__dlpack__`, in words of DLPack type\n"
+        "`(code, bits)`. Members wider than a word are rows of words, most"
+        " significant\nfirst. A legacy capsule if `version` is None."
+    ),
 )
 
 
 def tensor(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    """The members as a capsule for `__dlpack__`, in words of DLPack type
-    `(code, bits)`. Members wider than a word are rows of words, most significant
-    first. A legacy capsule if `version` is None."""
     var id = node(state, args[0])
     var at = width(state[].ints, args[1])
     var code = unsigned(args[2], Int64(UInt8.MAX))

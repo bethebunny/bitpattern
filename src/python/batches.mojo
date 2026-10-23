@@ -365,28 +365,40 @@ def walked[
     return chained
 
 
-comptime MEMBERS = Signature("members", 2, 1, ["node", "width", "", "", ""])
+comptime MEMBERS = Signature("members", positional=["node"], keywords=["width"])
 
 
 def members(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     return walked[members_walker](state, args)
 
 
-comptime BLOCKS = Signature("blocks", 2, 1, ["node", "width", "", "", ""])
+comptime BLOCKS = Signature(
+    "blocks",
+    positional=["node"],
+    keywords=["width"],
+    doc=(
+        "Members as maximal aligned blocks (like CIDR blocks). `(first, free)`"
+        " is the\n`2 ** free` integers from `first` on."
+    ),
+)
 
 
 def blocks(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    """Members as maximal aligned blocks (like CIDR blocks). `(first, free)` is the
-    `2 ** free` integers from `first` on."""
     return walked[blocks_walker](state, args)
 
 
-comptime PATHS = Signature("paths", 2, 1, ["node", "width", "", "", ""])
+comptime PATHS = Signature(
+    "paths",
+    positional=["node"],
+    keywords=["width"],
+    doc=(
+        "Paths to `BDD.ACCEPT` as `width` characters of `0`, `1` or `?`, most"
+        " significant\nfirst. Each member matches exactly one."
+    ),
+)
 
 
 def paths(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    """Paths to `BDD.ACCEPT` as `width` characters of `0`, `1` or `?`, most
-    significant first. Each member matches exactly one."""
     return walked[paths_walker](state, args)
 
 

@@ -43,8 +43,6 @@ struct Memos(Movable, Sized):
         )
 
     def clear(mut self):
-        """Each table keeps room for twice what it held, so similar walks needn't grow
-        it."""
         self.intersection.clear()
         self.union.clear()
         self.symmetric_difference.clear()

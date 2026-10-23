@@ -73,7 +73,7 @@ def checked_width(
     return width
 
 
-comptime COUNT = Signature("count", 2, 1, ["node", "width", "", "", ""])
+comptime COUNT = Signature("count", positional=["node"], keywords=["width"])
 
 
 def count(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
@@ -85,13 +85,14 @@ def count(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     return int_from_count(state[].ints, total)
 
 
-comptime NODE_COUNT = Signature("node_count", 1, 1, ["node", "", "", "", ""])
+comptime NODE_COUNT = Signature(
+    "node_count", positional=["node"], doc="Leaves aren't counted."
+)
 
 
 def node_count(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
-    """Leaves aren't counted."""
     var id = node(state, args[0])
     var lease = Lease(state)
     var nodes: Int
@@ -103,17 +104,21 @@ def node_count(
     return PyLong_FromSsize_t(nodes)
 
 
-comptime COUNT_REPR = Signature("count_repr", 1, 1, ["total", "", "", "", ""])
+comptime COUNT_REPR = Signature(
+    "count_repr",
+    positional=["total"],
+    doc=(
+        "A count as reprs write it:\n"
+        "  - `2**k` for powers of two from `2**10`\n"
+        "  - `~2**k` for ints too long to write out\n"
+        "  - the digits otherwise"
+    ),
+)
 
 
 def count_repr(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
-    """A count as reprs write it:
-    - `2**k` for powers of two from `2**10`
-    - `~2**k` for ints too long to write out
-    - the digits otherwise
-    """
     var total = indexed(state[].ints, args[0])
     var written: String
     try:
@@ -175,7 +180,7 @@ def integer_bit(value: Integer, bit: Int32) -> Bool:
     return narrow_bit(value.narrow, bit) != value.negative
 
 
-comptime ACCEPTS = Signature("accepts", 2, 2, ["node", "value", "", "", ""])
+comptime ACCEPTS = Signature("accepts", positional=["node", "value"])
 
 
 def accepts(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
@@ -206,11 +211,15 @@ def member_at(
     return Count(0, nth_wide(arena, id, at))
 
 
-comptime NTH = Signature("nth", 3, 2, ["node", "n", "width", "", ""])
+comptime NTH = Signature(
+    "nth",
+    positional=["node", "n"],
+    keywords=["width"],
+    doc="Negative `n` counts from the end, as for lists.",
+)
 
 
 def nth(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    """Negative `n` counts from the end, as for lists."""
     var id = node(state, args[0])
     var at = width(state[].ints, args[2])
     var index = integer(state[].ints, args[1])
@@ -233,11 +242,15 @@ def members_below(arena: Arena, id: Id, width: Int32, value: Integer) -> Count:
     return Count(0, rank_wide(arena, id, value.widened(), width))
 
 
-comptime RANK = Signature("rank", 3, 2, ["node", "value", "width", "", ""])
+comptime RANK = Signature(
+    "rank",
+    positional=["node", "value"],
+    keywords=["width"],
+    doc="How many members are below `value`.",
+)
 
 
 def rank(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    """How many members are below `value`."""
     var id = node(state, args[0])
     var value = integer(state[].ints, args[1])
     var at = checked_width(state, id, width(state[].ints, args[2]))
@@ -262,14 +275,14 @@ def answered[
     return PyBool_FromLong(Int(answer))
 
 
-comptime SUBSET = Signature("subset", 2, 2, ["a", "b", "", "", ""])
+comptime SUBSET = Signature("subset", positional=["a", "b"])
 
 
 def subset(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     return answered[is_subset](state, args)
 
 
-comptime DISJOINT = Signature("disjoint", 2, 2, ["a", "b", "", "", ""])
+comptime DISJOINT = Signature("disjoint", positional=["a", "b"])
 
 
 def disjoint(
@@ -278,13 +291,16 @@ def disjoint(
     return answered[is_disjoint](state, args)
 
 
-comptime PATH_COUNT = Signature("path_count", 1, 1, ["node", "", "", "", ""])
+comptime PATH_COUNT = Signature(
+    "path_count",
+    positional=["node"],
+    doc="Counted without walking each path to `BDD.ACCEPT`.",
+)
 
 
 def path_count(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
-    """Counted without walking each path to `BDD.ACCEPT`."""
     var id = node(state, args[0])
     var lease = Lease(state)
     var paths: BigUInt

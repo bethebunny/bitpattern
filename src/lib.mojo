@@ -110,63 +110,26 @@ def python_version() -> UInt64:
 def methods() -> Int:
     """The module's functions, in memory that lives as long as the process."""
     var table: List[MethodDef] = [
-        keywords_method[accepts, ACCEPTS]("accepts(node, value)\n--\n\n"),
-        keywords_method[count, COUNT]("count(node, *, width)\n--\n\n"),
-        keywords_method[nth, NTH](
-            "nth(node, n, *, width)\n--\n\nNegative `n` counts from the end, as"
-            " for lists."
-        ),
-        keywords_method[rank, RANK](
-            "rank(node, value, *, width)\n--\n\nHow many members are below"
-            " `value`."
-        ),
-        keywords_method[members, MEMBERS]("members(node, *, width)\n--\n\n"),
-        keywords_method[blocks, BLOCKS](
-            "blocks(node, *, width)\n--\n\nMembers as maximal aligned blocks"
-            " (like CIDR blocks). `(first, free)` is the\n`2 ** free` integers"
-            " from `first` on."
-        ),
-        keywords_method[paths, PATHS](
-            "paths(node, *, width)\n--\n\nPaths to `BDD.ACCEPT` as `width`"
-            " characters of `0`, `1` or `?`, most significant\nfirst. Each"
-            " member matches exactly one."
-        ),
-        keywords_method[tensor, TENSOR](
-            "tensor(node, *, width, code, bits, version)\n--\n\n"
-        ),
-        keywords_method[lshift, LSHIFT]("lshift(node, by)\n--\n\n"),
-        keywords_method[freed_between, FREED_BETWEEN](
-            "freed_between(node, *, low_bit, high_bit)\n--\n\nAccepts `i` when"
-            " `node` accepts any `i'` with the same bits outside\n`[low_bit,"
-            " high_bit)`."
-        ),
-        keywords_method[subset, SUBSET]("subset(a, b)\n--\n\n"),
-        keywords_method[disjoint, DISJOINT]("disjoint(a, b)\n--\n\n"),
-        keywords_method[narrowed, NARROWED]("narrowed(node, *, width)\n--\n\n"),
-        keywords_method[node_count, NODE_COUNT](
-            "node_count(node)\n--\n\nLeaves aren't counted."
-        ),
-        keywords_method[path_count, PATH_COUNT](
-            "path_count(node)\n--\n\nCounted without walking each path to"
-            " `BDD.ACCEPT`."
-        ),
-        keywords_method[count_repr, COUNT_REPR](
-            "count_repr(total)\n--\n\nA count as reprs write it:\n  - `2**k`"
-            " for powers of two from `2**10`\n  - `~2**k` for ints too long to"
-            " write out\n  - the digits otherwise"
-        ),
-        keywords_method[diagram, DIAGRAM](
-            "diagram(bits)\n--\n\n`bits` is most significant first, with `?`"
-            " for free bits."
-        ),
-        keywords_method[exactly_these, EXACTLY_THESE](
-            "exactly_these(values, *, width)\n--\n\nThe set of `values`, and"
-            " its width (at least `width`). Errors are IntSet's."
-        ),
-        keywords_method[interval, INTERVAL](
-            "interval(start, stop, *, width)\n--\n\n"
-        ),
-        keywords_method[rebuilt, REBUILT]("_rebuilt(rows)\n--\n\n"),
+        keywords_method[accepts, ACCEPTS](),
+        keywords_method[count, COUNT](),
+        keywords_method[nth, NTH](),
+        keywords_method[rank, RANK](),
+        keywords_method[members, MEMBERS](),
+        keywords_method[blocks, BLOCKS](),
+        keywords_method[paths, PATHS](),
+        keywords_method[tensor, TENSOR](),
+        keywords_method[lshift, LSHIFT](),
+        keywords_method[freed_between, FREED_BETWEEN](),
+        keywords_method[subset, SUBSET](),
+        keywords_method[disjoint, DISJOINT](),
+        keywords_method[narrowed, NARROWED](),
+        keywords_method[node_count, NODE_COUNT](),
+        keywords_method[path_count, PATH_COUNT](),
+        keywords_method[count_repr, COUNT_REPR](),
+        keywords_method[diagram, DIAGRAM](),
+        keywords_method[exactly_these, EXACTLY_THESE](),
+        keywords_method[interval, INTERVAL](),
+        keywords_method[rebuilt, REBUILT](),
         no_arguments_method[collect](
             "collect",
             (
