@@ -15,17 +15,17 @@ struct Op(Equatable, TrivialRegisterPassable):
 
 
 def intersection(mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
-    return applied[Op.INTERSECTION](arena, a, b)
+    return apply[Op.INTERSECTION](arena, a, b)
 
 
 def union(mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
-    return applied[Op.UNION](arena, a, b)
+    return apply[Op.UNION](arena, a, b)
 
 
 def symmetric_difference(
     mut arena: Arena, a: Id, b: Id
 ) raises Interrupted -> Id:
-    return applied[Op.SYMMETRIC_DIFFERENCE](arena, a, b)
+    return apply[Op.SYMMETRIC_DIFFERENCE](arena, a, b)
 
 
 def difference(mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
@@ -33,11 +33,11 @@ def difference(mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
     return intersection(arena, a, not_b)
 
 
-def applied[op: Op](mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
+def apply[op: Op](mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
     """Bryant's apply, specialised for `op` at compile time."""
     # Skips taking the stacks for the many calls that need no walk.
     var answer = known[op](arena, a, b)
-    if answer:
+    if answer is not None:
         return answer.value()
     var steps = List[Step[Pair]]()
     swap(steps, arena.spare.pair_steps)
@@ -50,7 +50,7 @@ def applied[op: Op](mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
         if step.is_visit():
             var pair = step.item
             var found = known[op](arena, pair.a, pair.b)
-            if found:
+            if found is not None:
                 results.append(found.value())
                 continue
             var bit = arena.top_bit(pair.a, pair.b)
@@ -76,7 +76,7 @@ def known[
 ](mut arena: Arena, a: Id, b: Id) raises Interrupted -> Optional[Id]:
     # Every step of apply's walk calls it.
     var answer = trivial[op](arena, a, b)
-    if answer:
+    if answer is not None:
         return answer
     var memoised: Optional[UInt32]
     comptime if op == Op.INTERSECTION:
@@ -85,7 +85,7 @@ def known[
         memoised = arena.memos.union.get(sorted_pair(a, b))
     else:
         memoised = arena.memos.symmetric_difference.get(sorted_pair(a, b))
-    if memoised:
+    if memoised is not None:
         return Id(memoised.value())
     return None
 
@@ -130,7 +130,7 @@ def memoise[op: Op](mut arena: Arena, key: UInt64, result: Id):
 
 def complement(mut arena: Arena, root: Id) raises Interrupted -> Id:
     var answer = known_complement(arena, root)
-    if answer:
+    if answer is not None:
         return answer.value()
     var steps = List[Step[Id]]()
     swap(steps, arena.spare.node_steps)
@@ -142,7 +142,7 @@ def complement(mut arena: Arena, root: Id) raises Interrupted -> Id:
         var step = steps.pop()
         if step.is_visit():
             var negation = known_complement(arena, step.item)
-            if negation:
+            if negation is not None:
                 results.append(negation.value())
             else:
                 push_branches(arena, steps, step.item)
@@ -164,6 +164,6 @@ def known_complement(arena: Arena, id: Id) -> Optional[Id]:
     if id == ACCEPT:
         return REJECT
     var memoised = arena.memos.complement.get(single(id))
-    if memoised:
+    if memoised is not None:
         return Id(memoised.value())
     return None

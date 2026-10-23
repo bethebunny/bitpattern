@@ -161,7 +161,7 @@ def integer(ints: Ints, o: PyObjectPtr) raises PyError -> Integer:
     var bits = signed.magnitude.copy()
     if signed.negative:
         bits -= BigUInt(1)
-    var narrow = bits.fitting_uint128()
+    var narrow = bits.uint128_or_none()
     if narrow:
         return Integer(signed.negative, narrow.value(), None)
     return Integer(signed.negative, 0, bits^)

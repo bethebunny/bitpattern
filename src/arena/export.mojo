@@ -32,7 +32,7 @@ struct WriteStep(TrivialRegisterPassable):
 
     @staticmethod
     @always_inline
-    def copies(start: Int, low: Int32, width: Int32) -> Self:
+    def copies(*, start: Int, low: Int32, width: Int32) -> Self:
         """Copies the words from `start` on, once for each other value of the free bits
         in `[low, width)` (clear in those words)."""
         return Self(REJECT, low, width, UInt64(start))
@@ -70,7 +70,13 @@ def write_words[
             arena, steps, written, step.id, step.width, step.at
         )
         var run = 1 << Int(free)
-        fill_run(arena, slots.unsafe_offset(written), run, first, sign_shift)
+        fill_run(
+            arena,
+            slots.unsafe_offset(written),
+            count=run,
+            first=first,
+            sign_shift=sign_shift,
+        )
         written += run
 
 
@@ -90,7 +96,11 @@ def descend(
     while id != ACCEPT:
         var node = arena.decision(id)
         if node.bit + 1 < width:
-            steps.append(WriteStep.copies(block_start, node.bit + 1, width))
+            steps.append(
+                WriteStep.copies(
+                    start=block_start, low=node.bit + 1, width=width
+                )
+            )
         if node.lo != REJECT and node.hi != REJECT:
             var hi_prefix = prefix | UInt64(1) << UInt64(node.bit)
             steps.append(WriteStep.visit(node.hi, node.bit, hi_prefix))
@@ -117,8 +127,8 @@ def write_copies[
     """Returns how many words it wrote."""
     var block = slots.unsafe_offset(start)
     var size = written - start
-    var first = member_of(block[], sign_shift)
-    var last = member_of(block[unsafe_offset=size - 1], sign_shift)
+    var first = member_of(block[], sign_shift=sign_shift)
+    var last = member_of(block[unsafe_offset=size - 1], sign_shift=sign_shift)
     # Writing a run afresh saves reading the block back once it's out of the cache.
     var one_run = last - first == UInt64(size - 1)
     var copies = (1 << Int(width - low)) - 1
@@ -126,9 +136,22 @@ def write_copies[
         var copy = block.unsafe_offset(value * size)
         var high_bits = UInt64(value) << UInt64(low)
         if one_run:
-            fill_run(arena, copy, size, first | high_bits, sign_shift)
+            fill_run(
+                arena,
+                copy,
+                count=size,
+                first=first | high_bits,
+                sign_shift=sign_shift,
+            )
         else:
-            fill_copy(arena, copy, block, size, high_bits, sign_shift)
+            fill_copy(
+                arena,
+                copy,
+                block,
+                count=size,
+                high_bits=high_bits,
+                sign_shift=sign_shift,
+            )
     return copies * size
 
 
@@ -137,6 +160,7 @@ def fill_run[
 ](
     mut arena: Arena,
     slots: Slots[word],
+    *,
     count: Int,
     first: UInt64,
     sign_shift: UInt64,
@@ -145,7 +169,7 @@ def fill_run[
     for start in range(0, count, CHUNK):
         arena.tick()
         for at in range(start, min(start + CHUNK, count)):
-            slots[unsafe_offset=at] = word_of[word](next, sign_shift)
+            slots[unsafe_offset=at] = word_of[word](next, sign_shift=sign_shift)
             next += 1  # past UInt64.MAX, which only the last slot can hold
 
 
@@ -155,6 +179,7 @@ def fill_copy[
     mut arena: Arena,
     slots: Slots[word],
     block: Slots[word],
+    *,
     count: Int,
     high_bits: UInt64,
     sign_shift: UInt64,
@@ -162,18 +187,22 @@ def fill_copy[
     for start in range(0, count, CHUNK):
         arena.tick()
         for at in range(start, min(start + CHUNK, count)):
-            var old = member_of(block[unsafe_offset=at], sign_shift)
-            slots[unsafe_offset=at] = word_of[word](old | high_bits, sign_shift)
+            var old = member_of(block[unsafe_offset=at], sign_shift=sign_shift)
+            slots[unsafe_offset=at] = word_of[word](
+                old | high_bits, sign_shift=sign_shift
+            )
 
 
 @always_inline
-def word_of[word: DType](member: UInt64, sign_shift: UInt64) -> Scalar[word]:
+def word_of[word: DType](member: UInt64, *, sign_shift: UInt64) -> Scalar[word]:
     """Shifting up and back down as an Int64 sign-extends a signed member."""
     return (Int64(member << sign_shift) >> Int64(sign_shift)).cast[word]()
 
 
 @always_inline
-def member_of[word: DType](value: Scalar[word], sign_shift: UInt64) -> UInt64:
+def member_of[
+    word: DType
+](value: Scalar[word], *, sign_shift: UInt64) -> UInt64:
     return value.cast[DType.uint64]() << sign_shift >> sign_shift
 
 
@@ -190,7 +219,7 @@ def write_rows[
     var row = slots
     while True:
         var run = walk.next_run(arena)
-        if not run:
+        if run is None:
             return
         # Copied once a run, since calling `limb` for each member is slower.
         for i in range(len(member)):

@@ -112,7 +112,7 @@ struct Frame(TrivialRegisterPassable):
 
     @staticmethod
     @always_inline
-    def free_bits(id: Id, low: Int32, width: Int32) -> Self:
+    def free_bits(id: Id, *, low: Int32, width: Int32) -> Self:
         """Counts the free bits in `[low, width)` up by one and walks `id` again, until
         they're all set."""
         return Self(id, low, width)
@@ -136,12 +136,12 @@ struct Walk[V: Prefix](Movable):
             if frame.low == HI_BRANCH:
                 self.prefix.set(frame.width, True)
             elif frame.low != VISIT:
-                if not count_up(self.prefix, frame.low, frame.width):
+                if not count_up(self.prefix, low=frame.low, high=frame.width):
                     continue
                 self.frames.append(frame)
                 width = frame.low
             var free = self.descend(arena, frame.id, width)
-            if free:
+            if free is not None:
                 return Run(
                     self.prefix.cleared_below(free.value()), free.value()
                 )
@@ -157,7 +157,9 @@ struct Walk[V: Prefix](Movable):
             if node.bit + 1 < width:
                 for bit in range(node.bit + 1, width):
                     self.prefix.set(bit, False)
-                self.frames.append(Frame.free_bits(id, node.bit + 1, width))
+                self.frames.append(
+                    Frame.free_bits(id, low=node.bit + 1, width=width)
+                )
             if node.hi != REJECT:
                 self.frames.append(Frame.hi_branch(node.hi, node.bit))
             self.prefix.set(node.bit, False)
@@ -168,7 +170,7 @@ struct Walk[V: Prefix](Movable):
         return width
 
 
-def count_up[V: Prefix](mut prefix: V, low: Int32, high: Int32) -> Bool:
+def count_up[V: Prefix](mut prefix: V, *, low: Int32, high: Int32) -> Bool:
     """Adds one to `prefix`'s bits in `[low, high)`. False if they overflow (to all
     clear)."""
     for bit in range(low, high):

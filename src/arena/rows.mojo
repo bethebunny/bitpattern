@@ -27,7 +27,10 @@ def rows(mut arena: Arena, root: Id) raises Interrupted -> List[Row]:
         arena.tick()
         var step = steps.pop()
         if step.is_visit():
-            if not step.item.is_leaf() and not numbers.get(single(step.item)):
+            if (
+                not step.item.is_leaf()
+                and numbers.get(single(step.item)) is None
+            ):
                 push_branches(arena, steps, step.item)
         else:
             var node = arena.decision(step.item)

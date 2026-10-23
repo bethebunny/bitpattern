@@ -41,7 +41,7 @@ def path_count(mut arena: Arena, root: Id) raises Interrupted -> BigUInt:
             results.append(step.item.index())
         else:
             var found = counted.get(single(step.item))
-            if found:
+            if found is not None:
                 results.append(Int(found.value()))
             else:
                 push_branches(arena, steps, step.item)

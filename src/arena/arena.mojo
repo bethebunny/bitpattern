@@ -140,7 +140,7 @@ struct Arena(Movable):
         self.free = List[Id]()
         self.memos = Memos()
         self.spare = Spare()
-        self.schedule = Schedule(0, MIN_COLLECTION_INTERVAL)
+        self.schedule = Schedule(made=0, due=MIN_COLLECTION_INTERVAL)
         self.pause = pause
         self.context = context
         self.countdown = PAUSE_INTERVAL
@@ -169,7 +169,7 @@ struct Arena(Movable):
         assert self.tests_only_below(lo, bit) and self.tests_only_below(hi, bit)
         var node = Decision(bit, lo, hi)
         var found = self.unique.get(node)
-        if found:
+        if found is not None:
             return found.value()
         var id = self._allocate(node)
         if bit < NARROW_WIDTH:
@@ -199,7 +199,7 @@ struct Arena(Movable):
             return lo
         for child in [lo, hi]:
             if not child.is_leaf() and self.decision(child).bit >= bit:
-                raise Misordered(bit, self.decision(child).bit)
+                raise Misordered(bit=bit, child_bit=self.decision(child).bit)
         return self.make(bit, lo, hi)
 
     @always_inline

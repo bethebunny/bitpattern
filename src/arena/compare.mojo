@@ -30,15 +30,15 @@ def trivial_disjoint(a: Id, b: Id) -> Optional[Bool]:
 
 def subset(mut arena: Arena, a: Id, b: Id) raises Interrupted -> Bool:
     var known = trivial_subset(a, b)
-    if known:
+    if known is not None:
         return known.value()
     # Unsorted keys, since subset isn't symmetric.
     var key = pair(a, b)
     var memoised = arena.memos.subset.get(key)
-    if memoised:
+    if memoised is not None:
         return memoised.value() == 1
     var both = arena.memos.intersection.get(sorted_pair(a, b))
-    if both:
+    if both is not None:
         return Id(both.value()) == a
     var answer, walked = walk_pairs[trivial_subset, pair](arena, a, b)
     if walked >= WORTH_KEEPING:
@@ -49,14 +49,14 @@ def subset(mut arena: Arena, a: Id, b: Id) raises Interrupted -> Bool:
 
 def disjoint(mut arena: Arena, a: Id, b: Id) raises Interrupted -> Bool:
     var known = trivial_disjoint(a, b)
-    if known:
+    if known is not None:
         return known.value()
     var key = sorted_pair(a, b)
     var memoised = arena.memos.disjoint.get(key)
-    if memoised:
+    if memoised is not None:
         return memoised.value() == 1
     var both = arena.memos.intersection.get(key)
-    if both:
+    if both is not None:
         return Id(both.value()) == REJECT
     var answer, walked = walk_pairs[trivial_disjoint, sorted_pair](arena, a, b)
     if walked >= WORTH_KEEPING:
@@ -80,7 +80,7 @@ def walk_pairs[
         arena.tick()
         var next = pairs.pop()
         var known = trivial(next.a, next.b)
-        if not known:
+        if known is None:
             if seen.add(key(next.a, next.b)):
                 var bit = arena.top_bit(next.a, next.b)
                 var a_lo, a_hi = arena.cofactors(next.a, bit)

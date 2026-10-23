@@ -28,7 +28,7 @@ struct Paths(Movable):
         while True:
             var id: Id
             var width: Int32
-            if self.start:
+            if self.start is not None:
                 id = self.start.take()
                 width = self.width
             elif self.frames:

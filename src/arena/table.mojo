@@ -222,7 +222,7 @@ struct HashTable[K: Key](Movable, Sized):
 
     def add(mut self, key: UInt64) -> Bool:
         """Adds `key` to a table used as a set. Returns whether it's new."""
-        if self.get(key):
+        if self.get(key) is not None:
             return False
         self.insert(key, 1)
         return True

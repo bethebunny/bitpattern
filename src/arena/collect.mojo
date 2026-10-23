@@ -51,7 +51,7 @@ def collect(mut arena: Arena, var roots: List[Id]) -> Tuple[Int, Int]:
     unique table keeps only twice the nodes left, since sparser is slower.
     """
     var made = arena.schedule.made
-    var freed = sweep(arena, marked(arena, roots^))
+    var freed = sweep(arena, marks(arena, roots^))
     # New nodes take the lowest slots, so the end can come free.
     var end = len(arena.nodes)
     while end > 2 and arena.nodes.unsafe_get(end - 1).bit == FREED:
@@ -63,8 +63,8 @@ def collect(mut arena: Arena, var roots: List[Id]) -> Tuple[Int, Int]:
         if arena.nodes.unsafe_get(index).bit == FREED:
             arena.free.append(Id.from_index(index))
     arena.schedule.made = 0
-    arena.schedule.due = max(MIN_COLLECTION_INTERVAL, used(arena))
-    var room = used(arena) + max(arena.schedule.due, made)
+    arena.schedule.due = max(MIN_COLLECTION_INTERVAL, used_slots(arena))
+    var room = used_slots(arena) + max(arena.schedule.due, made)
     arena.nodes = shrunk(arena.nodes^, room)
     arena.sizes.narrow = shrunk(arena.sizes.narrow^, room)
     arena.unique.shrink_to(2 * len(arena.unique))
@@ -73,7 +73,7 @@ def collect(mut arena: Arena, var roots: List[Id]) -> Tuple[Int, Int]:
     return (freed, room)
 
 
-def marked(arena: Arena, var roots: List[Id]) -> List[Bool]:
+def marks(arena: Arena, var roots: List[Id]) -> List[Bool]:
     var marks = List[Bool](length=len(arena.nodes), fill=False)
     marks[REJECT.index()] = True
     marks[ACCEPT.index()] = True
@@ -103,7 +103,7 @@ def sweep(mut arena: Arena, marks: List[Bool]) -> Int:
 def memos_full(arena: Arena) -> Bool:
     """Walks that make no nodes can fill the memos without making a collection due.
     """
-    return len(arena.memos) > max(MIN_COLLECTION_INTERVAL, used(arena))
+    return len(arena.memos) > max(MIN_COLLECTION_INTERVAL, used_slots(arena))
 
 
 def shrink_to_fit(mut arena: Arena):
@@ -114,7 +114,7 @@ def shrink_to_fit(mut arena: Arena):
     arena.memos.shrink_to_fit()
 
 
-def used(arena: Arena) -> Int:
+def used_slots(arena: Arena) -> Int:
     return len(arena.nodes) - len(arena.free)
 
 
@@ -124,9 +124,9 @@ def slots(arena: Arena) -> Int:
 
 def stats(arena: Arena) -> Stats:
     return Stats(
-        used(arena),
-        len(arena.free),
-        arena.nodes.capacity(),
-        len(arena.memos),
-        arena.memos.capacity(),
+        nodes=used_slots(arena),
+        free=len(arena.free),
+        room=arena.nodes.capacity(),
+        memo=len(arena.memos),
+        memo_room=arena.memos.capacity(),
     )

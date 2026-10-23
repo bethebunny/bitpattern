@@ -301,7 +301,7 @@ def int_from_u128(ints: Ints, value: UInt128) -> PyObjectPtr:
 
 
 def int_from_big(ints: Ints, value: BigUInt) -> PyObjectPtr:
-    var narrow = value.fitting_uint128()
+    var narrow = value.uint128_or_none()
     if narrow:
         return int_from_u128(ints, narrow.value())
     if ints.native:
@@ -326,7 +326,7 @@ def count_repr(ints: Ints, total: PyObjectPtr) raises PyError -> String:
     # Writing out more digits than Python's limit takes quadratic time.
     if bits > WRITABLE_BITS:
         var shift = bits - 64
-        var top = UInt64((magnitude >> shift).fitting_uint128().value())
+        var top = UInt64((magnitude >> shift).uint128_or_none().value())
         var tenths = Int((Float64(shift) + log2(Float64(top))) * 10 + 0.5)
         return String("~2**", tenths // 10, ".", tenths % 10)
     var digits = PyObject_Str(total)

@@ -521,8 +521,8 @@ def interval(
     if width <= NARROW_WIDTH:
         return narrow_interval(
             state,
-            first.fitting_uint128().value(),
-            last.fitting_uint128().value(),
+            first.uint128_or_none().value(),
+            last.uint128_or_none().value(),
             width,
         )
 

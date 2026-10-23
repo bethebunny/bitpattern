@@ -161,12 +161,12 @@ struct BigUInt(
             limbs.append(_low_mask(bits & 63))
         return Self(limbs=limbs^)
 
-    def fitting_uint64(self) -> Optional[UInt64]:
+    def uint64_or_none(self) -> Optional[UInt64]:
         if len(self.limbs) > 1:
             return None
         return self.limb(0)
 
-    def fitting_uint128(self) -> Optional[UInt128]:
+    def uint128_or_none(self) -> Optional[UInt128]:
         if len(self.limbs) > 2:
             return None
         return UInt128(self.limb(0)) | UInt128(self.limb(1)) << 64
@@ -278,7 +278,7 @@ struct BigUInt(
         var dest = limbs.unsafe_ptr()
         unsafe_memset_zero(dest, whole)
         if shift & 63:
-            var top = _shifted_left(
+            var top = _shift_left(
                 dest.unsafe_offset(whole),
                 self.limbs.unsafe_ptr(),
                 n,
@@ -303,7 +303,7 @@ struct BigUInt(
         var limbs = Limbs(unsafe_uninit_length=n)
         var low = self.limbs.unsafe_ptr().unsafe_offset(whole)
         if shift & 63:
-            _shifted_right(limbs.unsafe_ptr(), low, n, UInt64(shift & 63))
+            _shift_right(limbs.unsafe_ptr(), low, n, UInt64(shift & 63))
         else:
             unsafe_memcpy(dest=limbs.unsafe_ptr(), src=low, count=n)
         return Self(limbs=limbs^)
@@ -369,9 +369,7 @@ struct BigUInt(
         var limbs = Limbs(unsafe_uninit_length=na + nb)
         var dest = limbs.unsafe_ptr()
         var a = self.limbs.unsafe_ptr()
-        dest[unsafe_offset=na] = _multiplied(
-            dest, a, na, rhs.limbs.unsafe_get(0)
-        )
+        dest[unsafe_offset=na] = _multiply(dest, a, na, rhs.limbs.unsafe_get(0))
         for i in range(1, nb):
             dest[unsafe_offset=i + na] = _add_product_to(
                 dest.unsafe_offset(i), a, na, rhs.limbs.unsafe_get(i)
@@ -408,7 +406,7 @@ def _trim(mut limbs: Limbs):
 
 
 @always_inline
-def _added(
+def _add(
     dest: MutPointer[UInt64, _],
     a: Pointer[UInt64, _],
     b: Pointer[UInt64, _],
@@ -451,7 +449,7 @@ def _sum(a: Limbs, b: Limbs) -> Limbs:
     var limbs = Limbs(capacity=na + 1)
     limbs.resize(unsafe_uninit_length=na)
     var dest = limbs.unsafe_ptr()
-    var carry = _added(dest, a.unsafe_ptr(), b.unsafe_ptr(), nb)
+    var carry = _add(dest, a.unsafe_ptr(), b.unsafe_ptr(), nb)
     for i in range(nb, na):
         var s = a.unsafe_get(i) + carry
         carry = UInt64(s < carry)
@@ -486,7 +484,7 @@ def _subtract(mut a: Limbs, b: Limbs):
 
 
 @always_inline
-def _multiplied(
+def _multiply(
     dest: MutPointer[UInt64, _], a: Pointer[UInt64, _], n: Int, m: UInt64
 ) -> UInt64:
     """Writes `a * m` and returns the limb above."""
@@ -532,7 +530,7 @@ def _subtract_product_from(
 
 
 @always_inline
-def _shifted_left(
+def _shift_left(
     dest: MutPointer[UInt64, _], a: Pointer[UInt64, _], n: Int, shift: UInt64
 ) -> UInt64:
     """Writes `a << shift` (for 0 < shift < 64) and returns the bits shifted out
@@ -547,7 +545,7 @@ def _shifted_left(
 
 
 @always_inline
-def _shifted_right(
+def _shift_right(
     dest: MutPointer[UInt64, _], a: Pointer[UInt64, _], n: Int, shift: UInt64
 ):
     """Writes `a >> shift`, for 0 < shift < 64."""
@@ -565,7 +563,7 @@ struct _Division(TrivialRegisterPassable):
 
 
 @always_inline
-def _two_by_one(high: UInt64, low: UInt64, divisor: UInt64) -> _Division:
+def _two_by_one(*, high: UInt64, low: UInt64, divisor: UInt64) -> _Division:
     """`(high, low) / divisor`, for high < divisor so the quotient fits a limb.
     """
     comptime if CompilationTarget.is_x86():
@@ -580,13 +578,15 @@ def _two_by_one(high: UInt64, low: UInt64, divisor: UInt64) -> _Division:
     return _Division(q, low - q * divisor)
 
 
-def _divided(
+def _divide_by_limb(
     dest: MutPointer[UInt64, _], a: Pointer[UInt64, _], n: Int, divisor: UInt64
 ) -> UInt64:
     """Writes `a / divisor` and returns the remainder."""
     var rest = UInt64(0)
     for i in range(n - 1, -1, -1):
-        var step = _two_by_one(rest, a[unsafe_offset=i], divisor)
+        var step = _two_by_one(
+            high=rest, low=a[unsafe_offset=i], divisor=divisor
+        )
         dest[unsafe_offset=i] = step.quotient
         rest = step.remainder
     return rest
@@ -609,7 +609,7 @@ def _divide(
         return
     if n == 1:
         quotient.resize(unsafe_uninit_length=na)
-        var rest = _divided(
+        var rest = _divide_by_limb(
             quotient.unsafe_ptr(), a.unsafe_ptr(), na, b.unsafe_get(0)
         )
         _trim(quotient)
@@ -623,8 +623,8 @@ def _divide(
     var v = Limbs(unsafe_uninit_length=n)
     var u = Limbs(unsafe_uninit_length=na + 1)
     if shift:
-        _ = _shifted_left(v.unsafe_ptr(), b.unsafe_ptr(), n, shift)
-        u.unsafe_get(na) = _shifted_left(
+        _ = _shift_left(v.unsafe_ptr(), b.unsafe_ptr(), n, shift)
+        u.unsafe_get(na) = _shift_left(
             u.unsafe_ptr(), a.unsafe_ptr(), na, shift
         )
     else:
@@ -647,7 +647,7 @@ def _divide(
             q = ~UInt64(0)
             r = UInt128(low) + UInt128(top)
         else:
-            var step = _two_by_one(high, low, top)
+            var step = _two_by_one(high=high, low=low, divisor=top)
             q = step.quotient
             r = UInt128(step.remainder)
         # Correct it with v's next limb, unless r has passed a limb.
@@ -670,7 +670,7 @@ def _divide(
     _trim(quotient)
     remainder.resize(unsafe_uninit_length=n)
     if shift:
-        _shifted_right(remainder.unsafe_ptr(), up, n, shift)
+        _shift_right(remainder.unsafe_ptr(), up, n, shift)
     else:
         unsafe_memcpy(dest=remainder.unsafe_ptr(), src=up, count=n)
     _trim(remainder)

@@ -237,7 +237,7 @@ def room(members: Count, *, columns: Int, size: Int) -> Optional[Words]:
     """None if the words don't fit in memory."""
     var rows = -1
     if members.wide:
-        var fits = members.wide.value().fitting_uint64()
+        var fits = members.wide.value().uint64_or_none()
         if fits and fits.value() <= UInt64(Int.MAX):
             rows = Int(fits.value())
     elif members.narrow <= UInt128(Int.MAX):

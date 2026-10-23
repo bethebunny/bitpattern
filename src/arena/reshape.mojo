@@ -38,7 +38,7 @@ def lshift(
                 results.append(step.item)
                 continue
             var found = moved.get(single(step.item))
-            if found:
+            if found is not None:
                 results.append(Id(found.value()))
             else:
                 push_branches(arena, steps, step.item)
@@ -74,7 +74,7 @@ def freed_between(
                 results.append(step.item)
                 continue
             var found = freed.get(single(step.item))
-            if found:
+            if found is not None:
                 results.append(Id(found.value()))
             else:
                 push_branches(arena, steps, step.item)
