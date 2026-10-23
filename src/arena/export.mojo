@@ -4,6 +4,7 @@ from std.math import ceildiv
 from std.sys.info import bit_width_of
 
 from .arena import ACCEPT, Arena, Id, Interrupted, REJECT
+from .walk import Prefix, Walk
 
 
 comptime CHUNK = 1 << 12
@@ -176,131 +177,29 @@ def member_of[word: DType](value: Scalar[word], sign_shift: UInt64) -> UInt64:
 
 
 def write_rows[
-    word: DType
+    V: Prefix, word: DType
 ](
     mut arena: Arena, id: Id, width: Int32, columns: Int, slots: Slots[word]
 ) raises Interrupted:
     """For members wider than a word, as rows of words, most significant first.
     """
     comptime bits = bit_width_of[word]()
-    var runs = Runs(id, width, columns * bits)
+    var member = List[UInt64](length=ceildiv(columns * bits, 64), fill=0)
+    var walk = Walk[V](id, width)
     var row = slots
-    while runs.next(arena):
-        var low = runs.member[0]
-        for n in range(1 << Int(runs.free)):
+    while True:
+        var run = walk.next_run(arena)
+        if not run:
+            return
+        # Copied once a run, since calling `limb` for each member is slower.
+        for i in range(len(member)):
+            member.unsafe_get(i) = run.value().first.limb(i)
+        var low = member[0]
+        for n in range(1 << Int(run.value().free)):
             arena.tick()
-            runs.member.unsafe_get(0) = low | UInt64(n)
+            member.unsafe_get(0) = low | UInt64(n)
             for column in range(columns):
                 var at = (columns - 1 - column) * bits
-                var limb = runs.member.unsafe_get(at >> 6) >> UInt64(at & 63)
+                var limb = member.unsafe_get(at >> 6) >> UInt64(at & 63)
                 row[unsafe_offset=column] = limb.cast[word]()
             row = row.unsafe_offset(columns)
-
-
-comptime VISIT: Int32 = 0
-comptime HI_BRANCH: Int32 = 1
-comptime FREE_BITS: Int32 = 2
-
-
-@fieldwise_init
-struct Frame(TrivialRegisterPassable):
-    """Walks `id` below bit `low`: as it is (a visit), after setting bit `low` (a `hi`
-    branch), or after counting up the free bits in `[low, width)`."""
-
-    var kind: Int32
-    var id: Id
-    var low: Int32
-    var width: Int32
-
-    @staticmethod
-    @always_inline
-    def visit(id: Id, width: Int32) -> Self:
-        return Self(VISIT, id, width, width)
-
-    @staticmethod
-    @always_inline
-    def hi_branch(id: Id, bit: Int32) -> Self:
-        return Self(HI_BRANCH, id, bit, bit)
-
-    @staticmethod
-    @always_inline
-    def free_bits(id: Id, low: Int32, width: Int32) -> Self:
-        """Counts the free bits in `[low, width)` up by one and walks `id` again, until
-        they're all set."""
-        return Self(FREE_BITS, id, low, width)
-
-
-struct Runs(Movable):
-    """A set's members in order, a run of `2 ** free` from `member` at a time. Builds
-    each member in `member`, so a walk needs one member's memory and a frame per bit.
-    """
-
-    var member: List[UInt64]
-    """Least significant limb first."""
-    var free: Int32
-    var frames: List[Frame]
-
-    def __init__(out self, id: Id, width: Int32, bits: Int):
-        """`bits` (at least `width`) is the room the members take."""
-        self.member = List[UInt64](length=ceildiv(bits, 64), fill=0)
-        self.free = 0
-        self.frames = [Frame.visit(id, width)]
-
-    def next(mut self, arena: Arena) -> Bool:
-        """Moves on to the next run. False at the end."""
-        while self.frames:
-            var frame = self.frames.pop()
-            if frame.kind == HI_BRANCH:
-                self.set(Int(frame.low), True)
-            elif frame.kind == FREE_BITS:
-                if not self.counted_up(Int(frame.low), Int(frame.width)):
-                    continue
-                self.frames.append(frame)
-            if self.descend(arena, frame.id, frame.low):
-                return True
-        return False
-
-    def descend(mut self, arena: Arena, var id: Id, var width: Int32) -> Bool:
-        """Follows `lo` branches to a leaf, pushing frames for what it passes. False at
-        REJECT."""
-        while not id.is_leaf():
-            var node = arena.decision(id)
-            if node.bit + 1 < width:
-                self.clear(Int(node.bit) + 1, Int(width))
-                self.frames.append(Frame.free_bits(id, node.bit + 1, width))
-            if node.hi != REJECT:
-                self.frames.append(Frame.hi_branch(node.hi, node.bit))
-            self.set(Int(node.bit), False)
-            id = node.lo
-            width = node.bit
-        if id == REJECT:
-            return False
-        self.clear(0, Int(width))
-        self.free = width
-        return True
-
-    @always_inline
-    def bit(self, bit: Int) -> Bool:
-        return (self.member.unsafe_get(bit >> 6) >> UInt64(bit & 63)) & 1 == 1
-
-    @always_inline
-    def set(mut self, bit: Int, value: Bool):
-        var flag = UInt64(1) << UInt64(bit & 63)
-        if value:
-            self.member.unsafe_get(bit >> 6) |= flag
-        else:
-            self.member.unsafe_get(bit >> 6) &= ~flag
-
-    def clear(mut self, low: Int, high: Int):
-        for bit in range(low, high):
-            self.set(bit, False)
-
-    def counted_up(mut self, low: Int, high: Int) -> Bool:
-        """Adds one to the bits in `[low, high)`. False if they overflow to zero.
-        """
-        for bit in range(low, high):
-            var set = self.bit(bit)
-            self.set(bit, not set)
-            if not set:
-                return True
-        return False

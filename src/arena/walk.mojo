@@ -20,6 +20,10 @@ trait Prefix(Copyable, Defaultable, Deinitable):
     def plus(self, n: UInt64) -> Self:
         ...
 
+    def limb(self, i: Int) -> UInt64:
+        """Bits `[64 * i, 64 * i + 64)`."""
+        ...
+
 
 @fieldwise_init
 struct Narrow(Prefix, TrivialRegisterPassable):
@@ -48,6 +52,10 @@ struct Narrow(Prefix, TrivialRegisterPassable):
     def plus(self, n: UInt64) -> Self:
         return Self(self.value + UInt128(n))
 
+    @always_inline
+    def limb(self, i: Int) -> UInt64:
+        return UInt64(self.value >> UInt128(64 * i)) if i < 2 else 0
+
 
 @fieldwise_init
 struct Wide(Copyable, Prefix):
@@ -67,6 +75,9 @@ struct Wide(Copyable, Prefix):
 
     def plus(self, n: UInt64) -> Self:
         return Self(self.value + n)
+
+    def limb(self, i: Int) -> UInt64:
+        return self.value.limb(i)
 
 
 @fieldwise_init

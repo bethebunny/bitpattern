@@ -9,8 +9,9 @@ from std.memory.alloc import unsafe_alloc
 from std.memory.memory import _free, _malloc
 from std.python._cpython import PyObjectPtr
 
-from arena import Arena, Id, Interrupted
+from arena import Arena, Id, Interrupted, NARROW_WIDTH
 from arena.export import Slots, write_rows, write_words
+from arena.walk import Narrow, Wide
 
 from .args import Arguments, Signature, described, node, not_an_instance, width
 from .capi import (
@@ -258,8 +259,10 @@ def fill[
         return
     if columns == 1:
         write_words(arena, id, width, sign_shift, words.slots[word]())
+    elif width <= NARROW_WIDTH:
+        write_rows[Narrow](arena, id, width, columns, words.slots[word]())
     else:
-        write_rows(arena, id, width, columns, words.slots[word]())
+        write_rows[Wide](arena, id, width, columns, words.slots[word]())
 
 
 def written(

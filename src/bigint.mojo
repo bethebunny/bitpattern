@@ -164,15 +164,15 @@ struct BigUInt(
     def fitting_uint64(self) -> Optional[UInt64]:
         if len(self.limbs) > 1:
             return None
-        return self._limb(0)
+        return self.limb(0)
 
     def fitting_uint128(self) -> Optional[UInt128]:
         if len(self.limbs) > 2:
             return None
-        return UInt128(self._limb(0)) | UInt128(self._limb(1)) << 64
+        return UInt128(self.limb(0)) | UInt128(self.limb(1)) << 64
 
     @always_inline
-    def _limb(self, i: Int) -> UInt64:
+    def limb(self, i: Int) -> UInt64:
         return self.limbs.unsafe_get(i) if i < len(self.limbs) else 0
 
     def __bool__(self) -> Bool:
