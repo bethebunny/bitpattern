@@ -352,6 +352,10 @@ def test_an_error_runs_no_python_while_its_call_has_the_arena():
         functools.partial(bdd.members, node, width=2),
         functools.partial(tensor, node, width=2),
         functools.partial(tensor, BDD.ACCEPT, width=99),  # too many to fit in memory
+        functools.partial(BDD, 0, node, BDD.REJECT),  # misordered
+        functools.partial(bdd.lshift, node, -3),  # moves bit 0 out
+        functools.partial(bdd.lshift, node, 1 << 40),  # too far for any bit
+        functools.partial(bdd._rebuilt, [(0, 0, 1), (0, 2, 1)]),  # misordered
     ]
     failed = []
 
@@ -378,6 +382,22 @@ def test_an_error_runs_no_python_while_its_call_has_the_arena():
         gc.set_threshold(*threshold)
         gc.callbacks.remove(use_the_arena)
     assert failed == []
+
+
+def test_collection_runs_again_after_a_call_raises():
+    """Nothing collects while a call that makes nodes is underway, so an error has to
+    end its call."""
+    node = IntSet([1, 5], width=8).bdd
+    with pytest.raises(ValueError):
+        BDD(0, node, BDD.REJECT)
+    with pytest.raises(ValueError):
+        bdd.lshift(node, -3)
+    with pytest.raises(ValueError):
+        bdd.lshift(node, 1 << 40)
+    with pytest.raises(ValueError):
+        bdd._rebuilt([(0, 0, 1), (0, 2, 1)])
+    IntSet(range(0, 1 << 16, 3), width=16)  # garbage for a collection to free
+    assert bdd.collect() > 0
 
 
 def test_a_base_exception_out_of_the_ctrl_c_handler_keeps_the_arena():
