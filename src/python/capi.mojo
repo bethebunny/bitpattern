@@ -39,9 +39,7 @@ comptime Py_mod_multiple_interpreters = 3
 comptime Py_MOD_PER_INTERPRETER_GIL_SUPPORTED = 2
 
 comptime Py_TPFLAGS_DEFAULT: UInt32 = 1 << 18  # Py_TPFLAGS_HAVE_VERSION_TAG
-comptime Py_TPFLAGS_LONG_SUBCLASS: UInt64 = 1 << 24
 
-comptime METH_VARARGS: c_int = 0x01
 comptime METH_KEYWORDS: c_int = 0x02
 comptime METH_NOARGS: c_int = 0x04
 comptime METH_O: c_int = 0x08
@@ -49,8 +47,6 @@ comptime METH_FASTCALL: c_int = 0x80
 
 comptime Py_EQ: c_int = 2
 comptime Py_NE: c_int = 3
-
-comptime PY_VECTORCALL_ARGUMENTS_OFFSET = 1 << 63
 
 comptime T_PYSSIZET: c_int = 19
 comptime READONLY: c_int = 1
@@ -245,18 +241,8 @@ def PyErr_SetObject(kind: PyObjectPtr, value: PyObjectPtr):
 
 
 @always_inline
-def PyErr_SetString(kind: PyObjectPtr, message: Buffer):
-    external_call["PyErr_SetString", NoneType](kind, message)
-
-
-@always_inline
 def PyErr_Clear():
     external_call["PyErr_Clear", NoneType]()
-
-
-@always_inline
-def PyErr_ExceptionMatches(kind: PyObjectPtr) -> Bool:
-    return external_call["PyErr_ExceptionMatches", c_int](kind) != 0
 
 
 @always_inline
@@ -354,11 +340,6 @@ def PyDict_SetItemString(
 
 
 @always_inline
-def PyDict_Size(o: PyObjectPtr) -> Int:
-    return external_call["PyDict_Size", Int](o)
-
-
-@always_inline
 def PyDict_Next(
     o: PyObjectPtr,
     mut position: Int,
@@ -397,11 +378,6 @@ def PyObject_CallObject(
 
 
 @always_inline
-def PyObject_IsTrue(o: PyObjectPtr) -> c_int:
-    return external_call["PyObject_IsTrue", c_int](o)
-
-
-@always_inline
 def PyCallable_Check(o: PyObjectPtr) -> c_int:
     return external_call["PyCallable_Check", c_int](o)
 
@@ -420,11 +396,6 @@ def PyIter_Next(o: PyObjectPtr) -> PyObjectPtr:
 @always_inline
 def PyObject_ClearWeakRefs(o: PyObjectPtr):
     external_call["PyObject_ClearWeakRefs", NoneType](o)
-
-
-@always_inline
-def PyObject_Free(o: PyObjectPtr):
-    external_call["PyObject_Free", NoneType](o)
 
 
 @always_inline
@@ -459,13 +430,6 @@ def PyType_GetModuleState(type: PyObjectPtr) -> Int:
 @always_inline
 def PyModule_GetState(module: PyObjectPtr) -> Int:
     return external_call["PyModule_GetState", Int](module)
-
-
-@always_inline
-def PyModule_AddObjectRef(
-    module: PyObjectPtr, name: Buffer, value: PyObjectPtr
-) -> c_int:
-    return external_call["PyModule_AddObjectRef", c_int](module, name, value)
 
 
 @always_inline

@@ -45,8 +45,6 @@ struct State(Movable):
     var range_type: PyObjectPtr
     var none: PyObjectPtr
     var not_implemented: PyObjectPtr
-    var version: UInt64
-    """The running Python's Py_Version, eg. 0x030E00F0."""
     var ints: Ints
 
     def __init__(out self, version: UInt64):
@@ -59,7 +57,6 @@ struct State(Movable):
         self.range_type = object_symbol("PyRange_Type")
         self.none = object_symbol("_Py_NoneStruct")
         self.not_implemented = object_symbol("_Py_NotImplementedStruct")
-        self.version = version
         self.ints = Ints(version)
 
 
@@ -122,7 +119,7 @@ def paused(mut arena: Arena, context: Int) -> Bool:
     swap(arena, lent[])
     state[].arena = Int(lent)
     state[].depth += 1  # so the handler's calls aren't outermost
-    var handled = handle_sigint()
+    var handled = handle_sigint(state)
     state[].depth -= 1
     # Every call the handler made has given the arena back.
     swap(arena, lent[])
@@ -132,7 +129,7 @@ def paused(mut arena: Arena, context: Int) -> Bool:
     return handled
 
 
-def handle_sigint() -> Bool:
+def handle_sigint(state: StatePointer) -> Bool:
     """False if the handler raised. Raising SIGINT again instead would look like a second
     Ctrl-C to an event loop."""
     var signal = PyImport_ImportModule(cstr("signal"))
@@ -153,7 +150,7 @@ def handle_sigint() -> Bool:
             handler,
             "iO".ptr(),
             c_int(2),
-            frame if frame else object_symbol("_Py_NoneStruct"),
+            frame if frame else state[].none,
         )
         Py_DecRef(handler)
         if not result:

@@ -11,7 +11,6 @@ from .capi import (
     METH_KEYWORDS,
     METH_NOARGS,
     MethodDef,
-    PY_VECTORCALL_ARGUMENTS_OFFSET,
     Py_DecRef,
     PyDict_Next,
     PyErr_Clear,
@@ -76,18 +75,17 @@ def parsed[
     signature: Signature
 ](args: Int, nargs: Int, kwnames: PyObjectPtr) raises PyError -> Arguments:
     """METH_FASTCALL | METH_KEYWORDS arguments, matched to `signature`."""
-    var given = nargs & ~PY_VECTORCALL_ARGUMENTS_OFFSET
-    if given > signature.positional:
-        raise too_many[signature](given)
+    if nargs > signature.positional:
+        raise too_many[signature](nargs)
     var vector = Pointer[PyObjectPtr, MutUntrackedOrigin](
         unsafe_from_address=args
     )
     var arguments = Arguments()
-    for index in range(given):
+    for index in range(nargs):
         arguments.items[index] = vector[unsafe_offset=index]
     var keywords = PyTuple_Size(kwnames) if kwnames else 0
     for k in range(keywords):
-        var value = vector[unsafe_offset=given + k]
+        var value = vector[unsafe_offset=nargs + k]
         add_keyword[signature](arguments, PyTuple_GetItem(kwnames, k), value)
     return completed[signature](arguments^)
 

@@ -141,7 +141,14 @@ def test_leaves_are_their_own_branches():
 def test_operators_refuse_anything_but_nodes(node, other):
     """Operators return NotImplemented before reaching the weak cache, which can't
     hold `other`."""
-    for operate in (lambda: node & other, lambda: node | other, lambda: node - other):
+    for operate in (
+        lambda: node & other,
+        lambda: node | other,
+        lambda: node - other,
+        lambda: other & node,
+        lambda: other | node,
+        lambda: other - node,
+    ):
         with pytest.raises(TypeError, match="unsupported operand"):
             operate()
 

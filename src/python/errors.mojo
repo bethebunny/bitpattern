@@ -43,10 +43,6 @@ def runtime_error(message: String) -> PyError:
     return raised(pointer_symbol("PyExc_RuntimeError"), message)
 
 
-def not_implemented_error(message: String) -> PyError:
-    return raised(pointer_symbol("PyExc_NotImplementedError"), message)
-
-
 def index_error(index: PyObjectPtr) -> PyError:
     """IndexError with the index as given, like a list's."""
     PyErr_SetObject(pointer_symbol("PyExc_IndexError"), index)

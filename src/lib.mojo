@@ -53,7 +53,6 @@ from python.capi import (
     PyList_New,
     PyList_SetItem,
     PyModuleDef_Init,
-    PyModule_AddObjectRef,
     PyModule_GetState,
     PyObject_SetAttrString,
     PyTuple_New,

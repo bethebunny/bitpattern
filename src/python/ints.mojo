@@ -12,7 +12,6 @@ from .capi import (
     Py_NewRef,
     PyErr_Occurred,
     PyLong_AsLongLongAndOverflow,
-    PyLong_FromLongLong,
     PyLong_FromUnsignedLongLong,
     PyNumber_Index,
     PyObject_Str,
@@ -87,7 +86,6 @@ struct Ints(Movable):
     var native: Bool
     """Whether PyLong_AsNativeBytes and friends exist (3.13 on)."""
     var as_native_bytes: AsNativeBytes
-    var from_native_bytes: FromNativeBytes
     var from_unsigned_native_bytes: FromNativeBytes
     var as_byte_array: AsByteArray
     var from_byte_array: FromByteArray
@@ -97,19 +95,16 @@ struct Ints(Movable):
         self.int_type = object_symbol("PyLong_Type")
         self.native = version >= 0x030D0000
         var as_native = 0
-        var from_native = 0
         var from_unsigned_native = 0
         var as_bytes = 0
         var from_bytes = 0
         if self.native:
             as_native = symbol("PyLong_AsNativeBytes")
-            from_native = symbol("PyLong_FromNativeBytes")
             from_unsigned_native = symbol("PyLong_FromUnsignedNativeBytes")
         else:
             as_bytes = symbol("_PyLong_AsByteArray")
             from_bytes = symbol("_PyLong_FromByteArray")
         self.as_native_bytes = c_function[AsNativeBytes](as_native)
-        self.from_native_bytes = c_function[FromNativeBytes](from_native)
         self.from_unsigned_native_bytes = c_function[FromNativeBytes](
             from_unsigned_native
         )
@@ -248,15 +243,6 @@ def int_from_u128(ints: Ints, value: UInt128) -> PyObjectPtr:
     if ints.native:
         return ints.from_unsigned_native_bytes(buffer(bytes), 16, LITTLE_ENDIAN)
     return ints.from_byte_array(buffer(bytes), 16, 1, 0)
-
-
-def int_from_i128(ints: Ints, value: Int128) -> PyObjectPtr:
-    if Int128(Int64.MIN) <= value and value <= Int128(Int64.MAX):
-        return PyLong_FromLongLong(Int64(value))
-    var bytes = value
-    if ints.native:
-        return ints.from_native_bytes(buffer(bytes), 16, LITTLE_ENDIAN)
-    return ints.from_byte_array(buffer(bytes), 16, 1, 1)
 
 
 def int_from_big(ints: Ints, value: BigUInt) -> PyObjectPtr:
