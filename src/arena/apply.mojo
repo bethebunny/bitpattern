@@ -1,7 +1,7 @@
 """Diagrams' `&`, `|`, `^` and `~`."""
 
 from .arena import ACCEPT, Arena, Id, Interrupted, REJECT
-from .steps import Pair, Step, emptied, popped_branches, push_branches
+from .steps import Pair, Step, emptied, pop_branches, push_branches
 from .table import Table, single, sorted_pair
 
 
@@ -60,7 +60,7 @@ def applied[op: Op](mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
             steps.append(Step[Pair].visit(Pair(a_hi, b_hi)))
             steps.append(Step[Pair].visit(Pair(a_lo, b_lo)))
         else:
-            var lo, hi = popped_branches(results)
+            var lo, hi = pop_branches(results)
             var made = arena.make(step.bit, lo, hi)
             memoise[op](arena, sorted_pair(step.item.a, step.item.b), made)
             results.append(made)
@@ -147,7 +147,7 @@ def complement(mut arena: Arena, root: Id) raises Interrupted -> Id:
             else:
                 push_branches(arena, steps, step.item)
         else:
-            var lo, hi = popped_branches(results)
+            var lo, hi = pop_branches(results)
             var made = arena.make(step.bit, lo, hi)
             arena.memos.complement.insert(single(step.item), made.value)
             results.append(made)

@@ -19,7 +19,7 @@ struct PyError(TrivialRegisterPassable, Writable):
         writer.write("PyError")
 
 
-def raised(kind: PyObjectPtr, message: String) -> PyError:
+def error(kind: PyObjectPtr, message: String) -> PyError:
     """Sets Python's error to `kind(message)`."""
     var text = new_string(message)
     if text:
@@ -32,15 +32,15 @@ def raised(kind: PyObjectPtr, message: String) -> PyError:
 
 
 def value_error(message: String) -> PyError:
-    return raised(pointer_symbol("PyExc_ValueError"), message)
+    return error(pointer_symbol("PyExc_ValueError"), message)
 
 
 def type_error(message: String) -> PyError:
-    return raised(pointer_symbol("PyExc_TypeError"), message)
+    return error(pointer_symbol("PyExc_TypeError"), message)
 
 
 def runtime_error(message: String) -> PyError:
-    return raised(pointer_symbol("PyExc_RuntimeError"), message)
+    return error(pointer_symbol("PyExc_RuntimeError"), message)
 
 
 def index_error(index: PyObjectPtr) -> PyError:

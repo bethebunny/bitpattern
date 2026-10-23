@@ -42,7 +42,7 @@ from .capi import (
 from .errors import PyError
 from .ints import Ints, c_function, int_from_big, int_from_u128
 from .queries import checked_width
-from .state import StatePointer, give_back, object_state, taken_arena
+from .state import StatePointer, give_back, object_state, take_arena
 
 
 # Else `Batches()` would make an iterator with no walk.
@@ -193,7 +193,7 @@ def next_members[
 ](
     state: StatePointer, mut runs: Runs[V], size: Int
 ) raises PyError -> PyObjectPtr:
-    var arena = taken_arena(state)
+    var arena = take_arena(state)
     var batch = runs.next_batch(arena[], size)
     give_back(state, arena)
     if not batch:
@@ -223,7 +223,7 @@ def next_blocks[
 ](
     state: StatePointer, mut walk: Walk[V], size: Int
 ) raises PyError -> PyObjectPtr:
-    var arena = taken_arena(state)
+    var arena = take_arena(state)
     var runs = List[Run[V]]()
     while len(runs) < size:
         var run = walk.next_run(arena[])
@@ -263,7 +263,7 @@ def string_of(text: List[UInt8], start: Int, length: Int) -> PyObjectPtr:
 def next_paths(
     state: StatePointer, mut paths: Paths, size: Int
 ) raises PyError -> PyObjectPtr:
-    var arena = taken_arena(state)
+    var arena = take_arena(state)
     # Every path is `width` long, so they share one buffer.
     var text = List[UInt8]()
     var count = 0

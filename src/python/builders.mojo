@@ -57,8 +57,8 @@ from .capi import (
 )
 from .errors import PyError, type_error, value_error
 from .ints import Ints, big_of, fitting, indexed, u128_of
-from .objects import Call, made, node_of, wrap
-from .state import Lease, StatePointer, give_back, taken_arena
+from .objects import Call, node_of, wrap, wrap_result
+from .state import Lease, StatePointer, give_back, take_arena
 
 
 comptime Py_TPFLAGS_LIST_SUBCLASS: UInt64 = 1 << 25
@@ -119,7 +119,7 @@ def lshift(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
         # Too far for any decision node.
         if id.is_leaf():
             return Py_NewRef(args[0])
-        var arena = taken_arena(state)
+        var arena = take_arena(state)
         var top = arena[].decision(id).bit
         give_back(state, arena)
         # `described` can run Python, so the arena goes back first.
@@ -127,7 +127,7 @@ def lshift(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     if by.value == 0 or id.is_leaf():
         return Py_NewRef(args[0])
     if by.value < Int64(Int32.MIN) or by.value > Int64(Int32.MAX):
-        var arena = taken_arena(state)
+        var arena = take_arena(state)
         var top = arena[].decision(id).bit
         give_back(state, arena)
         raise shifted_out(String(by.value), top)
@@ -175,7 +175,7 @@ def freed_between(
     ) raises Interrupted {var id, var low, var high} -> Id:
         return reshape.freed_between(arena, id, low, high)
 
-    return made(state, walk)
+    return wrap_result(state, walk)
 
 
 comptime NARROWED = Signature(
@@ -188,7 +188,7 @@ def narrowed(
 ) raises PyError -> PyObjectPtr:
     var id = node(state, args[0])
     var at = width(state[].ints, args[1])
-    var arena = taken_arena(state)
+    var arena = take_arena(state)
     var narrow = arena[].tests_only_below(id, at)
     give_back(state, arena)
     if narrow:
@@ -197,7 +197,7 @@ def narrowed(
     def walk(mut arena: Arena) raises Interrupted {var id, var at} -> Id:
         return reshape.narrowed(arena, id, at)
 
-    return made(state, walk)
+    return wrap_result(state, walk)
 
 
 comptime DIAGRAM = Signature(
@@ -243,7 +243,7 @@ def diagram(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     def walk(mut arena: Arena) raises Interrupted {var bits} -> Id:
         return build.diagram(arena, bits)
 
-    return made(state, walk)
+    return wrap_result(state, walk)
 
 
 def quoted(symbol: Codepoint) -> String:
@@ -322,7 +322,7 @@ def exactly_these(
             )
         return build.exactly_these[build.narrow_bit](arena, members.narrow, at)
 
-    var node = made(state, walk)
+    var node = wrap_result(state, walk)
     var pair = PyTuple_New(2)
     var width_int = PyLong_FromLongLong(Int64(at))
     if not pair or not width_int:
@@ -377,14 +377,10 @@ struct Distinct[T: KeyElement & Copyable & Comparable & Deinitable](Movable):
                 self.hashing = True
                 self.values = List[Self.T]()
 
-    def sorted(mut self) -> List[Self.T]:
-        """Empties it."""
-        var values = List[Self.T]()
-        swap(values, self.values)
+    def sorted(deinit self) -> List[Self.T]:
+        var values = self.values^
         for value in self.hashed:
             values.append(value.copy())
-        self.hashed = Set[Self.T]()
-        self.hashing = False
         deduplicate(values)
         return values^
 
@@ -483,7 +479,7 @@ struct Members(Movable):
             Py_DecRef(int)
             if not wide:
                 var promoted = List[BigUInt]()
-                for value in narrow.sorted():
+                for value in narrow^.sorted():
                     promoted.append(BigUInt(value))
                 narrow = Distinct[UInt128]()
                 wide = Distinct[BigUInt](sorted=promoted^)
@@ -492,8 +488,8 @@ struct Members(Movable):
         if PyErr_Occurred():
             raise PyError()
         if wide:
-            return Members(List[UInt128](), wide.value().sorted())
-        return Members(narrow.sorted(), None)
+            return Members(List[UInt128](), wide.take().sorted())
+        return Members(narrow^.sorted(), None)
 
     def __init__(
         out self, var narrow: List[UInt128], var wide: Optional[List[BigUInt]]
@@ -556,7 +552,7 @@ def interval(
     ) raises Interrupted {imm first, imm last, var at} -> Id:
         return build.interval[build.wide_bit](arena, first, last, at)
 
-    return made(state, walk)
+    return wrap_result(state, walk)
 
 
 def narrow_interval(
@@ -567,7 +563,7 @@ def narrow_interval(
     ) raises Interrupted {var first, var last, var at} -> Id:
         return build.interval[build.narrow_bit](arena, first, last, at)
 
-    return made(state, walk)
+    return wrap_result(state, walk)
 
 
 def big_int(ints: Ints, o: PyObjectPtr) raises PyError -> Tuple[Bool, BigUInt]:

@@ -3,7 +3,7 @@
 from bigint import BigUInt
 
 from .arena import ACCEPT, Arena, Id, Interrupted, REJECT
-from .steps import Span, Step, emptied, popped_branches
+from .steps import Span, Step, emptied, pop_branches
 
 
 @always_inline
@@ -44,7 +44,7 @@ def exactly_these[
                     Step[Span].visit(Span(span.start, split, span.bit - 1))
                 )
         else:
-            var lo, hi = popped_branches(results)
+            var lo, hi = pop_branches(results)
             results.append(arena.make(step.bit, lo, hi))
     var result = results.pop()
     arena.spare.span_steps = emptied(steps^)

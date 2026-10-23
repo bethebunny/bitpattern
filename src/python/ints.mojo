@@ -20,7 +20,7 @@ from .capi import (
     object_symbol,
     symbol,
 )
-from .errors import PyError, raised
+from .errors import PyError, error
 
 
 # Py_ASNATIVEBYTES_* flags.

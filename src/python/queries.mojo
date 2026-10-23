@@ -17,7 +17,7 @@ from .ints import (
     int_from_u128,
 )
 from .ints import Ints, big_of, i128_of
-from .state import Lease, StatePointer, give_back, taken_arena
+from .state import Lease, StatePointer, give_back, take_arena
 
 
 @fieldwise_init
@@ -51,7 +51,7 @@ def int_from_count(ints: Ints, count: Count) raises PyError -> PyObjectPtr:
 def checked_width(
     state: StatePointer, id: Id, width: Int32
 ) raises PyError -> Int32:
-    var arena = taken_arena(state)
+    var arena = take_arena(state)
     var bit = Int32(-1) if id.is_leaf() else arena[].decision(id).bit
     give_back(state, arena)
     if bit >= width:
@@ -67,7 +67,7 @@ comptime COUNT = Signature("count", positional=["node"], keywords=["width"])
 def count(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node(state, args[0])
     var at = checked_width(state, id, width(state[].ints, args[1]))
-    var arena = taken_arena(state)
+    var arena = take_arena(state)
     var total = member_count(arena[], id, at)
     give_back(state, arena)
     return int_from_count(state[].ints, total)
@@ -174,7 +174,7 @@ comptime ACCEPTS = Signature("accepts", positional=["node", "value"])
 def accepts(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node(state, args[0])
     var value = integer(state[].ints, args[1])
-    var arena = taken_arena(state)
+    var arena = take_arena(state)
     var answer = members.accepts[integer_bit](arena[], id, value)
     give_back(state, arena)
     return PyBool_FromLong(Int(answer))
@@ -212,7 +212,7 @@ def nth(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var at = width(state[].ints, args[2])
     var index = integer(state[].ints, args[1])
     at = checked_width(state, id, at)
-    var arena = taken_arena(state)
+    var arena = take_arena(state)
     var member = member_at(arena[], id, at, index)
     give_back(state, arena)
     if not member:
@@ -242,7 +242,7 @@ def rank(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node(state, args[0])
     var value = integer(state[].ints, args[1])
     var at = checked_width(state, id, width(state[].ints, args[2]))
-    var arena = taken_arena(state)
+    var arena = take_arena(state)
     var below = members_below(arena[], id, at, value)
     give_back(state, arena)
     return int_from_count(state[].ints, below)

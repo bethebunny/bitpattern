@@ -24,10 +24,10 @@ from .capi import (
     ob_type,
     pointer_symbol,
 )
-from .errors import PyError, raised, value_error
+from .errors import PyError, error, value_error
 from .ints import fitting
 from .queries import Count, checked_width, int_from_count, member_count
-from .state import Lease, StatePointer, give_back, taken_arena
+from .state import Lease, StatePointer, give_back, take_arena
 
 
 comptime CPU: Int32 = 1
@@ -270,7 +270,7 @@ def written(
 ) raises PyError -> Words:
     """`DataType.columns` has checked the word size."""
     _ = checked_width(state, id, width)
-    var arena = taken_arena(state)
+    var arena = take_arena(state)
     var members = member_count(arena[], id, width)
     give_back(state, arena)
     var made = room(members, columns, Int(dtype.bits // 8))
@@ -280,7 +280,7 @@ def written(
             described(state[].ints, total), " members don't fit in memory"
         )
         Py_DecRef(total)
-        raise raised(pointer_symbol("PyExc_MemoryError"), message)
+        raise error(pointer_symbol("PyExc_MemoryError"), message)
     var words = made.take()
     var sign_shift: UInt64 = 0
     if dtype.code == INT:
@@ -310,7 +310,7 @@ def written(
 
 
 def overflow_error(message: String) -> PyError:
-    return raised(pointer_symbol("PyExc_OverflowError"), message)
+    return error(pointer_symbol("PyExc_OverflowError"), message)
 
 
 def unsigned(o: PyObjectPtr, most: Int64) raises PyError -> Int:

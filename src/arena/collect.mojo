@@ -51,7 +51,7 @@ def collect(mut arena: Arena, var roots: List[Id]) -> Tuple[Int, Int]:
     unique table keeps only twice the nodes left, since sparser is slower.
     """
     var made = arena.schedule.made
-    var freed = swept(arena, marked(arena, roots^))
+    var freed = sweep(arena, marked(arena, roots^))
     # New nodes take the lowest slots, so the end can come free.
     var end = len(arena.nodes)
     while end > 2 and arena.nodes.unsafe_get(end - 1).bit == FREED:
@@ -88,7 +88,7 @@ def marked(arena: Arena, var roots: List[Id]) -> List[Bool]:
     return marks^
 
 
-def swept(mut arena: Arena, marks: List[Bool]) -> Int:
+def sweep(mut arena: Arena, marks: List[Bool]) -> Int:
     var freed = 0
     for index in range(2, len(arena.nodes)):
         var node = arena.nodes.unsafe_get(index)

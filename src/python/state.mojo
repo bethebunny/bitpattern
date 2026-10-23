@@ -87,7 +87,7 @@ def object_state(o: PyObjectPtr) -> StatePointer:
     return type_state(ob_type(o))
 
 
-def taken_arena(state: StatePointer) raises PyError -> ArenaPointer:
+def take_arena(state: StatePointer) raises PyError -> ArenaPointer:
     """Python code that runs while a call has the arena (eg. an `__index__`) could call
     back in, so no Python may run until it's given back."""
     var address = state[].arena
@@ -110,7 +110,7 @@ struct Lease:
     var arena: ArenaPointer
 
     def __init__(out self, state: StatePointer) raises PyError:
-        self.arena = taken_arena(state)
+        self.arena = take_arena(state)
         self.state = state
 
     def __enter__(self) -> ArenaPointer:
@@ -120,7 +120,7 @@ struct Lease:
         give_back(self.state, self.arena)
 
 
-def paused(mut arena: Arena, context: Int) -> Bool:
+def pause(mut arena: Arena, context: Int) -> Bool:
     """Runs Python's SIGINT handler after a Ctrl-C, and stops the walk if it raised.
 
     The handler can use the arena, so the walk lends it the real one and holds a

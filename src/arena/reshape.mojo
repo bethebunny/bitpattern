@@ -4,7 +4,7 @@ from std.utils import Variant
 
 from .apply import union
 from .arena import Arena, Id, Interrupted, MAX_BIT
-from .steps import Step, emptied, popped_branches, push_branches
+from .steps import Step, emptied, pop_branches, push_branches
 from .table import Table, single
 
 
@@ -45,7 +45,7 @@ def lshift(
         else:
             if step.bit + by < 0:
                 raise ShiftedOut(step.bit)
-            var lo, hi = popped_branches(results)
+            var lo, hi = pop_branches(results)
             var result = arena.make(step.bit + by, lo, hi)
             moved.insert(single(step.item), result.value)
             results.append(result)
@@ -79,7 +79,7 @@ def freed_between(
             else:
                 push_branches(arena, steps, step.item)
         else:
-            var lo, hi = popped_branches(results)
+            var lo, hi = pop_branches(results)
             var result: Id
             if step.bit >= high:
                 result = arena.make(step.bit, lo, hi)

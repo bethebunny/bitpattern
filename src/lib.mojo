@@ -66,7 +66,7 @@ from python.capi import (
     text,
 )
 from python.dlpack import TENSOR, tensor
-from python.errors import PyError, raised
+from python.errors import PyError, error
 from python.ints import c_function
 from python.objects import collect, stats, wrap
 from python.queries import (
@@ -89,7 +89,7 @@ from python.queries import (
     rank,
     subset,
 )
-from python.state import State, StatePointer, paused
+from python.state import State, StatePointer, pause
 
 
 comptime VERSION = get_defined_string["VERSION"]()  # from pyproject.toml
@@ -194,31 +194,31 @@ def module_exec(module: PyObjectPtr) abi("C") -> c_int:
             unsafe_from_address=PyModule_GetState(module)
         )[] = Int(state)
         if not state[].ints.complete():
-            raise raised(
+            raise error(
                 pointer_symbol("PyExc_ImportError"),
                 "bitpattern.bdd can't find the int functions it needs",
             )
         var arena = unsafe_alloc[Arena](1)
-        arena.unsafe_write(Arena(paused, Int(state)))
+        arena.unsafe_write(Arena(pause, Int(state)))
         state[].arena = Int(arena)
         state[].bdd_type = bdd_type(module)
         state[].batches_type = batches_type(module)
-        added(module, "BDD", Py_NewRef(state[].bdd_type))
-        added(state[].bdd_type, "ACCEPT", wrap(state, ACCEPT))
-        added(state[].bdd_type, "REJECT", wrap(state, REJECT))
-        added(state[].bdd_type, "__match_args__", match_args())
-        added(module, "__version__", string(VERSION))
+        set_attribute(module, "BDD", Py_NewRef(state[].bdd_type))
+        set_attribute(state[].bdd_type, "ACCEPT", wrap(state, ACCEPT))
+        set_attribute(state[].bdd_type, "REJECT", wrap(state, REJECT))
+        set_attribute(state[].bdd_type, "__match_args__", match_args())
+        set_attribute(module, "__version__", string(VERSION))
         var all = PyList_New(1)
         if not all or PyList_SetItem(all, 0, string("BDD")) < 0:
             raise PyError()
         # The functions are private to bitpattern.
-        added(module, "__all__", all)
+        set_attribute(module, "__all__", all)
         return 0
     except:
         return -1
 
 
-def added(
+def set_attribute(
     o: PyObjectPtr, name: StaticString, var value: PyObjectPtr
 ) raises PyError:
     """Sets `o.name` to `value`, which it steals."""

@@ -171,7 +171,7 @@ struct Arena(Movable):
         var found = self.unique.get(node)
         if found:
             return found.value()
-        var id = self._allocated(node)
+        var id = self._allocate(node)
         if bit < NARROW_WIDTH:
             var size = self.count_narrow(lo, bit) + self.count_narrow(hi, bit)
             self.sizes.narrow.unsafe_set(id.index(), size)
@@ -183,7 +183,7 @@ struct Arena(Movable):
         self.schedule.made += 1
         return id
 
-    def _allocated(mut self, node: Decision) -> Id:
+    def _allocate(mut self, node: Decision) -> Id:
         if self.free:
             var id = self.free.pop()
             self.nodes.unsafe_set(id.index(), node)

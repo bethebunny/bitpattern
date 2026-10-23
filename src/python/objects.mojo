@@ -23,7 +23,7 @@ from .capi import (
     cstr,
 )
 from .errors import PyError
-from .state import Lease, StatePointer, give_back, taken_arena
+from .state import Lease, StatePointer, give_back, take_arena
 
 
 struct BddObject:
@@ -95,7 +95,7 @@ struct Call:
     var state: StatePointer
 
     def __init__(out self, state: StatePointer) raises PyError:
-        var arena = taken_arena(state)
+        var arena = take_arena(state)
         if state[].depth == 0:
             if collection_due(arena[]):
                 _ = collect_garbage(state, arena[])
@@ -112,7 +112,7 @@ struct Call:
         self.state[].depth -= 1
 
 
-def made[
+def wrap_result[
     F: def(mut Arena) raises Interrupted -> Id
 ](state: StatePointer, walk: F) raises PyError -> PyObjectPtr:
     """Runs `walk` with the arena and returns its node's object. If a pause stopped
@@ -130,7 +130,7 @@ def made[
 
 
 def collect(state: StatePointer) raises PyError -> PyObjectPtr:
-    var arena = taken_arena(state)
+    var arena = take_arena(state)
     var freed = 0
     # An outer call might be about to wrap a node.
     if state[].depth == 0:
@@ -144,7 +144,7 @@ def collect(state: StatePointer) raises PyError -> PyObjectPtr:
 
 
 def stats(state: StatePointer) raises PyError -> PyObjectPtr:
-    var arena = taken_arena(state)
+    var arena = take_arena(state)
     var counts = arena_stats(arena[])
     give_back(state, arena)
     var wrapped = 0

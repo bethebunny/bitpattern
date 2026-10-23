@@ -373,7 +373,7 @@ struct BigUInt(
             dest, a, na, rhs.limbs.unsafe_get(0)
         )
         for i in range(1, nb):
-            dest[unsafe_offset=i + na] = _added_product(
+            dest[unsafe_offset=i + na] = _add_product_to(
                 dest.unsafe_offset(i), a, na, rhs.limbs.unsafe_get(i)
             )
         return Self(limbs=limbs^)
@@ -499,7 +499,7 @@ def _multiplied(
 
 
 @always_inline
-def _added_product(
+def _add_product_to(
     dest: MutPointer[UInt64, _], a: Pointer[UInt64, _], n: Int, m: UInt64
 ) -> UInt64:
     """Adds `a * m` to `dest`, and returns the carry."""
@@ -517,7 +517,7 @@ def _added_product(
 
 
 @always_inline
-def _subtracted_product(
+def _subtract_product_from(
     dest: MutPointer[UInt64, _], a: Pointer[UInt64, _], n: Int, m: UInt64
 ) -> UInt64:
     """Subtracts `a * m` from `dest`, and returns the borrow."""
@@ -656,7 +656,7 @@ def _divide(
         ):
             q -= 1
             r += UInt128(top)
-        var borrow = _subtracted_product(
+        var borrow = _subtract_product_from(
             up.unsafe_offset(j), v.unsafe_ptr(), n, q
         )
         var above = up[unsafe_offset=j + n]

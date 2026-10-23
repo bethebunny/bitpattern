@@ -89,7 +89,7 @@ def emptied(var table: Table) -> Table:
 
 
 @always_inline
-def popped_branches(mut results: List[Id]) -> Tuple[Id, Id]:
+def pop_branches(mut results: List[Id]) -> Tuple[Id, Id]:
     var hi = results.pop()
     var lo = results.pop()
     return (lo, hi)

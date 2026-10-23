@@ -55,14 +55,14 @@ from .capi import (
 )
 from .errors import PyError, value_error
 from .ints import c_function, count_repr, int_from_big
-from .objects import BddObject, Call, forget, made, node_of, wrap
+from .objects import BddObject, Call, forget, node_of, wrap, wrap_result
 from .queries import int_from_count, member_count
 from .state import (
     Lease,
     StatePointer,
     give_back,
     object_state,
-    taken_arena,
+    take_arena,
     type_state,
 )
 
@@ -162,7 +162,7 @@ def bdd_invert(o: PyObjectPtr) abi("C") -> PyObjectPtr:
         return apply.complement(arena, id)
 
     try:
-        return made(object_state(o), negated)
+        return wrap_result(object_state(o), negated)
     except:
         return PyObjectPtr()
 
@@ -182,7 +182,7 @@ def binary[
         return operation(arena, x, y)
 
     try:
-        return made(type_state(type), walk)
+        return wrap_result(type_state(type), walk)
     except:
         return PyObjectPtr()
 
@@ -209,7 +209,7 @@ def bdd_bit(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
         return PyLong_FromLongLong(-1)
     var state = object_state(o)
     try:
-        var arena = taken_arena(state)
+        var arena = take_arena(state)
         var tested = arena[].decision(id).bit
         give_back(state, arena)
         return PyLong_FromLongLong(Int64(tested))
@@ -225,7 +225,7 @@ def branch[hi: Bool](o: PyObjectPtr) -> PyObjectPtr:
         return Py_NewRef(o)
     var state = object_state(o)
     try:
-        var arena = taken_arena(state)
+        var arena = take_arena(state)
         var decision = arena[].decision(id)
         give_back(state, arena)
         return wrap(state, decision.hi if hi else decision.lo)
@@ -245,7 +245,7 @@ def bdd_size(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
     var id = node_of(o)
     var state = object_state(o)
     try:
-        var arena = taken_arena(state)
+        var arena = take_arena(state)
         var width = Int32(0) if id.is_leaf() else arena[].decision(id).bit + 1
         var count = member_count(arena[], id, width)
         give_back(state, arena)
