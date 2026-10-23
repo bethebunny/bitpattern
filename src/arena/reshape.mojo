@@ -17,12 +17,12 @@ struct ShiftedOut(TrivialRegisterPassable):
 
 def lshift(
     mut arena: Arena, root: Id, by: Int32
-) raises Interrupted -> Variant[Id, ShiftedOut]:
+) raises Variant[Interrupted, ShiftedOut] -> Id:
     # The walk makes nodes bottom up, so check the top first to make none in vain.
     if not root.is_leaf() and Int(arena.decision(root).bit) + Int(by) > Int(
         MAX_BIT
     ):
-        return ShiftedOut(arena.decision(root).bit)
+        raise ShiftedOut(arena.decision(root).bit)
     var moved = Table()
     swap(moved, arena.spare.node_results)
     var steps = List[Step[Id]]()
@@ -44,7 +44,7 @@ def lshift(
                 push_branches(arena, steps, step.item)
         else:
             if step.bit + by < 0:
-                return ShiftedOut(step.bit)
+                raise ShiftedOut(step.bit)
             var lo, hi = popped_branches(results)
             var result = arena.make(step.bit + by, lo, hi)
             moved.insert(single(step.item), result.value)

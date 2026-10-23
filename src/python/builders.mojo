@@ -4,7 +4,6 @@ from std.bit import count_leading_zeros
 from std.collections import Set
 from std.ffi import c_int, c_uint, external_call
 from std.python._cpython import PyObjectPtr
-from std.utils import Variant
 
 from arena import (
     ACCEPT,
@@ -132,20 +131,22 @@ def lshift(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
         raise shifted_out(described(state[].ints, args[1]), top)
     if by.value == 0 or id.is_leaf():
         return Py_NewRef(args[0])
+    if by.value < Int64(Int32.MIN) or by.value > Int64(Int32.MAX):
+        var arena = taken_arena(state)
+        var top = arena[].decision(id).bit
+        give_back(state, arena)
+        raise shifted_out(String(by.value), top)
     with Call(state):
         var lease = Lease(state)
-        var moved: Variant[Id, ShiftedOut]
+        var moved: Id
         try:
             with lease^ as arena:
-                if by.value < Int64(Int32.MIN) or by.value > Int64(Int32.MAX):
-                    moved = ShiftedOut(arena[].decision(id).bit)
-                else:
-                    moved = shifted(arena[], id, Int32(by.value))
-        except:
-            raise PyError()
-        if moved.isa[ShiftedOut]():
-            raise shifted_out(String(by.value), moved[ShiftedOut].bit)
-        return wrap(state, moved[Id])
+                moved = shifted(arena[], id, Int32(by.value))
+        except e:
+            if e.isa[ShiftedOut]():
+                raise shifted_out(String(by.value), e[ShiftedOut].bit)
+            raise PyError()  # the Ctrl-C handler's
+        return wrap(state, moved)
 
 
 def shifted_out(by: String, bit: Int32) -> PyError:
@@ -576,15 +577,15 @@ def rebuilt(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
         raise value_error("rows don't make a diagram")
     with Call(state):
         var lease = Lease(state)
-        var built: Variant[Id, Misordered]
+        var built: Id
         try:
             with lease^ as arena:
                 built = rebuilt_node(arena[], rows)
-        except:
-            raise PyError()
-        if built.isa[Misordered]():
-            raise value_error(String(built[Misordered]))
-        return wrap(state, built[Id])
+        except e:
+            if e.isa[Misordered]():
+                raise value_error(String(e[Misordered]))
+            raise PyError()  # the Ctrl-C handler's
+        return wrap(state, built)
 
 
 def formed(rows: List[Row]) -> Bool:

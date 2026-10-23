@@ -48,15 +48,12 @@ def number(numbers: Table, id: Id) -> UInt32:
 
 def rebuilt(
     mut arena: Arena, rows: List[Row]
-) raises Interrupted -> Variant[Id, Misordered]:
+) raises Variant[Interrupted, Misordered] -> Id:
     """The caller checks that every branch names a leaf or an earlier row."""
     var ids: List[Id] = [REJECT, ACCEPT]
     for row in rows:
         arena.tick()
-        try:
-            ids.append(
-                arena.make_checked(row.bit, ids[Int(row.lo)], ids[Int(row.hi)])
-            )
-        except misordered:
-            return misordered
+        ids.append(
+            arena.make_checked(row.bit, ids[Int(row.lo)], ids[Int(row.hi)])
+        )
     return ids[len(ids) - 1]
