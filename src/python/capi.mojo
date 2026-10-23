@@ -4,12 +4,14 @@
 only functions in 3.11's stable ABI are called that way. Data symbols and other functions
 are looked up with `symbol`.
 
-Pointers in the structs are plain Ints (addresses), which C reads the same way. Memory
-passed to a call is a `Buffer`, never an Int: the compiler can't see C read or write
-through an Int, so it may not store a value first, or may destroy it early.
+Pointers in the structs are plain Ints (addresses), which C reads the same way. A call
+through a C function pointer takes memory as a pointer with the memory's own origin, or
+as a `mut` argument. Given an Int address, an untracked pointer or a pointer to a
+read-only argument, the compiler may drop the store before the call or miss the callee's
+write. `external_call` isn't affected.
 """
 
-from std.ffi import c_int, c_uint, external_call
+from std.ffi import CStringSpan, c_int, c_uint, external_call
 from std.python._cpython import PyObjectPtr, _fn_ptr_as_opaque
 
 
@@ -129,20 +131,6 @@ struct ObjectHead:
 
     var ob_refcnt: Int
     var ob_type: PyObjectPtr
-
-
-comptime Buffer = Pointer[NoneType, MutAnyOrigin]
-
-
-@always_inline
-def cstr(literal: StaticString) -> Buffer:
-    """A literal as a C string (literals end in a NUL)."""
-    return (
-        literal.unsafe_ptr()
-        .unsafe_bitcast[NoneType]()
-        .unsafe_mut_cast[True]()
-        .unsafe_origin_cast[MutAnyOrigin]()
-    )
 
 
 @always_inline
@@ -266,24 +254,15 @@ def PyOS_InterruptOccurred() -> c_int:
 
 
 @always_inline
-def PyUnicode_FromStringAndSize(data: Buffer, size: Int) -> PyObjectPtr:
-    return external_call["PyUnicode_FromStringAndSize", PyObjectPtr](data, size)
-
-
-def new_string(text: String) -> PyObjectPtr:
-    """A str of `text`, which the caller keeps alive through the call."""
-    var data = (
-        text.unsafe_ptr()
-        .unsafe_bitcast[NoneType]()
-        .unsafe_mut_cast[True]()
-        .unsafe_origin_cast[MutAnyOrigin]()
+def PyUnicode_FromStringAndSize(text: StringSpan) -> PyObjectPtr:
+    return external_call["PyUnicode_FromStringAndSize", PyObjectPtr](
+        text.unsafe_ptr(), text.byte_length()
     )
-    return PyUnicode_FromStringAndSize(data, text.byte_length())
 
 
 @always_inline
-def PyUnicode_InternFromString(data: Buffer) -> PyObjectPtr:
-    return external_call["PyUnicode_InternFromString", PyObjectPtr](data)
+def PyUnicode_InternFromString(text: CStringSpan) -> PyObjectPtr:
+    return external_call["PyUnicode_InternFromString", PyObjectPtr](text)
 
 
 @always_inline
@@ -292,7 +271,9 @@ def PyUnicode_FromOrdinal(ordinal: c_int) -> PyObjectPtr:
 
 
 @always_inline
-def PyUnicode_CompareWithASCIIString(o: PyObjectPtr, text: Buffer) -> c_int:
+def PyUnicode_CompareWithASCIIString(
+    o: PyObjectPtr, text: CStringSpan
+) -> c_int:
     return external_call["PyUnicode_CompareWithASCIIString", c_int](o, text)
 
 
@@ -335,7 +316,7 @@ def PyTuple_SetItem(o: PyObjectPtr, index: Int, item: PyObjectPtr) -> c_int:
 
 @always_inline
 def Py_BuildValue(
-    format: Buffer, first: c_int, second: c_uint, third: c_uint
+    format: CStringSpan, first: c_int, second: c_uint, third: c_uint
 ) -> PyObjectPtr:
     return external_call["Py_BuildValue", PyObjectPtr, num_fixed_args=1](
         format, first, second, third
@@ -344,7 +325,7 @@ def Py_BuildValue(
 
 @always_inline
 def Py_BuildValue(
-    format: Buffer, first: PyObjectPtr, second: PyObjectPtr
+    format: CStringSpan, first: PyObjectPtr, second: PyObjectPtr
 ) -> PyObjectPtr:
     return external_call["Py_BuildValue", PyObjectPtr, num_fixed_args=1](
         format, first, second
@@ -369,7 +350,7 @@ def PyDict_New() -> PyObjectPtr:
 
 @always_inline
 def PyDict_SetItemString(
-    o: PyObjectPtr, key: Buffer, value: PyObjectPtr
+    o: PyObjectPtr, key: CStringSpan, value: PyObjectPtr
 ) -> c_int:
     return external_call["PyDict_SetItemString", c_int](o, key, value)
 
@@ -394,13 +375,13 @@ def PyDict_Next(
 
 
 @always_inline
-def PyObject_GetAttrString(o: PyObjectPtr, name: Buffer) -> PyObjectPtr:
+def PyObject_GetAttrString(o: PyObjectPtr, name: CStringSpan) -> PyObjectPtr:
     return external_call["PyObject_GetAttrString", PyObjectPtr](o, name)
 
 
 @always_inline
 def PyObject_SetAttrString(
-    o: PyObjectPtr, name: Buffer, value: PyObjectPtr
+    o: PyObjectPtr, name: CStringSpan, value: PyObjectPtr
 ) -> c_int:
     return external_call["PyObject_SetAttrString", c_int](o, name, value)
 
@@ -414,7 +395,10 @@ def PyObject_CallObject(
 
 @always_inline
 def PyObject_CallFunction(
-    callable: PyObjectPtr, format: Buffer, first: c_int, second: PyObjectPtr
+    callable: PyObjectPtr,
+    format: CStringSpan,
+    first: c_int,
+    second: PyObjectPtr,
 ) -> PyObjectPtr:
     return external_call[
         "PyObject_CallFunction", PyObjectPtr, num_fixed_args=2
@@ -432,7 +416,7 @@ def PyObject_CallFunctionObjArgs(
 
 @always_inline
 def PyObject_CallMethod(
-    o: PyObjectPtr, name: Buffer, format: Buffer
+    o: PyObjectPtr, name: CStringSpan, format: CStringSpan
 ) -> PyObjectPtr:
     return external_call["PyObject_CallMethod", PyObjectPtr, num_fixed_args=3](
         o, name, format
@@ -441,7 +425,7 @@ def PyObject_CallMethod(
 
 @always_inline
 def PyObject_CallMethod(
-    o: PyObjectPtr, name: Buffer, format: Buffer, arg: c_int
+    o: PyObjectPtr, name: CStringSpan, format: CStringSpan, arg: c_int
 ) -> PyObjectPtr:
     return external_call["PyObject_CallMethod", PyObjectPtr, num_fixed_args=3](
         o, name, format, arg
@@ -526,7 +510,7 @@ def PyModule_GetState(module: PyObjectPtr) -> Int:
 
 
 @always_inline
-def PyImport_ImportModule(name: Buffer) -> PyObjectPtr:
+def PyImport_ImportModule(name: CStringSpan) -> PyObjectPtr:
     return external_call["PyImport_ImportModule", PyObjectPtr](name)
 
 
@@ -540,7 +524,9 @@ def PyModuleDef_Init(definition: Int) -> PyObjectPtr:
 
 @always_inline
 def PyCapsule_New(
-    pointer: Buffer, name: Buffer, destructor: Int
+    pointer: Pointer[NoneType, MutUntrackedOrigin],
+    name: CStringSpan,
+    destructor: Int,
 ) -> PyObjectPtr:
     return external_call["PyCapsule_New", PyObjectPtr](
         pointer, name, destructor
@@ -548,10 +534,10 @@ def PyCapsule_New(
 
 
 @always_inline
-def PyCapsule_GetPointer(capsule: PyObjectPtr, name: Buffer) -> Int:
+def PyCapsule_GetPointer(capsule: PyObjectPtr, name: CStringSpan) -> Int:
     return external_call["PyCapsule_GetPointer", Int](capsule, name)
 
 
 @always_inline
-def PyCapsule_IsValid(capsule: PyObjectPtr, name: Buffer) -> c_int:
+def PyCapsule_IsValid(capsule: PyObjectPtr, name: CStringSpan) -> c_int:
     return external_call["PyCapsule_IsValid", c_int](capsule, name)

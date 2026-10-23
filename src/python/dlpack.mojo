@@ -30,7 +30,6 @@ from .capi import (
     PyTuple_Size,
     PyType_GetFlags,
     address,
-    cstr,
     ob_type,
     pointer_symbol,
 )
@@ -196,8 +195,8 @@ def delete[M: Managed](managed: Int) abi("C"):
 def destructor[M: Managed](capsule: PyObjectPtr) abi("C"):
     """Frees the export unless a consumer renamed the capsule (and so owns the
     tensor)."""
-    if PyCapsule_IsValid(capsule, cstr(M.NAME)) == 1:
-        delete[M](PyCapsule_GetPointer(capsule, cstr(M.NAME)))
+    if PyCapsule_IsValid(capsule, M.NAME.as_c_string_span()) == 1:
+        delete[M](PyCapsule_GetPointer(capsule, M.NAME.as_c_string_span()))
 
 
 def capsule[
@@ -222,8 +221,8 @@ def capsule[
     var managed = M.managing(tensor, version, address(delete[M]))
     export.unsafe_write(Export[M](managed, shape^, strides^, words^))
     var made = PyCapsule_New(
-        export.unsafe_bitcast[NoneType]().unsafe_origin_cast[MutAnyOrigin](),
-        cstr(M.NAME),
+        export.unsafe_bitcast[NoneType](),
+        M.NAME.as_c_string_span(),
         address(destructor[M]),
     )
     if not made:

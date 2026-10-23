@@ -7,7 +7,7 @@ from .args import str_or_size
 from .capi import (
     Py_DecRef,
     PyErr_SetObject,
-    new_string,
+    PyUnicode_FromStringAndSize,
     pointer_symbol,
 )
 
@@ -22,7 +22,7 @@ struct PyError(TrivialRegisterPassable, Writable):
 
 def error(kind: PyObjectPtr, message: String) -> PyError:
     """Sets Python's error to `kind(message)`."""
-    var text = new_string(message)
+    var text = PyUnicode_FromStringAndSize(message)
     if text:
         PyErr_SetObject(kind, text)
         Py_DecRef(text)

@@ -3,11 +3,11 @@
 from std.ffi import c_int
 from std.math import log2
 from std.python._cpython import PyObjectPtr
+from std.sys.info import size_of
 
 from bigint import BigUInt, Limbs
 
 from .capi import (
-    Buffer,
     Py_DecRef,
     Py_NewRef,
     PyErr_Occurred,
@@ -27,39 +27,6 @@ from .errors import PyError
 comptime LITTLE_ENDIAN = c_int(1)
 comptime UNSIGNED_BUFFER = c_int(4)
 
-# From 3.13.
-comptime AsNativeBytes = def(PyObjectPtr, Buffer, Int, c_int) thin abi(
-    "C"
-) -> Int
-comptime FromNativeBytes = def(Buffer, Int, c_int) thin abi("C") -> PyObjectPtr
-# 3.11 and 3.12's private equivalents (3.13 changed _PyLong_AsByteArray's arguments).
-comptime AsByteArray = def(PyObjectPtr, Buffer, Int, c_int, c_int) thin abi(
-    "C"
-) -> c_int
-comptime FromByteArray = def(Buffer, Int, c_int, c_int) thin abi(
-    "C"
-) -> PyObjectPtr
-
-
-@always_inline
-def buffer[T: AnyType](mut value: T) -> Buffer:
-    return (
-        Pointer(to=value)
-        .unsafe_bitcast[NoneType]()
-        .unsafe_origin_cast[MutAnyOrigin]()
-    )
-
-
-@always_inline
-def limbs_buffer(ref limbs: Limbs) -> Buffer:
-    return (
-        limbs.unsafe_ptr()
-        .unsafe_bitcast[NoneType]()
-        .unsafe_mut_cast[True]()
-        .unsafe_origin_cast[MutAnyOrigin]()
-    )
-
-
 comptime NumBits = def(PyObjectPtr) thin abi("C") -> Int
 
 
@@ -75,32 +42,122 @@ struct Ints(Movable):
     var int_type: PyObjectPtr
     var native: Bool
     """Whether PyLong_AsNativeBytes and friends exist (3.13 on)."""
-    var as_native_bytes: AsNativeBytes
-    var from_unsigned_native_bytes: FromNativeBytes
-    var as_byte_array: AsByteArray
-    var from_byte_array: FromByteArray
+    var as_native_bytes_address: Int
+    var from_unsigned_native_bytes_address: Int
+    var as_byte_array_address: Int
+    var from_byte_array_address: Int
     var num_bits: NumBits
 
     def __init__(out self, version: UInt64):
         self.int_type = object_symbol("PyLong_Type")
         self.native = version >= 0x030D0000
-        var as_native = 0
-        var from_unsigned_native = 0
-        var as_bytes = 0
-        var from_bytes = 0
+        self.as_native_bytes_address = 0
+        self.from_unsigned_native_bytes_address = 0
+        self.as_byte_array_address = 0
+        self.from_byte_array_address = 0
         if self.native:
-            as_native = symbol("PyLong_AsNativeBytes")
-            from_unsigned_native = symbol("PyLong_FromUnsignedNativeBytes")
+            self.as_native_bytes_address = symbol("PyLong_AsNativeBytes")
+            self.from_unsigned_native_bytes_address = symbol(
+                "PyLong_FromUnsignedNativeBytes"
+            )
         else:
-            as_bytes = symbol("_PyLong_AsByteArray")
-            from_bytes = symbol("_PyLong_FromByteArray")
-        self.as_native_bytes = c_function[AsNativeBytes](as_native)
-        self.from_unsigned_native_bytes = c_function[FromNativeBytes](
-            from_unsigned_native
-        )
-        self.as_byte_array = c_function[AsByteArray](as_bytes)
-        self.from_byte_array = c_function[FromByteArray](from_bytes)
+            self.as_byte_array_address = symbol("_PyLong_AsByteArray")
+            self.from_byte_array_address = symbol("_PyLong_FromByteArray")
         self.num_bits = c_function[NumBits](symbol("_PyLong_NumBits"))
+
+    # From 3.13.
+
+    def as_native_bytes[
+        T: AnyType
+    ](self, int: PyObjectPtr, mut into: T, flags: c_int) -> Int:
+        var memory = Pointer(to=into).unsafe_bitcast[NoneType]()
+        var call = c_function[
+            def(PyObjectPtr, type_of(memory), Int, c_int) thin abi("C") -> Int
+        ](self.as_native_bytes_address)
+        return call(int, memory, size_of[T](), flags)
+
+    def as_native_bytes(
+        self, int: PyObjectPtr, mut into: Limbs, flags: c_int
+    ) -> Int:
+        var memory = into.unsafe_ptr().unsafe_bitcast[NoneType]()
+        var call = c_function[
+            def(PyObjectPtr, type_of(memory), Int, c_int) thin abi("C") -> Int
+        ](self.as_native_bytes_address)
+        return call(int, memory, len(into) * 8, flags)
+
+    # `mut` though C only reads `value` (see capi.mojo).
+    def from_unsigned_native_bytes[
+        T: AnyType
+    ](self, mut value: T, flags: c_int) -> PyObjectPtr:
+        var memory = Pointer(to=value).unsafe_bitcast[NoneType]()
+        var call = c_function[
+            def(type_of(memory), Int, c_int) thin abi("C") -> PyObjectPtr
+        ](self.from_unsigned_native_bytes_address)
+        return call(memory, size_of[T](), flags)
+
+    def from_unsigned_native_bytes(
+        self, limbs: Limbs, flags: c_int
+    ) -> PyObjectPtr:
+        var memory = limbs.unsafe_ptr().unsafe_bitcast[NoneType]()
+        var call = c_function[
+            def(type_of(memory), Int, c_int) thin abi("C") -> PyObjectPtr
+        ](self.from_unsigned_native_bytes_address)
+        return call(memory, len(limbs) * 8, flags)
+
+    # 3.11 and 3.12's private equivalents (3.13 changed _PyLong_AsByteArray's arguments).
+
+    def as_byte_array[
+        T: AnyType
+    ](
+        self,
+        int: PyObjectPtr,
+        mut into: T,
+        little_endian: c_int,
+        is_signed: c_int,
+    ) -> c_int:
+        var memory = Pointer(to=into).unsafe_bitcast[NoneType]()
+        var call = c_function[
+            def(
+                PyObjectPtr, type_of(memory), Int, c_int, c_int
+            ) thin abi("C") -> c_int
+        ](self.as_byte_array_address)
+        return call(int, memory, size_of[T](), little_endian, is_signed)
+
+    def as_byte_array(
+        self,
+        int: PyObjectPtr,
+        mut into: Limbs,
+        little_endian: c_int,
+        is_signed: c_int,
+    ) -> c_int:
+        var memory = into.unsafe_ptr().unsafe_bitcast[NoneType]()
+        var call = c_function[
+            def(
+                PyObjectPtr, type_of(memory), Int, c_int, c_int
+            ) thin abi("C") -> c_int
+        ](self.as_byte_array_address)
+        return call(int, memory, len(into) * 8, little_endian, is_signed)
+
+    # `mut` though C only reads `value` (see capi.mojo).
+    def from_byte_array[
+        T: AnyType
+    ](
+        self, mut value: T, little_endian: c_int, is_signed: c_int
+    ) -> PyObjectPtr:
+        var memory = Pointer(to=value).unsafe_bitcast[NoneType]()
+        var call = c_function[
+            def(type_of(memory), Int, c_int, c_int) thin abi("C") -> PyObjectPtr
+        ](self.from_byte_array_address)
+        return call(memory, size_of[T](), little_endian, is_signed)
+
+    def from_byte_array(
+        self, limbs: Limbs, little_endian: c_int, is_signed: c_int
+    ) -> PyObjectPtr:
+        var memory = limbs.unsafe_ptr().unsafe_bitcast[NoneType]()
+        var call = c_function[
+            def(type_of(memory), Int, c_int, c_int) thin abi("C") -> PyObjectPtr
+        ](self.from_byte_array_address)
+        return call(memory, len(limbs) * 8, little_endian, is_signed)
 
     def complete(self) -> Bool:
         if self.native:
@@ -157,11 +214,11 @@ def u128_of(ints: Ints, int: PyObjectPtr) -> Optional[UInt128]:
     var value = UInt128(0)
     if ints.native:
         var flags = LITTLE_ENDIAN | UNSIGNED_BUFFER
-        var needed = ints.as_native_bytes(int, buffer(value), 16, flags)
+        var needed = ints.as_native_bytes(int, value, flags)
         return Optional(value) if needed <= 16 else None
     if ints.num_bits(int) > 128:
         return None
-    _ = ints.as_byte_array(int, buffer(value), 16, 1, 0)
+    _ = ints.as_byte_array(int, value, 1, 0)
     return value
 
 
@@ -172,13 +229,13 @@ def i128_of(ints: Ints, int: PyObjectPtr) -> Optional[Int128]:
         return Int128(small)
     if ints.native:
         var value = Int128(0)
-        var needed = ints.as_native_bytes(int, buffer(value), 16, LITTLE_ENDIAN)
+        var needed = ints.as_native_bytes(int, value, LITTLE_ENDIAN)
         return Optional(value) if needed <= 16 else None
     if ints.num_bits(int) > 128:
         return None
     # Of the 128-bit ints only -2**127 fits, so read with room for the sign.
     var wide = Int256(0)
-    _ = ints.as_byte_array(int, buffer(wide), 32, 1, 1)
+    _ = ints.as_byte_array(int, wide, 1, 1)
     if wide < Int256(Int128.MIN) or wide > Int256(Int128.MAX):
         return None
     return Int128(wide)
@@ -202,18 +259,14 @@ struct Signed(Movable):
         var bytes: Int
         if ints.native:
             var unused = UInt64(0)
-            bytes = ints.as_native_bytes(int, buffer(unused), 0, LITTLE_ENDIAN)
+            bytes = ints.as_native_bytes(int, unused, LITTLE_ENDIAN)
         else:
             bytes = ints.num_bits(int) // 8 + 1
         var limbs = Limbs(length=(bytes + 7) // 8, fill=0)
         if ints.native:
-            _ = ints.as_native_bytes(
-                int, limbs_buffer(limbs), len(limbs) * 8, LITTLE_ENDIAN
-            )
+            _ = ints.as_native_bytes(int, limbs, LITTLE_ENDIAN)
         else:
-            _ = ints.as_byte_array(
-                int, limbs_buffer(limbs), len(limbs) * 8, 1, 1
-            )
+            _ = ints.as_byte_array(int, limbs, 1, 1)
         var negative = overflow < 0
         if negative:
             var carry = UInt64(1)
@@ -243,20 +296,17 @@ def int_from_u128(ints: Ints, value: UInt128) -> PyObjectPtr:
         return int_from_u64(UInt64(value))
     var bytes = value
     if ints.native:
-        return ints.from_unsigned_native_bytes(buffer(bytes), 16, LITTLE_ENDIAN)
-    return ints.from_byte_array(buffer(bytes), 16, 1, 0)
+        return ints.from_unsigned_native_bytes(bytes, LITTLE_ENDIAN)
+    return ints.from_byte_array(bytes, 1, 0)
 
 
 def int_from_big(ints: Ints, value: BigUInt) -> PyObjectPtr:
     var narrow = value.fitting_uint128()
     if narrow:
         return int_from_u128(ints, narrow.value())
-    var size = len(value.limbs) * 8
     if ints.native:
-        return ints.from_unsigned_native_bytes(
-            limbs_buffer(value.limbs), size, LITTLE_ENDIAN
-        )
-    return ints.from_byte_array(limbs_buffer(value.limbs), size, 1, 0)
+        return ints.from_unsigned_native_bytes(value.limbs, LITTLE_ENDIAN)
+    return ints.from_byte_array(value.limbs, 1, 0)
 
 
 comptime WRITABLE_BITS = 14_284

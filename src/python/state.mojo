@@ -24,7 +24,6 @@ from .capi import (
     PyObject_CallMethod,
     PyOS_InterruptOccurred,
     PyType_GetModuleState,
-    cstr,
     object_symbol,
     ob_type,
 )
@@ -153,11 +152,11 @@ def pause(mut arena: Arena, context: Int) -> Bool:
 def handle_sigint(state: StatePointer) -> Bool:
     """False if the handler raised. Raising SIGINT again instead would look like a second
     Ctrl-C to an event loop."""
-    var signal = PyImport_ImportModule(cstr("signal"))
+    var signal = PyImport_ImportModule("signal".as_c_string_span())
     if not signal:
         return False
     var handler = PyObject_CallMethod(
-        signal, cstr("getsignal"), cstr("i"), c_int(2)
+        signal, "getsignal".as_c_string_span(), "i".as_c_string_span(), c_int(2)
     )
     Py_DecRef(signal)
     if not handler:
@@ -166,7 +165,10 @@ def handle_sigint(state: StatePointer) -> Bool:
         # The frame the signal came in, as Python passes it.
         var frame = PyEval_GetFrame()
         var result = PyObject_CallFunction(
-            handler, cstr("iO"), c_int(2), frame if frame else state[].none
+            handler,
+            "iO".as_c_string_span(),
+            c_int(2),
+            frame if frame else state[].none,
         )
         Py_DecRef(handler)
         if not result:

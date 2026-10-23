@@ -26,7 +26,6 @@ from .capi import (
     PyUnicode_AsUTF8AndSize,
     PyUnicode_CompareWithASCIIString,
     address,
-    cstr,
     ob_type,
     text,
 )
@@ -156,7 +155,7 @@ def add_keyword[
 ) raises PyError:
     comptime for index in range(signature.arity()):
         comptime name = signature.name(index)
-        if PyUnicode_CompareWithASCIIString(key, cstr(name)) == 0:
+        if PyUnicode_CompareWithASCIIString(key, name.as_c_string_span()) == 0:
             if arguments.items[index]:
                 raise type_error(
                     String(
@@ -266,7 +265,9 @@ def str_or_size(o: PyObjectPtr) -> String:
     var int = PyNumber_Index(o)
     var bit_length = PyObjectPtr()
     if int:
-        bit_length = PyObject_CallMethod(int, cstr("bit_length"), cstr(""))
+        bit_length = PyObject_CallMethod(
+            int, "bit_length".as_c_string_span(), "".as_c_string_span()
+        )
         Py_DecRef(int)
     if not bit_length:
         PyErr_Clear()

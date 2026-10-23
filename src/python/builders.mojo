@@ -60,7 +60,6 @@ from .capi import (
     PyUnicode_AsUTF8AndSize,
     PyUnicode_FromOrdinal,
     PyUnicode_InternFromString,
-    cstr,
     ob_type,
 )
 from .errors import PyError, type_error, value_error
@@ -74,9 +73,11 @@ def reduced(state: StatePointer, o: PyObjectPtr) raises PyError -> PyObjectPtr:
     nesting would recurse once per bit."""
     var id = node_of(o)
     if id.is_leaf():
-        var name = PyUnicode_InternFromString(
-            cstr("BDD.ACCEPT") if id == ACCEPT else cstr("BDD.REJECT")
-        )
+        var name: PyObjectPtr
+        if id == ACCEPT:
+            name = PyUnicode_InternFromString("BDD.ACCEPT".as_c_string_span())
+        else:
+            name = PyUnicode_InternFromString("BDD.REJECT".as_c_string_span())
         if not name:
             raise PyError()
         return name
@@ -93,18 +94,21 @@ def reduced(state: StatePointer, o: PyObjectPtr) raises PyError -> PyObjectPtr:
     for index in range(len(found)):
         var row = found[index]
         var item = Py_BuildValue(
-            cstr("(iII)"), c_int(row.bit), c_uint(row.lo), c_uint(row.hi)
+            "(iII)".as_c_string_span(),
+            c_int(row.bit),
+            c_uint(row.lo),
+            c_uint(row.hi),
         )
         # Steals `item`, even if it fails.
         if not item or PyList_SetItem(written, index, item) < 0:
             Py_DecRef(written)
             raise PyError()
     var module = PyType_GetModule(ob_type(o))
-    var rebuild = PyObject_GetAttrString(module, cstr("_rebuilt"))
+    var rebuild = PyObject_GetAttrString(module, "_rebuilt".as_c_string_span())
     if not rebuild:
         Py_DecRef(written)
         raise PyError()
-    var reduction = Py_BuildValue(cstr("(N(N))"), rebuild, written)
+    var reduction = Py_BuildValue("(N(N))".as_c_string_span(), rebuild, written)
     if not reduction:
         raise PyError()
     return reduction
@@ -601,10 +605,10 @@ def read_rows(state: StatePointer, o: PyObjectPtr) raises PyError -> List[Row]:
 
 def is_sequence(o: PyObjectPtr) raises PyError -> Bool:
     """`isinstance(o, collections.abc.Sequence)`."""
-    var abc = PyImport_ImportModule(cstr("collections.abc"))
+    var abc = PyImport_ImportModule("collections.abc".as_c_string_span())
     if not abc:
         raise PyError()
-    var sequence = PyObject_GetAttrString(abc, cstr("Sequence"))
+    var sequence = PyObject_GetAttrString(abc, "Sequence".as_c_string_span())
     Py_DecRef(abc)
     if not sequence:
         raise PyError()

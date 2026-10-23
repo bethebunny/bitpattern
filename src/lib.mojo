@@ -60,7 +60,6 @@ from python.capi import (
     PyUnicode_FromStringAndSize,
     PyUnicode_InternFromString,
     address,
-    cstr,
     pointer_symbol,
     symbol,
     text,
@@ -219,30 +218,34 @@ def module_exec(module: PyObjectPtr) abi("C") -> c_int:
 
 
 def set_attribute(
-    o: PyObjectPtr, name: StaticString, var value: PyObjectPtr
+    o: PyObjectPtr, name: StringLiteral, var value: PyObjectPtr
 ) raises PyError:
     """Sets `o.name` to `value`, which it steals."""
     if not value:
         raise PyError()
-    var failed = PyObject_SetAttrString(o, cstr(name), value) < 0
+    var failed = PyObject_SetAttrString(o, name.as_c_string_span(), value) < 0
     Py_DecRef(value)
     if failed:
         raise PyError()
 
 
 def string(literal: StaticString) -> PyObjectPtr:
-    return PyUnicode_FromStringAndSize(cstr(literal), literal.byte_length())
+    return PyUnicode_FromStringAndSize(literal)
 
 
 def match_args() -> PyObjectPtr:
     var names = PyTuple_New(3)
     if not names:
         return names
-    var fields: List[StaticString] = ["bit", "left", "right"]
+    var fields = [
+        "bit".as_c_string_span(),
+        "left".as_c_string_span(),
+        "right".as_c_string_span(),
+    ]
     for index in range(3):
         if (
             PyTuple_SetItem(
-                names, index, PyUnicode_InternFromString(cstr(fields[index]))
+                names, index, PyUnicode_InternFromString(fields[index])
             )
             < 0
         ):

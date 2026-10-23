@@ -8,7 +8,12 @@ from arena import build, compare, members, nodes
 from bigint import BigUInt
 
 from .args import Arguments, Signature, node_as_id, width_as_int32
-from .capi import Py_DecRef, PyBool_FromLong, PyLong_FromSsize_t, new_string
+from .capi import (
+    Py_DecRef,
+    PyBool_FromLong,
+    PyLong_FromSsize_t,
+    PyUnicode_FromStringAndSize,
+)
 from .errors import PyError, index_error, value_error
 from .ints import (
     count_repr as written_count,
@@ -117,7 +122,7 @@ def count_repr(
         Py_DecRef(total)
         raise e
     Py_DecRef(total)
-    return new_string(written)
+    return PyUnicode_FromStringAndSize(written)
 
 
 @fieldwise_init

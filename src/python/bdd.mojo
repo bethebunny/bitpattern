@@ -43,12 +43,12 @@ from .capi import (
     PyObject_ClearWeakRefs,
     PyType_FromModuleAndSpec,
     PyType_GetSlot,
+    PyUnicode_FromStringAndSize,
     READONLY,
     T_PYSSIZET,
     TypeSlot,
     TypeSpec,
     address,
-    new_string,
     ob_type,
     object_symbol,
     text,
@@ -297,7 +297,7 @@ def bdd_repr(o: PyObjectPtr) abi("C") -> PyObjectPtr:
                 counted,
                 " members>",
             )
-        return new_string(written)
+        return PyUnicode_FromStringAndSize(written)
     except:
         return PyObjectPtr()
 

@@ -37,7 +37,6 @@ from .capi import (
     TypeSlot,
     TypeSpec,
     address,
-    cstr,
     ob_type,
     text,
 )
@@ -249,14 +248,9 @@ def next_blocks[
 
 
 def string_of(text: List[UInt8], start: Int, length: Int) -> PyObjectPtr:
-    var data = (
-        text.unsafe_ptr()
-        .unsafe_offset(start)
-        .unsafe_bitcast[NoneType]()
-        .unsafe_mut_cast[True]()
-        .unsafe_origin_cast[MutAnyOrigin]()
+    return PyUnicode_FromStringAndSize(
+        StringSpan(unsafe_from_utf8=Span(text)[start : start + length])
     )
-    return PyUnicode_FromStringAndSize(data, length)
 
 
 def next_paths(
@@ -325,14 +319,16 @@ def from_iterable(state: StatePointer) raises PyError -> PyObjectPtr:
     """`itertools.chain.from_iterable` (borrowed)."""
     if state[].from_iterable:
         return state[].from_iterable
-    var itertools = PyImport_ImportModule(cstr("itertools"))
+    var itertools = PyImport_ImportModule("itertools".as_c_string_span())
     if not itertools:
         raise PyError()
-    var chain = PyObject_GetAttrString(itertools, cstr("chain"))
+    var chain = PyObject_GetAttrString(itertools, "chain".as_c_string_span())
     Py_DecRef(itertools)
     if not chain:
         raise PyError()
-    var method = PyObject_GetAttrString(chain, cstr("from_iterable"))
+    var method = PyObject_GetAttrString(
+        chain, "from_iterable".as_c_string_span()
+    )
     Py_DecRef(chain)
     if not method:
         raise PyError()

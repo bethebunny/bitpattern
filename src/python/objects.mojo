@@ -20,7 +20,6 @@ from .capi import (
     PyDict_SetItemString,
     PyLong_FromSsize_t,
     PyType_GenericAlloc,
-    cstr,
 )
 from .errors import PyError
 from .state import Lease, StatePointer, give_back, take_arena
@@ -154,13 +153,13 @@ def stats(state: StatePointer) raises PyError -> PyObjectPtr:
     var stats = PyDict_New()
     if not stats:
         raise PyError()
-    var names: List[StaticString] = [
-        "nodes",
-        "free",
-        "wrapped",
-        "room",
-        "memo",
-        "memo_room",
+    var names = [
+        "nodes".as_c_string_span(),
+        "free".as_c_string_span(),
+        "wrapped".as_c_string_span(),
+        "room".as_c_string_span(),
+        "memo".as_c_string_span(),
+        "memo_room".as_c_string_span(),
     ]
     var values: List[Int] = [
         counts.nodes,
@@ -172,10 +171,7 @@ def stats(state: StatePointer) raises PyError -> PyObjectPtr:
     ]
     for index in range(len(names)):
         var value = PyLong_FromSsize_t(values[index])
-        if (
-            not value
-            or PyDict_SetItemString(stats, cstr(names[index]), value) < 0
-        ):
+        if not value or PyDict_SetItemString(stats, names[index], value) < 0:
             Py_DecRef(value)
             Py_DecRef(stats)
             raise PyError()
