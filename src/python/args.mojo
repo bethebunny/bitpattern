@@ -29,7 +29,7 @@ from .capi import (
     text,
 )
 from .errors import PyError, out_of_range, type_error
-from .ints import fitting
+from .ints import Int64OrOverflow
 from .objects import node_of
 from .state import StatePointer, module_state
 
@@ -228,10 +228,10 @@ def missing[signature: Signature](arguments: Arguments) -> PyError:
     return type_error(message)
 
 
-def node(state: StatePointer, o: PyObjectPtr) raises PyError -> Id:
-    if ob_type(o) != state[].bdd_type:
-        raise not_an_instance(state, o, "BDD")
-    return node_of(o)
+def node_as_id(state: StatePointer, node: PyObjectPtr) raises PyError -> Id:
+    if ob_type(node) != state[].bdd_type:
+        raise not_an_instance(state, node, "BDD")
+    return node_of(node)
 
 
 def not_an_instance(
@@ -276,47 +276,53 @@ def str_or_size(o: PyObjectPtr) -> String:
     return String("an int of ", bits, " bits")
 
 
-def in_range(o: PyObjectPtr, most: Int32) raises PyError -> Optional[Int32]:
-    var read = fitting(o)
-    if read.fits() and Int64(0) <= read.value and read.value <= Int64(most):
-        return Int32(read.value)
+def int32_up_to(o: PyObjectPtr, most: Int32) raises PyError -> Optional[Int32]:
+    var int_or_overflow = Int64OrOverflow.from_python(o)
+    if (
+        int_or_overflow.fits()
+        and Int64(0) <= int_or_overflow.value
+        and int_or_overflow.value <= Int64(most)
+    ):
+        return Int32(int_or_overflow.value)
     return None
 
 
-def width(o: PyObjectPtr) raises PyError -> Int32:
+def width_as_int32(width: PyObjectPtr) raises PyError -> Int32:
     """ValueError outside `0..=MAX_WIDTH`."""
-    var read = in_range(o, MAX_WIDTH)
-    if not read:
-        raise out_of_range("width", o)
-    return read.value()
+    var width_or_none = int32_up_to(width, MAX_WIDTH)
+    if width_or_none is None:
+        raise out_of_range("width", width)
+    return width_or_none.value()
 
 
-def bit(o: PyObjectPtr) raises PyError -> Int32:
+def bit_as_int32(bit: PyObjectPtr) raises PyError -> Int32:
     """ValueError outside `0..=MAX_BIT`."""
-    var read = in_range(o, MAX_BIT)
-    if not read:
-        raise out_of_range("bit", o)
-    return read.value()
+    var bit_or_none = int32_up_to(bit, MAX_BIT)
+    if bit_or_none is None:
+        raise out_of_range("bit", bit)
+    return bit_or_none.value()
 
 
-def least_width(o: PyObjectPtr) raises PyError -> Int32:
+def least_width_as_int32(width: PyObjectPtr) raises PyError -> Int32:
     """A negative width is 0, as for str.ljust."""
-    var read = fitting(o)
-    if read.overflow < 0 or (read.fits() and read.value < 0):
+    var width_or_overflow = Int64OrOverflow.from_python(width)
+    if width_or_overflow.overflow < 0 or (
+        width_or_overflow.fits() and width_or_overflow.value < 0
+    ):
         return 0
-    if read.fits() and read.value <= Int64(MAX_WIDTH):
-        return Int32(read.value)
-    raise out_of_range("width", o)
+    if width_or_overflow.fits() and width_or_overflow.value <= Int64(MAX_WIDTH):
+        return Int32(width_or_overflow.value)
+    raise out_of_range("width", width)
 
 
-def clamped(o: PyObjectPtr) raises PyError -> Int32:
+def clamped(bit: PyObjectPtr) raises PyError -> Int32:
     """A bit clamped to `0..=MAX_WIDTH`."""
-    var read = fitting(o)
-    if read.overflow < 0:
+    var bit_or_overflow = Int64OrOverflow.from_python(bit)
+    if bit_or_overflow.overflow < 0:
         return 0
-    if read.overflow > 0:
+    if bit_or_overflow.overflow > 0:
         return MAX_WIDTH
-    return Int32(max(Int64(0), min(read.value, Int64(MAX_WIDTH))))
+    return Int32(max(Int64(0), min(bit_or_overflow.value, Int64(MAX_WIDTH))))
 
 
 # Calling conventions. Each wraps a raising Mojo function in the C function CPython

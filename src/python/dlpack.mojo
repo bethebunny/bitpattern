@@ -16,10 +16,10 @@ from arena.walk import Narrow, Wide
 from .args import (
     Arguments,
     Signature,
-    node,
+    node_as_id,
     not_an_instance,
     str_or_size,
-    width,
+    width_as_int32,
 )
 from .capi import (
     Py_DecRef,
@@ -32,7 +32,7 @@ from .capi import (
     pointer_symbol,
 )
 from .errors import PyError, error, value_error
-from .ints import fitting
+from .ints import Int64OrOverflow
 from .queries import Count, checked_width, int_from_count, member_count
 from .state import Lease, StatePointer, give_back, take_arena
 
@@ -320,12 +320,12 @@ def overflow_error(message: String) -> PyError:
 
 def unsigned(o: PyObjectPtr, most: Int64) raises PyError -> Int:
     """An int in `0..=most`, with PyO3's errors for a u8 or a u32."""
-    var read = fitting(o)
-    if not read.fits():
+    var int_or_overflow = Int64OrOverflow.from_python(o)
+    if not int_or_overflow.fits():
         raise overflow_error("Python int too large to convert to C long")
-    if read.value < 0 or read.value > most:
+    if int_or_overflow.value < 0 or int_or_overflow.value > most:
         raise overflow_error("out of range integral type conversion attempted")
-    return Int(read.value)
+    return Int(int_or_overflow.value)
 
 
 def version_of(
@@ -361,14 +361,14 @@ comptime TENSOR = Signature(
 
 
 def tensor(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    var id = node(state, args[0])
-    var at = width(args[1])
+    var id = node_as_id(state, args[0])
+    var width = width_as_int32(args[1])
     var code = unsigned(args[2], Int64(UInt8.MAX))
     var bits = unsigned(args[3], Int64(UInt8.MAX))
     var version = version_of(state, args[4])
     var dtype = DataType(UInt8(code), UInt8(bits), 1)
-    var columns = dtype.columns(at)
-    var words = written(state, id, at, dtype, columns)
+    var columns = dtype.columns(width)
+    var words = written(state, id, width, dtype, columns)
     if version:
         return capsule[Versioned](words^, dtype, columns, version.value())
     return capsule[Legacy](words^, dtype, columns, Version(0, 0))

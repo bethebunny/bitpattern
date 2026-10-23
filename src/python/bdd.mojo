@@ -9,7 +9,7 @@ from arena import ACCEPT, Arena, Id, Interrupted, REJECT
 from arena import apply, nodes
 from bigint import BigUInt
 
-from .args import Signature, bit, node, parsed
+from .args import Signature, bit_as_int32, node_as_id, parsed
 from .builders import reduced
 from .capi import (
     GetSetDef,
@@ -108,15 +108,15 @@ def bdd_new(
     var state = type_state(type)
     try:
         var given = parsed[NEW](args, kwargs)
-        var at = bit(given[0])
-        var lo = node(state, given[1])
-        var hi = node(state, given[2])
+        var bit = bit_as_int32(given[0])
+        var lo = node_as_id(state, given[1])
+        var hi = node_as_id(state, given[2])
         with Call(state):
             var lease = Lease(state)
             var id: Id
             try:
                 with lease^ as arena:
-                    id = arena[].make_checked(at, lo, hi)
+                    id = arena[].make_checked(bit, lo, hi)
             except misordered:
                 raise value_error(String(misordered))
             return wrap(state, id)

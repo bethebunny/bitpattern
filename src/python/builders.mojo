@@ -23,15 +23,15 @@ from bigint import BigUInt
 from .args import (
     Arguments,
     Signature,
-    bit,
+    bit_as_int32,
     clamped,
-    in_range,
-    least_width,
-    node,
+    int32_up_to,
+    least_width_as_int32,
+    node_as_id,
     not_an_instance,
     str_or_size,
     utf8,
-    width,
+    width_as_int32,
 )
 from .capi import (
     Py_DecRef,
@@ -56,7 +56,7 @@ from .capi import (
     ob_type,
 )
 from .errors import PyError, type_error, value_error
-from .ints import Ints, big_of, fitting, indexed, u128_of
+from .ints import Int64OrOverflow, Ints, big_of, indexed, u128_of
 from .objects import Call, node_of, wrap, wrap_result
 from .state import Lease, StatePointer, give_back, take_arena
 
@@ -113,8 +113,8 @@ comptime LSHIFT = Signature("lshift", positional=["node", "by"])
 
 
 def lshift(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    var id = node(state, args[0])
-    var by = fitting(args[1])
+    var id = node_as_id(state, args[0])
+    var by = Int64OrOverflow.from_python(args[1])
     if not by.fits():
         # Too far for any decision node.
         if id.is_leaf():
@@ -164,7 +164,7 @@ comptime FREED_BETWEEN = Signature(
 def freed_between(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
-    var id = node(state, args[0])
+    var id = node_as_id(state, args[0])
     var low = clamped(args[1])
     var high = clamped(args[2])
     if low >= high:
@@ -186,16 +186,16 @@ comptime NARROWED = Signature(
 def narrowed(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
-    var id = node(state, args[0])
-    var at = width(args[1])
+    var id = node_as_id(state, args[0])
+    var width = width_as_int32(args[1])
     var arena = take_arena(state)
-    var narrow = arena[].tests_only_below(id, at)
+    var narrow = arena[].tests_only_below(id, width)
     give_back(state, arena)
     if narrow:
         return Py_NewRef(args[0])
 
-    def walk(mut arena: Arena) raises Interrupted {var id, var at} -> Id:
-        return reshape.narrowed(arena, id, at)
+    def walk(mut arena: Arena) raises Interrupted {var id, var width} -> Id:
+        return reshape.narrowed(arena, id, width)
 
     return wrap_result(state, walk)
 
@@ -306,25 +306,29 @@ comptime EXACTLY_THESE = Signature(
 def exactly_these(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
-    var least = least_width(args[1])
+    var least_width = least_width_as_int32(args[1])
     var members = Members.read(state[].ints, args[0])
     var bits = members.bits()
     if bits > Int(MAX_WIDTH):
         raise value_error(
             String("a value of ", bits, " bits is wider than any set")
         )
-    var at = max(least, Int32(bits))
+    var width = max(least_width, Int32(bits))
 
-    def walk(mut arena: Arena) raises Interrupted {imm members, var at} -> Id:
+    def walk(
+        mut arena: Arena,
+    ) raises Interrupted {imm members, var width} -> Id:
         if members.wide:
             return build.exactly_these[build.wide_bit](
-                arena, members.wide.value(), at
+                arena, members.wide.value(), width
             )
-        return build.exactly_these[build.narrow_bit](arena, members.narrow, at)
+        return build.exactly_these[build.narrow_bit](
+            arena, members.narrow, width
+        )
 
     var node = wrap_result(state, walk)
     var pair = PyTuple_New(2)
-    var width_int = PyLong_FromLongLong(Int64(at))
+    var width_int = PyLong_FromLongLong(Int64(width))
     if not pair or not width_int:
         Py_DecRef(node)
         Py_DecRef(pair)
@@ -514,54 +518,54 @@ comptime INTERVAL = Signature(
 def interval(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
-    var at = width(args[2])
-    var start = fitting(args[0])
-    var stop = fitting(args[1])
+    var width = width_as_int32(args[2])
+    var start = Int64OrOverflow.from_python(args[0])
+    var stop = Int64OrOverflow.from_python(args[1])
     # Bounds that fit an Int64 make members that fit a UInt128.
     if start.fits() and stop.fits():
         if stop.value <= 0:
             return wrap(state, REJECT)
         var top = UInt128(0)
-        if at > 0:
-            top = UInt128.MAX >> UInt128(128 - min(at, 128))
+        if width > 0:
+            top = UInt128.MAX >> UInt128(128 - min(width, 128))
         var first = UInt128(max(start.value, 0))
         var last = min(UInt128(stop.value - 1), top)
         if first > last:
             return wrap(state, REJECT)
-        return narrow_interval(state, first, last, at)
+        return narrow_interval(state, first, last, width)
     var low = big_int(state[].ints, args[0])
     var high = big_int(state[].ints, args[1])
     if high[0] or not high[1]:
         return wrap(state, REJECT)
     var last = high[1] - BigUInt(1)
-    if last.bits() > Int(at):
-        last = BigUInt.mask(Int(at))
+    if last.bits() > Int(width):
+        last = BigUInt.mask(Int(width))
     var first = BigUInt() if low[0] else low[1].copy()
     if first > last:
         return wrap(state, REJECT)
-    if at <= NARROW_WIDTH:
+    if width <= NARROW_WIDTH:
         return narrow_interval(
             state,
             first.fitting_uint128().value(),
             last.fitting_uint128().value(),
-            at,
+            width,
         )
 
     def walk(
         mut arena: Arena,
-    ) raises Interrupted {imm first, imm last, var at} -> Id:
-        return build.interval[build.wide_bit](arena, first, last, at)
+    ) raises Interrupted {imm first, imm last, var width} -> Id:
+        return build.interval[build.wide_bit](arena, first, last, width)
 
     return wrap_result(state, walk)
 
 
 def narrow_interval(
-    state: StatePointer, first: UInt128, last: UInt128, at: Int32
+    state: StatePointer, first: UInt128, last: UInt128, width: Int32
 ) raises PyError -> PyObjectPtr:
     def walk(
         mut arena: Arena,
-    ) raises Interrupted {var first, var last, var at} -> Id:
-        return build.interval[build.narrow_bit](arena, first, last, at)
+    ) raises Interrupted {var first, var last, var width} -> Id:
+        return build.interval[build.narrow_bit](arena, first, last, width)
 
     return wrap_result(state, walk)
 
@@ -660,11 +664,11 @@ def read_row(state: StatePointer, o: PyObjectPtr) raises PyError -> Row:
                 PyTuple_Size(o),
             )
         )
-    var at = bit(PyTuple_GetItem(o, 0))
-    var lo = in_range(PyTuple_GetItem(o, 1), Int32.MAX)
-    var hi = in_range(PyTuple_GetItem(o, 2), Int32.MAX)
+    var bit = bit_as_int32(PyTuple_GetItem(o, 0))
+    var lo = int32_up_to(PyTuple_GetItem(o, 1), Int32.MAX)
+    var hi = int32_up_to(PyTuple_GetItem(o, 2), Int32.MAX)
     return Row(
-        at,
-        UInt32(lo.value()) if lo else UInt32.MAX,
-        UInt32(hi.value()) if hi else UInt32.MAX,
+        bit,
+        UInt32(lo.value()) if lo is not None else UInt32.MAX,
+        UInt32(hi.value()) if hi is not None else UInt32.MAX,
     )

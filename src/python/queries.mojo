@@ -7,7 +7,7 @@ from arena import ACCEPT, Arena, Id, Interrupted, NARROW_WIDTH
 from arena import build, compare, members, nodes
 from bigint import BigUInt
 
-from .args import Arguments, Signature, node, width
+from .args import Arguments, Signature, node_as_id, width_as_int32
 from .capi import Py_DecRef, PyBool_FromLong, PyLong_FromSsize_t, new_string
 from .errors import PyError, index_error, value_error
 from .ints import (
@@ -65,10 +65,10 @@ comptime COUNT = Signature("count", positional=["node"], keywords=["width"])
 
 
 def count(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    var id = node(state, args[0])
-    var at = checked_width(state, id, width(args[1]))
+    var id = node_as_id(state, args[0])
+    var width = checked_width(state, id, width_as_int32(args[1]))
     var arena = take_arena(state)
-    var total = member_count(arena[], id, at)
+    var total = member_count(arena[], id, width)
     give_back(state, arena)
     return int_from_count(state[].ints, total)
 
@@ -81,7 +81,7 @@ comptime NODE_COUNT = Signature(
 def node_count(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
-    var id = node(state, args[0])
+    var id = node_as_id(state, args[0])
     var lease = Lease(state)
     var found: Int
     try:
@@ -172,7 +172,7 @@ comptime ACCEPTS = Signature("accepts", positional=["node", "value"])
 
 
 def accepts(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    var id = node(state, args[0])
+    var id = node_as_id(state, args[0])
     var value = integer(state[].ints, args[1])
     var arena = take_arena(state)
     var answer = members.accepts[integer_bit](arena[], id, value)
@@ -208,12 +208,12 @@ comptime NTH = Signature(
 
 
 def nth(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    var id = node(state, args[0])
-    var at = width(args[2])
+    var id = node_as_id(state, args[0])
+    var width = width_as_int32(args[2])
     var index = integer(state[].ints, args[1])
-    at = checked_width(state, id, at)
+    width = checked_width(state, id, width)
     var arena = take_arena(state)
-    var member = member_at(arena[], id, at, index)
+    var member = member_at(arena[], id, width, index)
     give_back(state, arena)
     if not member:
         raise index_error(args[1])
@@ -239,11 +239,11 @@ comptime RANK = Signature(
 
 
 def rank(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    var id = node(state, args[0])
+    var id = node_as_id(state, args[0])
     var value = integer(state[].ints, args[1])
-    var at = checked_width(state, id, width(args[2]))
+    var width = checked_width(state, id, width_as_int32(args[2]))
     var arena = take_arena(state)
-    var below = members_below(arena[], id, at, value)
+    var below = members_below(arena[], id, width, value)
     give_back(state, arena)
     return int_from_count(state[].ints, below)
 
@@ -251,8 +251,8 @@ def rank(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
 def answered[
     walk: def(mut Arena, Id, Id) thin raises Interrupted -> Bool
 ](state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    var a = node(state, args[0])
-    var b = node(state, args[1])
+    var a = node_as_id(state, args[0])
+    var b = node_as_id(state, args[1])
     var lease = Lease(state)
     var answer: Bool
     try:
@@ -289,7 +289,7 @@ comptime PATH_COUNT = Signature(
 def path_count(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
-    var id = node(state, args[0])
+    var id = node_as_id(state, args[0])
     var lease = Lease(state)
     var paths: BigUInt
     try:

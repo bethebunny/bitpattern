@@ -11,7 +11,7 @@ from arena.paths import Paths
 from arena.walk import Narrow, Prefix, Run, Walk, Wide
 from bigint import BigUInt
 
-from .args import Arguments, Signature, node, width
+from .args import Arguments, Signature, node_as_id, width_as_int32
 from .capi import (
     Py_DecRef,
     Py_NewRef,
@@ -346,16 +346,16 @@ def walked[
 ](state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     """The batches chained into one iterator."""
     var root = args[0]
-    var id = node(state, root)
-    var at = checked_width(state, id, width(args[1]))
+    var id = node_as_id(state, root)
+    var width = checked_width(state, id, width_as_int32(args[1]))
     var chain = from_iterable(state)
     var batches = PyType_GenericAlloc(state[].batches_type, 0)
     if not batches:
         raise PyError()
     ref made = batches_of(batches)
     made.root = Py_NewRef(root)
-    Pointer(to=made.walker).unsafe_write(walker(id, at))
-    made.sizes = BatchSizes(at)
+    Pointer(to=made.walker).unsafe_write(walker(id, width))
+    made.sizes = BatchSizes(width)
     var chained = external_call[
         "PyObject_CallFunctionObjArgs", PyObjectPtr, num_fixed_args=1
     ](chain, batches, PyObjectPtr())

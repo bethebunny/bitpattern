@@ -113,27 +113,27 @@ struct Ints(Movable):
 
 
 @fieldwise_init
-struct Fitting(TrivialRegisterPassable):
+struct Int64OrOverflow(TrivialRegisterPassable):
     """An int read as an Int64: `value` if `overflow` is 0, else just its sign.
     """
 
     var value: Int64
     var overflow: c_int
 
+    @staticmethod
+    @always_inline
+    def from_python(o: PyObjectPtr) raises PyError -> Self:
+        """Without the cost of an OverflowError. Runs `__index__` for an int-like, and
+        passes on its errors (TypeError for a non-int)."""
+        var overflow = c_int(0)
+        var value = PyLong_AsLongLongAndOverflow(o, overflow)
+        if value == -1 and overflow == 0 and PyErr_Occurred():
+            raise PyError()
+        return Self(value, overflow)
+
     @always_inline
     def fits(self) -> Bool:
         return self.overflow == 0
-
-
-@always_inline
-def fitting(o: PyObjectPtr) raises PyError -> Fitting:
-    """Without the cost of an OverflowError. Runs `__index__` for an int-like, and
-    passes on its errors (TypeError for a non-int)."""
-    var overflow = c_int(0)
-    var value = PyLong_AsLongLongAndOverflow(o, overflow)
-    if value == -1 and overflow == 0 and PyErr_Occurred():
-        raise PyError()
-    return Fitting(value, overflow)
 
 
 def indexed(ints: Ints, o: PyObjectPtr) raises PyError -> PyObjectPtr:
