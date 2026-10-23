@@ -39,7 +39,7 @@ from .capi import (
     ob_type,
     text,
 )
-from .errors import PyError, value_error
+from .errors import PyError
 from .ints import Ints, c_function, int_from_big, int_from_u128
 from .queries import checked_width
 from .state import StatePointer, give_back, object_state, taken_arena
@@ -347,14 +347,7 @@ def walked[
     """The batches chained into one iterator."""
     var root = args[0]
     var id = node(state, root)
-    var at = width(state[].ints, args[1])
-    var arena = taken_arena(state)
-    try:
-        at = checked_width(arena[], id, at)
-    except outside:
-        give_back(state, arena)
-        raise value_error(String(outside))
-    give_back(state, arena)
+    var at = checked_width(state, id, width(state[].ints, args[1]))
     var chain = from_iterable(state)
     var batches = PyType_GenericAlloc(state[].batches_type, 0)
     if not batches:

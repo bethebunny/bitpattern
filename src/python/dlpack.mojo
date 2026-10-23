@@ -266,13 +266,9 @@ def written(
     state: StatePointer, id: Id, width: Int32, dtype: DataType, columns: Int
 ) raises PyError -> Words:
     """`DataType.columns` has checked the word size."""
+    _ = checked_width(state, id, width)
     var arena = taken_arena(state)
-    var members: Count
-    try:
-        members = member_count(arena[], id, checked_width(arena[], id, width))
-    except outside:
-        give_back(state, arena)
-        raise value_error(String(outside))
+    var members = member_count(arena[], id, width)
     var made = room(members, columns, Int(dtype.bits // 8))
     if not made:
         give_back(state, arena)

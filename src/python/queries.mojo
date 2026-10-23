@@ -60,25 +60,16 @@ def int_from_count(ints: Ints, count: Count) raises PyError -> PyObjectPtr:
     return int
 
 
-@fieldwise_init
-struct OutsideWidth(TrivialRegisterPassable, Writable):
-    """A node tests `bit`, which isn't below the set's `width`. A call raises it as a
-    ValueError once it gives back the arena, since making one can run Python."""
-
-    var bit: Int32
-    var width: Int32
-
-    def write_to(self, mut writer: Some[Writer]):
-        writer.write(
-            "node tests bit ", self.bit, ", outside width ", self.width
-        )
-
-
 def checked_width(
-    arena: Arena, id: Id, width: Int32
-) raises OutsideWidth -> Int32:
-    if not id.is_leaf() and arena.decision(id).bit >= width:
-        raise OutsideWidth(arena.decision(id).bit, width)
+    state: StatePointer, id: Id, width: Int32
+) raises PyError -> Int32:
+    var arena = taken_arena(state)
+    var bit = Int32(-1) if id.is_leaf() else arena[].decision(id).bit
+    give_back(state, arena)
+    if bit >= width:
+        raise value_error(
+            String("node tests bit ", bit, ", outside width ", width)
+        )
     return width
 
 
@@ -87,14 +78,9 @@ comptime COUNT = Signature("count", 2, 1, ["node", "width", "", "", ""])
 
 def count(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node(state, args[0])
-    var at = width(state[].ints, args[1])
+    var at = checked_width(state, id, width(state[].ints, args[1]))
     var arena = taken_arena(state)
-    var total: Count
-    try:
-        total = member_count(arena[], id, checked_width(arena[], id, at))
-    except outside:
-        give_back(state, arena)
-        raise value_error(String(outside))
+    var total = member_count(arena[], id, at)
     give_back(state, arena)
     return int_from_count(state[].ints, total)
 
@@ -229,13 +215,9 @@ def nth(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node(state, args[0])
     var at = width(state[].ints, args[2])
     var index = integer(state[].ints, args[1])
+    at = checked_width(state, id, at)
     var arena = taken_arena(state)
-    var member: Optional[Count]
-    try:
-        member = member_at(arena[], id, checked_width(arena[], id, at), index)
-    except outside:
-        give_back(state, arena)
-        raise value_error(String(outside))
+    var member = member_at(arena[], id, at, index)
     give_back(state, arena)
     if not member:
         raise index_error(args[1])
@@ -259,16 +241,9 @@ def rank(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     """How many members are below `value`."""
     var id = node(state, args[0])
     var value = integer(state[].ints, args[1])
-    var at = width(state[].ints, args[2])
+    var at = checked_width(state, id, width(state[].ints, args[2]))
     var arena = taken_arena(state)
-    var below: Count
-    try:
-        below = members_below(
-            arena[], id, checked_width(arena[], id, at), value
-        )
-    except outside:
-        give_back(state, arena)
-        raise value_error(String(outside))
+    var below = members_below(arena[], id, at, value)
     give_back(state, arena)
     return int_from_count(state[].ints, below)
 
