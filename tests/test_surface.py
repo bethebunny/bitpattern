@@ -2,6 +2,7 @@
 
 import doctest
 import importlib
+import inspect
 import random
 from pathlib import Path
 
@@ -52,6 +53,39 @@ def test_codecs_arent_top_level(name):
 
 def test_engine_names_live_in_bdd():
     assert bdd.__all__ == ["BDD"]
+
+
+@pytest.mark.parametrize(
+    "function, signature",
+    [
+        (bdd.accepts, "(node, value)"),
+        (bdd.count, "(node, *, width)"),
+        (bdd.nth, "(node, n, *, width)"),
+        (bdd.rank, "(node, value, *, width)"),
+        (bdd.members, "(node, *, width)"),
+        (bdd.blocks, "(node, *, width)"),
+        (bdd.paths, "(node, *, width)"),
+        (bdd.tensor, "(node, *, width, code, bits, version)"),
+        (bdd.lshift, "(node, by)"),
+        (bdd.freed_between, "(node, *, low_bit, high_bit)"),
+        (bdd.subset, "(a, b)"),
+        (bdd.disjoint, "(a, b)"),
+        (bdd.narrowed, "(node, *, width)"),
+        (bdd.node_count, "(node)"),
+        (bdd.path_count, "(node)"),
+        (bdd.count_repr, "(total)"),
+        (bdd.diagram, "(bits)"),
+        (bdd.exactly_these, "(values, *, width)"),
+        (bdd.interval, "(start, stop, *, width)"),
+        (bdd._rebuilt, "(rows)"),
+    ],
+)
+def test_engine_signatures(function, signature):
+    assert str(inspect.signature(function)) == signature
+
+
+def test_tensor_has_a_doc():
+    assert bdd.tensor.__doc__
 
 
 def test_version():
