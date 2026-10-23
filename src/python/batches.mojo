@@ -89,11 +89,11 @@ struct Runs[V: Prefix](Movable):
         var listed = 0
         while True:
             var run: Run[Self.V]
-            if self.held:
+            if self.held is not None:
                 run = self.held.take()
             else:
                 var next = self.walk.next_run(arena)
-                if not next:
+                if next is None:
                     break
                 run = next.take()
             var long = not short(run.free, size)
@@ -226,7 +226,7 @@ def next_blocks[
     var runs = List[Run[V]]()
     while len(runs) < size:
         var run = walk.next_run(arena[])
-        if not run:
+        if run is None:
             break
         runs.append(run.take())
     give_back(state, arena)
@@ -337,10 +337,9 @@ def from_iterable(state: StatePointer) raises PyError -> PyObjectPtr:
     return method
 
 
-def walked[
+def chained_batches[
     walker: def(Id, Int32) thin -> Walker
 ](state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    """The batches chained into one iterator."""
     var root = args[0]
     var id = node_as_id(state, root)
     var width = checked_width(state, id, width_as_int32(args[1]))
@@ -363,7 +362,7 @@ comptime MEMBERS = Signature("members", positional=["node"], keywords=["width"])
 
 
 def members(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    return walked[members_walker](state, args)
+    return chained_batches[members_walker](state, args)
 
 
 comptime BLOCKS = Signature(
@@ -378,7 +377,7 @@ comptime BLOCKS = Signature(
 
 
 def blocks(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    return walked[blocks_walker](state, args)
+    return chained_batches[blocks_walker](state, args)
 
 
 comptime PATHS = Signature(
@@ -393,7 +392,7 @@ comptime PATHS = Signature(
 
 
 def paths(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    return walked[paths_walker](state, args)
+    return chained_batches[paths_walker](state, args)
 
 
 def batches_type(module: PyObjectPtr) raises PyError -> PyObjectPtr:

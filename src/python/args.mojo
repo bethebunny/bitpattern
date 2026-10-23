@@ -30,7 +30,7 @@ from .capi import (
 )
 from .errors import PyError, out_of_range, type_error
 from .ints import Int64OrOverflow
-from .objects import node_of
+from .objects import id_of
 from .state import StatePointer, module_state
 
 
@@ -231,7 +231,7 @@ def missing[signature: Signature](arguments: Arguments) -> PyError:
 def node_as_id(state: StatePointer, node: PyObjectPtr) raises PyError -> Id:
     if ob_type(node) != state[].bdd_type:
         raise not_an_instance(state, node, "BDD")
-    return node_of(node)
+    return id_of(node)
 
 
 def not_an_instance(

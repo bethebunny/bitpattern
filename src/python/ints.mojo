@@ -302,7 +302,7 @@ def int_from_u128(ints: Ints, value: UInt128) -> PyObjectPtr:
 
 def int_from_big(ints: Ints, value: BigUInt) -> PyObjectPtr:
     var narrow = value.uint128_or_none()
-    if narrow:
+    if narrow is not None:
         return int_from_u128(ints, narrow.value())
     if ints.native:
         return ints.from_unsigned_native_bytes(value.limbs, LITTLE_ENDIAN)
@@ -313,7 +313,7 @@ comptime WRITABLE_BITS = 14_284
 """Ints of up to this many bits fit Python's limit of 4,300 digits."""
 
 
-def count_repr(ints: Ints, total: PyObjectPtr) raises PyError -> String:
+def repr_of_count(ints: Ints, total: PyObjectPtr) raises PyError -> String:
     """A count (a non-negative int) as reprs write it:
     - `2**k` for powers of two from `2**10`
     - `~2**k` for ints too long to write out

@@ -236,10 +236,10 @@ def capsule[
 def room(members: Count, *, columns: Int, size: Int) -> Optional[Words]:
     """None if the words don't fit in memory."""
     var rows = -1
-    if members.wide:
-        var fits = members.wide.value().uint64_or_none()
-        if fits and fits.value() <= UInt64(Int.MAX):
-            rows = Int(fits.value())
+    if members.wide is not None:
+        var small = members.wide.value().uint64_or_none()
+        if small is not None and small.value() <= UInt64(Int.MAX):
+            rows = Int(small.value())
     elif members.narrow <= UInt128(Int.MAX):
         rows = Int(members.narrow)
     # The bytes, and up to 255 more to align them, must fit an Int.
@@ -250,7 +250,7 @@ def room(members: Count, *, columns: Int, size: Int) -> Optional[Words]:
         var data = external_call["aligned_alloc", Optional[Bytes]](
             256, ceildiv(rows * columns * size, 256) * 256
         )
-        if data:
+        if data is not None:
             return Words(Int(data.unsafe_value()), rows * columns)
     return None
 
@@ -275,7 +275,7 @@ def fill[
         write_rows[Wide](arena, id, width, columns, words.slots[word]())
 
 
-def written(
+def member_words(
     state: StatePointer, id: Id, width: Int32, dtype: DataType, columns: Int
 ) raises PyError -> Words:
     """`DataType.columns` has checked the word size."""
@@ -283,13 +283,15 @@ def written(
     var arena = take_arena(state)
     var members = member_count(arena[], id, width)
     give_back(state, arena)
-    var made = room(members, columns=columns, size=Int(dtype.bits // 8))
-    if not made:
+    var words_or_none = room(
+        members, columns=columns, size=Int(dtype.bits // 8)
+    )
+    if words_or_none is None:
         var total = int_from_count(state[].ints, members)
         var message = String(str_or_size(total), " members don't fit in memory")
         Py_DecRef(total)
         raise error(pointer_symbol("PyExc_MemoryError"), message)
-    var words = made.take()
+    var words = words_or_none.take()
     var sign_shift: UInt64 = 0
     if dtype.code == INT:
         sign_shift = UInt64(64 - max(width, 1))
@@ -321,8 +323,8 @@ def overflow_error(message: String) -> PyError:
     return error(pointer_symbol("PyExc_OverflowError"), message)
 
 
-def unsigned(o: PyObjectPtr, most: Int64) raises PyError -> Int:
-    """An int in `[0, most]`."""
+def int_up_to(o: PyObjectPtr, most: Int64) raises PyError -> Int:
+    """OverflowError outside `[0, most]`."""
     var int_or_overflow = Int64OrOverflow.from_python(o)
     if (
         int_or_overflow.fits()
@@ -348,8 +350,8 @@ def version_of(
                 "expected tuple of length 2, but got tuple of length ", length
             )
         )
-    var major = unsigned(PyTuple_GetItem(o, 0), Int64(UInt32.MAX))
-    var minor = unsigned(PyTuple_GetItem(o, 1), Int64(UInt32.MAX))
+    var major = int_up_to(PyTuple_GetItem(o, 0), Int64(UInt32.MAX))
+    var minor = int_up_to(PyTuple_GetItem(o, 1), Int64(UInt32.MAX))
     return Version(UInt32(major), UInt32(minor))
 
 
@@ -368,12 +370,12 @@ comptime TENSOR = Signature(
 def tensor(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node_as_id(state, args[0])
     var width = width_as_int32(args[1])
-    var code = unsigned(args[2], Int64(UInt8.MAX))
-    var bits = unsigned(args[3], Int64(UInt8.MAX))
+    var code = int_up_to(args[2], Int64(UInt8.MAX))
+    var bits = int_up_to(args[3], Int64(UInt8.MAX))
     var version = version_of(state, args[4])
     var dtype = DataType(UInt8(code), UInt8(bits), 1)
     var columns = dtype.columns(width)
-    var words = written(state, id, width, dtype, columns)
-    if version:
+    var words = member_words(state, id, width, dtype, columns)
+    if version is not None:
         return capsule[Versioned](words^, dtype, columns, version.value())
     return capsule[Legacy](words^, dtype, columns, Version(0, 0))

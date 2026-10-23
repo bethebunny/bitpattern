@@ -35,7 +35,7 @@ struct BddObject:
 
 
 @always_inline
-def node_of(o: PyObjectPtr) -> Id:
+def id_of(o: PyObjectPtr) -> Id:
     return o.bitcast[BddObject]().unsafe_value()[].id
 
 
@@ -61,7 +61,7 @@ def wrap(state: StatePointer, id: Id) raises PyError -> PyObjectPtr:
 def forget(state: StatePointer, o: PyObjectPtr):
     """Clears the entry of a dying object. A weakref callback can then make the node a
     new object, which the entry names instead."""
-    var index = node_of(o).index()
+    var index = id_of(o).index()
     if (
         index < len(state[].wrappers)
         and state[].wrappers.unsafe_get(index) == o

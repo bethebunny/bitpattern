@@ -10,7 +10,7 @@ from arena import apply, nodes
 from bigint import BigUInt
 
 from .args import Signature, bit_as_int32, node_as_id, parsed
-from .builders import reduced
+from .builders import reduction
 from .capi import (
     GetSetDef,
     MemberDef,
@@ -55,8 +55,8 @@ from .capi import (
     text,
 )
 from .errors import PyError, value_error
-from .ints import c_function, count_repr, int_from_big
-from .objects import BddObject, Call, forget, node_of, wrap, wrap_result
+from .ints import c_function, int_from_big, repr_of_count
+from .objects import BddObject, Call, forget, id_of, wrap, wrap_result
 from .queries import int_from_count, member_count
 from .state import (
     Lease,
@@ -139,11 +139,11 @@ def bdd_dealloc(o: PyObjectPtr) abi("C"):
 
 def bdd_hash(o: PyObjectPtr) abi("C") -> Int:
     # A node's object can come and go while a parent keeps the node, so hash the node.
-    return node_of(o).index()
+    return id_of(o).index()
 
 
 def bdd_bool(o: PyObjectPtr) abi("C") -> c_int:
-    return c_int(Int(node_of(o) != REJECT))
+    return c_int(Int(id_of(o) != REJECT))
 
 
 def bdd_richcompare(
@@ -152,12 +152,12 @@ def bdd_richcompare(
     var state = object_state(a)
     if ob_type(b) != ob_type(a) or (op != Py_EQ and op != Py_NE):
         return Py_NewRef(state[].not_implemented)
-    var equal = node_of(a) == node_of(b)
+    var equal = id_of(a) == id_of(b)
     return PyBool_FromLong(Int(equal == (op == Py_EQ)))
 
 
 def bdd_invert(o: PyObjectPtr) abi("C") -> PyObjectPtr:
-    var id = node_of(o)
+    var id = id_of(o)
 
     def negated(mut arena: Arena) raises Interrupted {var id} -> Id:
         return apply.complement(arena, id)
@@ -176,8 +176,8 @@ def binary[
     # BDD is final, so if the types differ one isn't a BDD.
     if ob_type(b) != type:
         return Py_NewRef(object_symbol("_Py_NotImplementedStruct"))
-    var x = node_of(a)
-    var y = node_of(b)
+    var x = id_of(a)
+    var y = id_of(b)
 
     def walk(mut arena: Arena) raises Interrupted {var x, var y} -> Id:
         return operation(arena, x, y)
@@ -205,7 +205,7 @@ def bdd_xor(a: PyObjectPtr, b: PyObjectPtr) abi("C") -> PyObjectPtr:
 
 
 def bdd_bit(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
-    var id = node_of(o)
+    var id = id_of(o)
     if id.is_leaf():
         return PyLong_FromLongLong(-1)
     var state = object_state(o)
@@ -221,7 +221,7 @@ def bdd_bit(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
 @always_inline
 def branch[hi: Bool](o: PyObjectPtr) -> PyObjectPtr:
     """A leaf's branches are itself."""
-    var id = node_of(o)
+    var id = id_of(o)
     if id.is_leaf():
         return Py_NewRef(o)
     var state = object_state(o)
@@ -243,7 +243,7 @@ def bdd_right(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
 
 
 def bdd_size(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
-    var id = node_of(o)
+    var id = id_of(o)
     var state = object_state(o)
     try:
         var arena = take_arena(state)
@@ -256,12 +256,12 @@ def bdd_size(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
 
 
 def bdd_leaf(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
-    return PyBool_FromLong(Int(node_of(o).is_leaf()))
+    return PyBool_FromLong(Int(id_of(o).is_leaf()))
 
 
 def bdd_repr(o: PyObjectPtr) abi("C") -> PyObjectPtr:
     # A Ctrl-C handler can drop `o` while the walk is paused, so read the id first.
-    var id = node_of(o)
+    var id = id_of(o)
     var state = object_state(o)
     try:
         var written: String
@@ -284,7 +284,7 @@ def bdd_repr(o: PyObjectPtr) abi("C") -> PyObjectPtr:
                 raise PyError()
             var counted: String
             try:
-                counted = count_repr(state[].ints, total)
+                counted = repr_of_count(state[].ints, total)
             except e:
                 Py_DecRef(total)
                 raise e
@@ -310,7 +310,7 @@ def bdd_copy(o: PyObjectPtr, unused: PyObjectPtr) abi("C") -> PyObjectPtr:
 
 def bdd_reduce(o: PyObjectPtr, unused: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
-        return reduced(object_state(o), o)
+        return reduction(object_state(o), o)
     except:
         return PyObjectPtr()
 

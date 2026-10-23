@@ -16,10 +16,10 @@ from .capi import (
 )
 from .errors import PyError, index_error, value_error
 from .ints import (
-    count_repr as written_count,
     indexed,
     int_from_big,
     int_from_u128,
+    repr_of_count,
 )
 from .ints import Ints, Signed, i128_of
 from .state import Lease, StatePointer, give_back, take_arena
@@ -47,7 +47,7 @@ def member_count(arena: Arena, id: Id, width: Int32) -> Count:
 def int_from_count(ints: Ints, count: Count) raises PyError -> PyObjectPtr:
     var int = int_from_big(
         ints, count.wide.value()
-    ) if count.wide else int_from_u128(ints, count.narrow)
+    ) if count.wide is not None else int_from_u128(ints, count.narrow)
     if not int:
         raise PyError()
     return int
@@ -117,7 +117,7 @@ def count_repr(
     try:
         if Signed.from_int(state[].ints, total).negative:
             raise value_error("counts aren't negative")
-        written = written_count(state[].ints, total)
+        written = repr_of_count(state[].ints, total)
     except e:
         Py_DecRef(total)
         raise e
@@ -135,42 +135,45 @@ struct Integer(Movable):
     var wide: Optional[BigUInt]
     """The bits, if they don't fit a UInt128."""
 
+    @staticmethod
+    def from_python(ints: Ints, o: PyObjectPtr) raises PyError -> Self:
+        """Runs `o.__index__` at most once, so its errors come out as they are.
+        """
+        var int = indexed(ints, o)
+        var small = i128_of(ints, int)
+        if small is not None:
+            Py_DecRef(int)
+            var value = small.value()
+            return Self(
+                value < 0, UInt128(~value if value < 0 else value), None
+            )
+        var signed = Signed.from_int(ints, int)
+        Py_DecRef(int)
+        var bits = signed.magnitude.copy()
+        if signed.negative:
+            # A negative int's complement is its magnitude less one.
+            bits -= BigUInt(1)
+        var narrow = bits.uint128_or_none()
+        if narrow is not None:
+            return Self(signed.negative, narrow.value(), None)
+        return Self(signed.negative, 0, bits^)
+
     def bit_length(self) -> Int:
-        if self.wide:
+        if self.wide is not None:
             return self.wide.value().bits()
         return 128 - Int(count_leading_zeros(self.narrow))
 
     def widened(self) -> BigUInt:
         """The bits in a BigUInt."""
-        if self.wide:
+        if self.wide is not None:
             return self.wide.value().copy()
         return BigUInt(self.narrow)
-
-
-def integer(ints: Ints, o: PyObjectPtr) raises PyError -> Integer:
-    """Runs `o.__index__` at most once, so its errors come out as they are."""
-    var int = indexed(ints, o)
-    var small = i128_of(ints, int)
-    if small:
-        Py_DecRef(int)
-        var value = small.value()
-        return Integer(value < 0, UInt128(~value if value < 0 else value), None)
-    var signed = Signed.from_int(ints, int)
-    Py_DecRef(int)
-    # A negative int's complement is its magnitude less one.
-    var bits = signed.magnitude.copy()
-    if signed.negative:
-        bits -= BigUInt(1)
-    var narrow = bits.uint128_or_none()
-    if narrow:
-        return Integer(signed.negative, narrow.value(), None)
-    return Integer(signed.negative, 0, bits^)
 
 
 def integer_bit(value: Integer, bit: Int32) -> Bool:
     """As Python reads ints: two's complement, so a negative int's bits are its
     complement's flipped."""
-    if value.wide:
+    if value.wide is not None:
         return build.wide_bit(value.wide.value(), bit) != value.negative
     return build.narrow_bit(value.narrow, bit) != value.negative
 
@@ -180,7 +183,7 @@ comptime ACCEPTS = Signature("accepts", positional=["node", "value"])
 
 def accepts(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node_as_id(state, args[0])
-    var value = integer(state[].ints, args[1])
+    var value = Integer.from_python(state[].ints, args[1])
     var arena = take_arena(state)
     var answer = members.accepts[integer_bit](arena[], id, value)
     give_back(state, arena)
@@ -191,7 +194,7 @@ def member_at(
     arena: Arena, id: Id, width: Int32, index: Integer
 ) -> Optional[Count]:
     """None if `index` is out of range. `~i` is the `i`th from the end."""
-    if not index.wide and count_fits_u128(id, width):
+    if index.wide is None and count_fits_u128(id, width):
         var total = arena.count_narrow(id, width)
         if index.narrow >= total:
             return None
@@ -217,12 +220,12 @@ comptime NTH = Signature(
 def nth(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node_as_id(state, args[0])
     var width = width_as_int32(args[2])
-    var index = integer(state[].ints, args[1])
+    var index = Integer.from_python(state[].ints, args[1])
     width = checked_width(state, id, width)
     var arena = take_arena(state)
     var member = member_at(arena[], id, width, index)
     give_back(state, arena)
-    if not member:
+    if member is None:
         raise index_error(args[1])
     return int_from_count(state[].ints, member.value())
 
@@ -247,7 +250,7 @@ comptime RANK = Signature(
 
 def rank(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node_as_id(state, args[0])
-    var value = integer(state[].ints, args[1])
+    var value = Integer.from_python(state[].ints, args[1])
     var width = checked_width(state, id, width_as_int32(args[2]))
     var arena = take_arena(state)
     var below = members_below(arena[], id, width, value)
@@ -255,7 +258,7 @@ def rank(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     return int_from_count(state[].ints, below)
 
 
-def answered[
+def bool_of[
     walk: def(mut Arena, Id, Id) thin raises Interrupted -> Bool
 ](state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var a = node_as_id(state, args[0])
@@ -274,7 +277,7 @@ comptime SUBSET = Signature("subset", positional=["a", "b"])
 
 
 def subset(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    return answered[compare.subset](state, args)
+    return bool_of[compare.subset](state, args)
 
 
 comptime DISJOINT = Signature("disjoint", positional=["a", "b"])
@@ -283,7 +286,7 @@ comptime DISJOINT = Signature("disjoint", positional=["a", "b"])
 def disjoint(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
-    return answered[compare.disjoint](state, args)
+    return bool_of[compare.disjoint](state, args)
 
 
 comptime PATH_COUNT = Signature(

@@ -257,7 +257,7 @@ def match_args() -> PyObjectPtr:
 
 
 def module_traverse(
-    module: PyObjectPtr, visit: Int, arg: Int
+    module: PyObjectPtr, visit_address: Int, arg: Int
 ) abi("C") -> c_int:
     var slot = Pointer[Int, MutUntrackedOrigin](
         unsafe_from_address=PyModule_GetState(module)
@@ -265,12 +265,12 @@ def module_traverse(
     if slot[] == 0:
         return 0
     var state = StatePointer(unsafe_from_address=slot[])
-    var visited = c_function[def(PyObjectPtr, Int) thin abi("C") -> c_int](
-        visit
+    var visit = c_function[def(PyObjectPtr, Int) thin abi("C") -> c_int](
+        visit_address
     )
     for o in [state[].bdd_type, state[].batches_type, state[].from_iterable]:
         if o:
-            var failed = visited(o, arg)
+            var failed = visit(o, arg)
             if failed:
                 return failed
     return 0

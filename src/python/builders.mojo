@@ -64,14 +64,16 @@ from .capi import (
 )
 from .errors import PyError, type_error, value_error
 from .ints import Int64OrOverflow, Ints, Signed, indexed, u128_of
-from .objects import Call, node_of, wrap, wrap_result
+from .objects import Call, id_of, wrap, wrap_result
 from .state import Lease, StatePointer, give_back, take_arena
 
 
-def reduced(state: StatePointer, o: PyObjectPtr) raises PyError -> PyObjectPtr:
+def reduction(
+    state: StatePointer, o: PyObjectPtr
+) raises PyError -> PyObjectPtr:
     """BDD.__reduce__: leaves pickle by name, and other nodes as flat rows, since
     nesting would recurse once per bit."""
-    var id = node_of(o)
+    var id = id_of(o)
     if id.is_leaf():
         var name: PyObjectPtr
         if id == ACCEPT:
@@ -282,7 +284,7 @@ def exactly_these(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
     var least_width = least_width_as_int32(args[1])
-    var members = Members.read(state[].ints, args[0])
+    var members = Members.from_python(state[].ints, args[0])
     var bits = members.bits()
     if bits > Int(MAX_WIDTH):
         raise value_error(
@@ -293,7 +295,7 @@ def exactly_these(
     def walk(
         mut arena: Arena,
     ) raises Interrupted {imm members, var width} -> Id:
-        if members.wide:
+        if members.wide is not None:
             return build.exactly_these[build.wide_bit](
                 arena, members.wide.value(), width
             )
@@ -420,7 +422,7 @@ struct Members(Movable):
     var wide: Optional[List[BigUInt]]
 
     @staticmethod
-    def read(ints: Ints, values: PyObjectPtr) raises PyError -> Members:
+    def from_python(ints: Ints, values: PyObjectPtr) raises PyError -> Members:
         var iterator = PyObject_GetIter(values)
         if not iterator:
             raise PyError()
@@ -439,8 +441,8 @@ struct Members(Movable):
                 Py_DecRef(iterator)
                 raise e
             Py_DecRef(item)
-            var small = u128_of(ints, int) if not wide else None
-            if small:
+            var small = u128_of(ints, int) if wide is None else None
+            if small is not None:
                 narrow.push(small.value())
                 Py_DecRef(int)
                 continue
@@ -456,7 +458,7 @@ struct Members(Movable):
                 Py_DecRef(iterator)
                 raise error
             Py_DecRef(int)
-            if not wide:
+            if wide is None:
                 var promoted = List[BigUInt]()
                 for value in narrow^.sorted():
                     promoted.append(BigUInt(value))
@@ -466,7 +468,7 @@ struct Members(Movable):
         Py_DecRef(iterator)
         if PyErr_Occurred():
             raise PyError()
-        if wide:
+        if wide is not None:
             return Members(List[UInt128](), wide.take().sorted())
         return Members(narrow^.sorted(), None)
 
@@ -477,7 +479,7 @@ struct Members(Movable):
         self.wide = wide^
 
     def bits(self) -> Int:
-        if self.wide:
+        if self.wide is not None:
             ref values = self.wide.value()
             return values[len(values) - 1].bits() if values else 0
         if not self.narrow:
@@ -549,7 +551,7 @@ comptime REBUILT = Signature("_rebuilt", positional=["rows"])
 
 
 def rebuilt(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
-    var given = read_rows(state, args[0])
+    var given = rows_of(state, args[0])
     if not given or not formed(given):
         raise value_error("rows don't make a diagram")
     with Call(state):
@@ -574,7 +576,7 @@ def formed(rows: List[Row]) -> Bool:
     return True
 
 
-def read_rows(state: StatePointer, o: PyObjectPtr) raises PyError -> List[Row]:
+def rows_of(state: StatePointer, o: PyObjectPtr) raises PyError -> List[Row]:
     """A sequence of `(bit, lo, hi)` tuples."""
     var flags = PyType_GetFlags(ob_type(o))
     if flags & Py_TPFLAGS_UNICODE_SUBCLASS:
@@ -591,7 +593,7 @@ def read_rows(state: StatePointer, o: PyObjectPtr) raises PyError -> List[Row]:
         if not item:
             break
         try:
-            rows.append(read_row(state, item))
+            rows.append(row_of(state, item))
         except e:
             Py_DecRef(item)
             Py_DecRef(iterator)
@@ -619,7 +621,7 @@ def is_sequence(o: PyObjectPtr) raises PyError -> Bool:
     return found == 1
 
 
-def read_row(state: StatePointer, o: PyObjectPtr) raises PyError -> Row:
+def row_of(state: StatePointer, o: PyObjectPtr) raises PyError -> Row:
     """A branch out of range reads as UInt32.MAX, which `formed` rejects."""
     if PyType_GetFlags(ob_type(o)) & Py_TPFLAGS_TUPLE_SUBCLASS == 0:
         raise not_an_instance(state, o, "tuple")
