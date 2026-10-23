@@ -1,7 +1,7 @@
 """Arguments. Reading one can run Python (eg. `__index__`), so calls read their
 arguments before taking the arena."""
 
-from std.ffi import c_int, external_call
+from std.ffi import c_int
 from std.memory import unsafe_memcpy
 from std.memory.alloc import unsafe_alloc
 from std.python._cpython import PyObjectPtr
@@ -18,9 +18,11 @@ from .capi import (
     PyErr_Clear,
     PyLong_AsLongLongAndOverflow,
     PyNumber_Index,
+    PyObject_CallMethod,
     PyObject_Str,
     PyTuple_GetItem,
     PyTuple_Size,
+    PyType_GetQualName,
     PyUnicode_AsUTF8AndSize,
     PyUnicode_CompareWithASCIIString,
     address,
@@ -241,7 +243,7 @@ def not_an_instance(
     instance of 'BDD'")."""
     if o == state[].none:
         return type_error(String("'None' is not an instance of '", type, "'"))
-    var name = external_call["PyType_GetQualName", PyObjectPtr](ob_type(o))
+    var name = PyType_GetQualName(ob_type(o))
     var written = String("?")
     if name:
         written = utf8(name)
@@ -264,9 +266,7 @@ def str_or_size(o: PyObjectPtr) -> String:
     var int = PyNumber_Index(o)
     var bit_length = PyObjectPtr()
     if int:
-        bit_length = external_call[
-            "PyObject_CallMethod", PyObjectPtr, num_fixed_args=3
-        ](int, cstr("bit_length"), cstr(""))
+        bit_length = PyObject_CallMethod(int, cstr("bit_length"), cstr(""))
         Py_DecRef(int)
     if not bit_length:
         PyErr_Clear()

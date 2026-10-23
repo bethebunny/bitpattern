@@ -2,14 +2,14 @@
 
 `external_call` binds each name when Python loads the module, as for any C extension, so
 only functions in 3.11's stable ABI are called that way. Data symbols and other functions
-are looked up with `symbol` at init.
+are looked up with `symbol`.
 
 Pointers in the structs are plain Ints (addresses), which C reads the same way. Memory
 passed to a call is a `Buffer`, never an Int: the compiler can't see C read or write
 through an Int, so it may not store a value first, or may destroy it early.
 """
 
-from std.ffi import c_int, external_call
+from std.ffi import c_int, c_uint, external_call
 from std.python._cpython import PyObjectPtr, _fn_ptr_as_opaque
 
 
@@ -38,7 +38,14 @@ comptime Py_mod_exec = 2
 comptime Py_mod_multiple_interpreters = 3
 comptime Py_MOD_PER_INTERPRETER_GIL_SUPPORTED = 2
 
+# Type flags (Include/object.h), as type specs hold them.
 comptime Py_TPFLAGS_DEFAULT: UInt32 = 1 << 18  # Py_TPFLAGS_HAVE_VERSION_TAG
+comptime Py_TPFLAGS_DISALLOW_INSTANTIATION: UInt32 = 1 << 7
+
+# As PyType_GetFlags returns them.
+comptime Py_TPFLAGS_LIST_SUBCLASS: UInt64 = 1 << 25
+comptime Py_TPFLAGS_TUPLE_SUBCLASS: UInt64 = 1 << 26
+comptime Py_TPFLAGS_UNICODE_SUBCLASS: UInt64 = 1 << 28
 
 comptime METH_KEYWORDS: c_int = 0x02
 comptime METH_NOARGS: c_int = 0x04
@@ -327,6 +334,24 @@ def PyTuple_SetItem(o: PyObjectPtr, index: Int, item: PyObjectPtr) -> c_int:
 
 
 @always_inline
+def Py_BuildValue(
+    format: Buffer, first: c_int, second: c_uint, third: c_uint
+) -> PyObjectPtr:
+    return external_call["Py_BuildValue", PyObjectPtr, num_fixed_args=1](
+        format, first, second, third
+    )
+
+
+@always_inline
+def Py_BuildValue(
+    format: Buffer, first: PyObjectPtr, second: PyObjectPtr
+) -> PyObjectPtr:
+    return external_call["Py_BuildValue", PyObjectPtr, num_fixed_args=1](
+        format, first, second
+    )
+
+
+@always_inline
 def PyList_New(size: Int) -> PyObjectPtr:
     return external_call["PyList_New", PyObjectPtr](size)
 
@@ -388,8 +413,55 @@ def PyObject_CallObject(
 
 
 @always_inline
+def PyObject_CallFunction(
+    callable: PyObjectPtr, format: Buffer, first: c_int, second: PyObjectPtr
+) -> PyObjectPtr:
+    return external_call[
+        "PyObject_CallFunction", PyObjectPtr, num_fixed_args=2
+    ](callable, format, first, second)
+
+
+@always_inline
+def PyObject_CallFunctionObjArgs(
+    callable: PyObjectPtr, arg: PyObjectPtr
+) -> PyObjectPtr:
+    return external_call[
+        "PyObject_CallFunctionObjArgs", PyObjectPtr, num_fixed_args=1
+    ](callable, arg, PyObjectPtr())
+
+
+@always_inline
+def PyObject_CallMethod(
+    o: PyObjectPtr, name: Buffer, format: Buffer
+) -> PyObjectPtr:
+    return external_call["PyObject_CallMethod", PyObjectPtr, num_fixed_args=3](
+        o, name, format
+    )
+
+
+@always_inline
+def PyObject_CallMethod(
+    o: PyObjectPtr, name: Buffer, format: Buffer, arg: c_int
+) -> PyObjectPtr:
+    return external_call["PyObject_CallMethod", PyObjectPtr, num_fixed_args=3](
+        o, name, format, arg
+    )
+
+
+@always_inline
+def PyEval_GetFrame() -> PyObjectPtr:
+    """Borrowed."""
+    return external_call["PyEval_GetFrame", PyObjectPtr]()
+
+
+@always_inline
 def PyCallable_Check(o: PyObjectPtr) -> c_int:
     return external_call["PyCallable_Check", c_int](o)
+
+
+@always_inline
+def PyObject_IsInstance(o: PyObjectPtr, type: PyObjectPtr) -> c_int:
+    return external_call["PyObject_IsInstance", c_int](o, type)
 
 
 @always_inline
@@ -424,12 +496,23 @@ def PyType_GetFlags(type: PyObjectPtr) -> UInt64:
 
 
 @always_inline
+def PyType_GetQualName(type: PyObjectPtr) -> PyObjectPtr:
+    return external_call["PyType_GetQualName", PyObjectPtr](type)
+
+
+@always_inline
 def PyType_FromModuleAndSpec(
     module: PyObjectPtr, spec: Int, bases: PyObjectPtr
 ) -> PyObjectPtr:
     return external_call["PyType_FromModuleAndSpec", PyObjectPtr](
         module, spec, bases
     )
+
+
+@always_inline
+def PyType_GetModule(type: PyObjectPtr) -> PyObjectPtr:
+    """Borrowed."""
+    return external_call["PyType_GetModule", PyObjectPtr](type)
 
 
 @always_inline
@@ -450,3 +533,25 @@ def PyImport_ImportModule(name: Buffer) -> PyObjectPtr:
 @always_inline
 def PyModuleDef_Init(definition: Int) -> PyObjectPtr:
     return external_call["PyModuleDef_Init", PyObjectPtr](definition)
+
+
+# Capsules.
+
+
+@always_inline
+def PyCapsule_New(
+    pointer: Buffer, name: Buffer, destructor: Int
+) -> PyObjectPtr:
+    return external_call["PyCapsule_New", PyObjectPtr](
+        pointer, name, destructor
+    )
+
+
+@always_inline
+def PyCapsule_GetPointer(capsule: PyObjectPtr, name: Buffer) -> Int:
+    return external_call["PyCapsule_GetPointer", Int](capsule, name)
+
+
+@always_inline
+def PyCapsule_IsValid(capsule: PyObjectPtr, name: Buffer) -> c_int:
+    return external_call["PyCapsule_IsValid", c_int](capsule, name)

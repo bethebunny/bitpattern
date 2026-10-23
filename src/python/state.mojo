@@ -5,7 +5,7 @@ also gives each interpreter that imports the module an arena of its own. The mod
 requires the GIL, which keeps every call into it on one thread at a time.
 """
 
-from std.ffi import c_int, external_call
+from std.ffi import c_int
 from std.memory.alloc import unsafe_alloc
 from std.python._cpython import PyObjectPtr
 
@@ -17,8 +17,11 @@ from .capi import (
     Py_DecRef,
     PyCallable_Check,
     PyErr_CheckSignals,
+    PyEval_GetFrame,
     PyImport_ImportModule,
     PyModule_GetState,
+    PyObject_CallFunction,
+    PyObject_CallMethod,
     PyOS_InterruptOccurred,
     PyType_GetModuleState,
     cstr,
@@ -153,22 +156,17 @@ def handle_sigint(state: StatePointer) -> Bool:
     var signal = PyImport_ImportModule(cstr("signal"))
     if not signal:
         return False
-    var handler = external_call[
-        "PyObject_CallMethod", PyObjectPtr, num_fixed_args=3
-    ](signal, "getsignal".ptr(), "i".ptr(), c_int(2))
+    var handler = PyObject_CallMethod(
+        signal, cstr("getsignal"), cstr("i"), c_int(2)
+    )
     Py_DecRef(signal)
     if not handler:
         return False
     if PyCallable_Check(handler) != 0:
-        # The frame the signal came in, as Python passes it. Borrowed.
-        var frame = external_call["PyEval_GetFrame", PyObjectPtr]()
-        var result = external_call[
-            "PyObject_CallFunction", PyObjectPtr, num_fixed_args=2
-        ](
-            handler,
-            "iO".ptr(),
-            c_int(2),
-            frame if frame else state[].none,
+        # The frame the signal came in, as Python passes it.
+        var frame = PyEval_GetFrame()
+        var result = PyObject_CallFunction(
+            handler, cstr("iO"), c_int(2), frame if frame else state[].none
         )
         Py_DecRef(handler)
         if not result:

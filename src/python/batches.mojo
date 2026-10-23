@@ -1,6 +1,6 @@
 """Python iterators over a set's members, blocks and paths, a batch at a time."""
 
-from std.ffi import c_int, external_call
+from std.ffi import c_int
 from std.memory.alloc import unsafe_alloc
 from std.python._cpython import PyObjectPtr
 from std.sys.info import size_of
@@ -16,6 +16,7 @@ from .capi import (
     Py_DecRef,
     Py_NewRef,
     Py_TPFLAGS_DEFAULT,
+    Py_TPFLAGS_DISALLOW_INSTANTIATION,
     Py_tp_dealloc,
     Py_tp_free,
     Py_tp_iter,
@@ -24,6 +25,7 @@ from .capi import (
     PyList_New,
     PyList_SetItem,
     PyLong_FromLongLong,
+    PyObject_CallFunctionObjArgs,
     PyObject_CallObject,
     PyObject_GetAttrString,
     PyTuple_New,
@@ -44,9 +46,6 @@ from .ints import Ints, c_function, int_from_big, int_from_u128
 from .queries import checked_width
 from .state import StatePointer, give_back, object_state, take_arena
 
-
-# Else `Batches()` would make an iterator with no walk.
-comptime Py_TPFLAGS_DISALLOW_INSTANTIATION: UInt32 = 1 << 7
 
 # Batches start small, so taking a few items is quick, and double up to MAX_BATCH
 # items or about MAX_BATCH_BITS bits.
@@ -356,9 +355,7 @@ def walked[
     made.root = Py_NewRef(root)
     Pointer(to=made.walker).unsafe_write(walker(id, width))
     made.sizes = BatchSizes(width)
-    var chained = external_call[
-        "PyObject_CallFunctionObjArgs", PyObjectPtr, num_fixed_args=1
-    ](chain, batches, PyObjectPtr())
+    var chained = PyObject_CallFunctionObjArgs(chain, batches)
     Py_DecRef(batches)
     if not chained:
         raise PyError()
@@ -415,6 +412,7 @@ def batches_type(module: PyObjectPtr) raises PyError -> PyObjectPtr:
         text("bitpattern.bdd.Batches"),
         c_int(size_of[BatchesObject]()),
         0,
+        # Else `Batches()` would make an iterator with no walk.
         Py_TPFLAGS_DEFAULT | Py_TPFLAGS_DISALLOW_INSTANTIATION,
         Int(slots),
     )

@@ -2,7 +2,7 @@
 
 from std.bit import count_leading_zeros
 from std.collections import Set
-from std.ffi import c_int, c_uint, external_call
+from std.ffi import c_int, c_uint
 from std.python._cpython import PyObjectPtr
 
 from arena import (
@@ -34,8 +34,12 @@ from .args import (
     width_as_int32,
 )
 from .capi import (
+    Py_BuildValue,
     Py_DecRef,
     Py_NewRef,
+    Py_TPFLAGS_LIST_SUBCLASS,
+    Py_TPFLAGS_TUPLE_SUBCLASS,
+    Py_TPFLAGS_UNICODE_SUBCLASS,
     PyErr_Clear,
     PyErr_Occurred,
     PyImport_ImportModule,
@@ -45,12 +49,14 @@ from .capi import (
     PyLong_FromLongLong,
     PyObject_GetAttrString,
     PyObject_GetIter,
+    PyObject_IsInstance,
     PyObject_Repr,
     PyTuple_GetItem,
     PyTuple_New,
     PyTuple_SetItem,
     PyTuple_Size,
     PyType_GetFlags,
+    PyType_GetModule,
     PyUnicode_AsUTF8AndSize,
     PyUnicode_FromOrdinal,
     PyUnicode_InternFromString,
@@ -61,11 +67,6 @@ from .errors import PyError, type_error, value_error
 from .ints import Int64OrOverflow, Ints, Signed, indexed, u128_of
 from .objects import Call, node_of, wrap, wrap_result
 from .state import Lease, StatePointer, give_back, take_arena
-
-
-comptime Py_TPFLAGS_LIST_SUBCLASS: UInt64 = 1 << 25
-comptime Py_TPFLAGS_TUPLE_SUBCLASS: UInt64 = 1 << 26
-comptime Py_TPFLAGS_UNICODE_SUBCLASS: UInt64 = 1 << 28
 
 
 def reduced(state: StatePointer, o: PyObjectPtr) raises PyError -> PyObjectPtr:
@@ -91,21 +92,19 @@ def reduced(state: StatePointer, o: PyObjectPtr) raises PyError -> PyObjectPtr:
         raise PyError()
     for index in range(len(found)):
         var row = found[index]
-        var item = external_call[
-            "Py_BuildValue", PyObjectPtr, num_fixed_args=1
-        ](cstr("(iII)"), c_int(row.bit), c_uint(row.lo), c_uint(row.hi))
+        var item = Py_BuildValue(
+            cstr("(iII)"), c_int(row.bit), c_uint(row.lo), c_uint(row.hi)
+        )
         # Steals `item`, even if it fails.
         if not item or PyList_SetItem(written, index, item) < 0:
             Py_DecRef(written)
             raise PyError()
-    var module = external_call["PyType_GetModule", PyObjectPtr](ob_type(o))
+    var module = PyType_GetModule(ob_type(o))
     var rebuild = PyObject_GetAttrString(module, cstr("_rebuilt"))
     if not rebuild:
         Py_DecRef(written)
         raise PyError()
-    var reduction = external_call[
-        "Py_BuildValue", PyObjectPtr, num_fixed_args=1
-    ](cstr("(N(N))"), rebuild, written)
+    var reduction = Py_BuildValue(cstr("(N(N))"), rebuild, written)
     if not reduction:
         raise PyError()
     return reduction
@@ -609,7 +608,7 @@ def is_sequence(o: PyObjectPtr) raises PyError -> Bool:
     Py_DecRef(abc)
     if not sequence:
         raise PyError()
-    var found = external_call["PyObject_IsInstance", c_int](o, sequence)
+    var found = PyObject_IsInstance(o, sequence)
     Py_DecRef(sequence)
     if found < 0:
         raise PyError()

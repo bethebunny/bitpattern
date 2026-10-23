@@ -3,7 +3,6 @@
 https://dmlc.github.io/dlpack/latest/python_spec.html
 """
 
-from std.ffi import c_int, external_call
 from std.math import ceildiv
 from std.memory.alloc import unsafe_alloc
 from std.memory.memory import _free, _malloc
@@ -23,6 +22,10 @@ from .args import (
 )
 from .capi import (
     Py_DecRef,
+    Py_TPFLAGS_TUPLE_SUBCLASS,
+    PyCapsule_GetPointer,
+    PyCapsule_IsValid,
+    PyCapsule_New,
     PyTuple_GetItem,
     PyTuple_Size,
     PyType_GetFlags,
@@ -43,8 +46,6 @@ comptime IS_COPIED: UInt64 = 1 << 1
 
 comptime INT: UInt8 = 0
 comptime UINT: UInt8 = 1
-
-comptime Py_TPFLAGS_TUPLE_SUBCLASS: UInt64 = 1 << 26
 
 
 @fieldwise_init
@@ -195,10 +196,8 @@ def delete[M: Managed](managed: Int) abi("C"):
 def destructor[M: Managed](capsule: PyObjectPtr) abi("C"):
     """Frees the export unless a consumer renamed the capsule (and so owns the
     tensor)."""
-    if external_call["PyCapsule_IsValid", c_int](capsule, cstr(M.NAME)) == 1:
-        delete[M](
-            external_call["PyCapsule_GetPointer", Int](capsule, cstr(M.NAME))
-        )
+    if PyCapsule_IsValid(capsule, cstr(M.NAME)) == 1:
+        delete[M](PyCapsule_GetPointer(capsule, cstr(M.NAME)))
 
 
 def capsule[
@@ -222,7 +221,7 @@ def capsule[
     )
     var managed = M.managing(tensor, version, address(delete[M]))
     export.unsafe_write(Export[M](managed, shape^, strides^, words^))
-    var made = external_call["PyCapsule_New", PyObjectPtr](
+    var made = PyCapsule_New(
         export.unsafe_bitcast[NoneType]().unsafe_origin_cast[MutAnyOrigin](),
         cstr(M.NAME),
         address(destructor[M]),

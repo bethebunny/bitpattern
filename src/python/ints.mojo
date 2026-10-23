@@ -1,6 +1,6 @@
 """Python ints to and from Mojo integers, from one .so for CPython 3.11 to 3.14."""
 
-from std.ffi import c_int, external_call
+from std.ffi import c_int
 from std.math import log2
 from std.python._cpython import PyObjectPtr
 
@@ -20,7 +20,7 @@ from .capi import (
     object_symbol,
     symbol,
 )
-from .errors import PyError, error
+from .errors import PyError
 
 
 # Py_ASNATIVEBYTES_* flags.
