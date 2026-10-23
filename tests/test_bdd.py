@@ -1,6 +1,7 @@
 """Node-level tests: interning, reduction, and the boolean algebra."""
 
 import copy
+import functools
 import gc
 import operator
 import pickle
@@ -27,6 +28,7 @@ from bitpattern.bdd import (
     node_count,
     nth,
     path_count,
+    paths,
     rank,
 )
 from bitpattern.intset import IntSet
@@ -478,9 +480,23 @@ def test_zero_width_holds_only_zero():
     assert nth(BDD.ACCEPT, 0, width=0) == 0
 
 
-def test_width_must_cover_the_diagram():
-    with pytest.raises(ValueError):
-        count(BDD(5, BDD.ACCEPT, BDD.REJECT), width=5)
+@pytest.mark.parametrize("width", [3, 5])
+@pytest.mark.parametrize(
+    "call",
+    [
+        count,
+        functools.partial(nth, n=0),
+        functools.partial(rank, value=0),
+        members,
+        blocks,
+        paths,
+        functools.partial(bdd.tensor, code=1, bits=8, version=None),
+    ],
+    ids=["count", "nth", "rank", "members", "blocks", "paths", "tensor"],
+)
+def test_width_must_cover_the_diagram(call, width):
+    with pytest.raises(ValueError, match=f"^node tests bit 5, outside width {width}$"):
+        call(BDD(5, BDD.ACCEPT, BDD.REJECT), width=width)
 
 
 @pytest.mark.parametrize("mask", MASKS)
