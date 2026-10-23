@@ -45,12 +45,14 @@ from .capi import (
     PyLong_FromLongLong,
     PyObject_GetAttrString,
     PyObject_GetIter,
+    PyObject_Repr,
     PyTuple_GetItem,
     PyTuple_New,
     PyTuple_SetItem,
     PyTuple_Size,
     PyType_GetFlags,
     PyUnicode_AsUTF8AndSize,
+    PyUnicode_FromOrdinal,
     PyUnicode_InternFromString,
     cstr,
     ob_type,
@@ -235,7 +237,7 @@ def diagram(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
             # Bits are ASCII, so the first byte that isn't one starts a character.
             var decoded = Codepoint.unsafe_decode_utf8_codepoint(bytes[index:])
             raise value_error(
-                String("bits are 0, 1 or ?, not ", quoted(decoded[0]))
+                String("bits are 0, 1 or ?, not ", repr_of(decoded[0]))
             )
     if size > Int(MAX_WIDTH):
         raise value_error(String(size, " bits is too many"))
@@ -246,50 +248,20 @@ def diagram(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     return wrap_result(state, walk)
 
 
-def quoted(symbol: Codepoint) -> String:
-    """`symbol` as the Rust build's errors write it (Rust's `{:?}`)."""
-    var code = symbol.to_u32()
-    if code == 0:
-        return "'\\0'"
-    if code == 9:
-        return "'\\t'"
-    if code == 10:
-        return "'\\n'"
-    if code == 13:
-        return "'\\r'"
-    if code == UInt32(ord("'")) or code == UInt32(ord("\\")):
-        return String("'\\", symbol, "'")
-    if escaped(code):
-        return String("'\\u{", hex(code, prefix=""), "}'")
-    return String("'", symbol, "'")
-
-
-def escaped(code: UInt32) -> Bool:
-    """Whether Rust escapes the character: if it isn't printable (an "other" character,
-    or a separator but space) or it extends a grapheme (taken to be a nonspacing or
-    enclosing mark). Asks Python's unicodedata, since Mojo has no character categories.
-    """
-    if code < 0x80:
-        return code < 0x20 or code == 0x7F
-    var unicodedata = PyImport_ImportModule(cstr("unicodedata"))
-    if not unicodedata:
+def repr_of(symbol: Codepoint) -> String:
+    """Python's `repr(chr(symbol))`, or "?" if it can't be made."""
+    var char = PyUnicode_FromOrdinal(c_int(symbol.to_u32()))
+    if not char:
         PyErr_Clear()
-        return False
-    var category = external_call[
-        "PyObject_CallMethod", PyObjectPtr, num_fixed_args=3
-    ](unicodedata, cstr("category"), cstr("C"), c_int(code))
-    Py_DecRef(unicodedata)
-    if not category:
+        return "?"
+    var text = PyObject_Repr(char)
+    Py_DecRef(char)
+    if not text:
         PyErr_Clear()
-        return False
-    var name = utf8(category)
-    Py_DecRef(category)
-    return (
-        name.startswith("C")
-        or name.startswith("Z")
-        or name == "Mn"
-        or name == "Me"
-    )
+        return "?"
+    var written = utf8(text)
+    Py_DecRef(text)
+    return written^
 
 
 comptime EXACTLY_THESE = Signature(

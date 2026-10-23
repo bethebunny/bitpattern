@@ -280,6 +280,11 @@ def PyUnicode_InternFromString(data: Buffer) -> PyObjectPtr:
 
 
 @always_inline
+def PyUnicode_FromOrdinal(ordinal: c_int) -> PyObjectPtr:
+    return external_call["PyUnicode_FromOrdinal", PyObjectPtr](ordinal)
+
+
+@always_inline
 def PyUnicode_CompareWithASCIIString(o: PyObjectPtr, text: Buffer) -> c_int:
     return external_call["PyUnicode_CompareWithASCIIString", c_int](o, text)
 
@@ -292,6 +297,11 @@ def PyUnicode_AsUTF8AndSize(o: PyObjectPtr, mut size: Int) -> Int:
 @always_inline
 def PyObject_Str(o: PyObjectPtr) -> PyObjectPtr:
     return external_call["PyObject_Str", PyObjectPtr](o)
+
+
+@always_inline
+def PyObject_Repr(o: PyObjectPtr) -> PyObjectPtr:
+    return external_call["PyObject_Repr", PyObjectPtr](o)
 
 
 @always_inline
