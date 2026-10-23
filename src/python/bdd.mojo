@@ -346,9 +346,14 @@ def bdd_type(module: PyObjectPtr) raises PyError -> PyObjectPtr:
         MethodDef(0, 0, 0, 0),
     ]
 
-    # Weakrefs live just after the object header.
     var members: List[MemberDef] = [
-        MemberDef(text("__weaklistoffset__"), T_PYSSIZET, 16, READONLY, 0),
+        MemberDef(
+            text("__weaklistoffset__"),
+            T_PYSSIZET,
+            reflect[BddObject].field_offset[name="weakrefs"](),
+            READONLY,
+            0,
+        ),
         MemberDef(0, 0, 0, 0, 0),
     ]
 
