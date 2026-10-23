@@ -51,16 +51,6 @@ def buffer[T: AnyType](mut value: T) -> Buffer:
 
 
 @always_inline
-def limbs_buffer(ref limbs: List[UInt64]) -> Buffer:
-    return (
-        limbs.unsafe_ptr()
-        .unsafe_bitcast[NoneType]()
-        .unsafe_mut_cast[True]()
-        .unsafe_origin_cast[MutAnyOrigin]()
-    )
-
-
-@always_inline
 def limbs_buffer(ref limbs: Limbs) -> Buffer:
     return (
         limbs.unsafe_ptr()
@@ -213,7 +203,7 @@ def big_of(ints: Ints, int: PyObjectPtr) -> Tuple[Bool, BigUInt]:
         bytes = ints.as_native_bytes(int, buffer(unused), 0, LITTLE_ENDIAN)
     else:
         bytes = ints.num_bits(int) // 8 + 1
-    var limbs = List[UInt64](length=(bytes + 7) // 8, fill=0)
+    var limbs = Limbs(length=(bytes + 7) // 8, fill=0)
     if ints.native:
         _ = ints.as_native_bytes(
             int, limbs_buffer(limbs), len(limbs) * 8, LITTLE_ENDIAN
@@ -224,9 +214,9 @@ def big_of(ints: Ints, int: PyObjectPtr) -> Tuple[Bool, BigUInt]:
     if negative:
         var carry = UInt64(1)
         for i in range(len(limbs)):
-            var limb = ~limbs[i] + carry
+            var limb = ~limbs.unsafe_get(i) + carry
             carry = 1 if carry == 1 and limb == 0 else 0
-            limbs[i] = limb
+            limbs.unsafe_get(i) = limb
     return (negative, BigUInt(limbs=limbs^))
 
 

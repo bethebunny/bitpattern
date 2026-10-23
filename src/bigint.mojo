@@ -152,16 +152,6 @@ struct BigUInt(
         self.limbs = limbs^
         _trim(self.limbs)
 
-    def __init__(out self, *, limbs: List[UInt64]):
-        """Least significant first. High zero limbs are dropped."""
-        self.limbs = Limbs(unsafe_uninit_length=len(limbs))
-        unsafe_memcpy(
-            dest=self.limbs.unsafe_ptr(),
-            src=limbs.unsafe_ptr(),
-            count=len(limbs),
-        )
-        _trim(self.limbs)
-
     @staticmethod
     def mask(bits: Int) -> Self:
         """`2**bits - 1`."""
