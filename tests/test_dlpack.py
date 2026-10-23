@@ -271,6 +271,12 @@ def test_a_set_too_big_for_memory_doesnt_export(width):
         IntSet.from_bdd(BDD.ACCEPT, width).__dlpack__()
 
 
+def test_a_set_too_big_for_memory_names_a_huge_count_by_its_size():
+    """Python won't write out an int this long."""
+    with pytest.raises(MemoryError, match="an int of 1600001 bits members"):
+        IntSet.from_bdd(BDD.ACCEPT, 1_600_000).__dlpack__()
+
+
 @pytest.mark.parametrize(
     "codec", [int8, int16, int32, int64, uint8, uint16, uint32, uint64]
 )
