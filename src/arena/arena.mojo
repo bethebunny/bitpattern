@@ -108,7 +108,7 @@ struct Sizes(Movable):
 
 
 comptime Pause = def(mut Arena, Int) thin -> Bool
-"""Runs every PAUSE_INTERVAL steps of a walk with the arena's context, and returns
+"""Runs every PAUSE_INTERVAL steps of a walk with the arena's context and returns
 whether the walk goes on."""
 
 

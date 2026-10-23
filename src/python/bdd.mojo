@@ -138,7 +138,7 @@ def bdd_dealloc(o: PyObjectPtr) abi("C"):
 
 
 def bdd_hash(o: PyObjectPtr) abi("C") -> Int:
-    # A node's object can come and go while a parent keeps the node, so by node.
+    # A node's object can come and go while a parent keeps the node, so hash the node.
     return node_of(o).index()
 
 

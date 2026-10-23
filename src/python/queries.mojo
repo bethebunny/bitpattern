@@ -127,8 +127,8 @@ def count_repr(
 
 @fieldwise_init
 struct Integer(Movable):
-    """An int as its sign and bits: its own if it isn't negative, else its complement's
-    (`~int`, which isn't). The bits are in a UInt128 when they fit."""
+    """An int as its sign and bits. A negative int keeps the bits of `~int`, which is
+    non-negative. The bits are in a UInt128 when they fit."""
 
     var negative: Bool
     var narrow: UInt128

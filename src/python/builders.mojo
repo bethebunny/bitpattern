@@ -315,7 +315,7 @@ def exactly_these(
 
 
 struct Distinct[T: KeyElement & Copyable & Comparable & Deinitable](Movable):
-    """Values without repeats. The list is deduplicated each time it doubles, and becomes
+    """Values without repeats. The list is deduplicated each time it doubles and becomes
     a hash set once most values were repeats."""
 
     var values: List[Self.T]
@@ -620,8 +620,7 @@ def is_sequence(o: PyObjectPtr) raises PyError -> Bool:
 
 
 def read_row(state: StatePointer, o: PyObjectPtr) raises PyError -> Row:
-    """A branch out of range is malformed, not an error here: it names no row.
-    """
+    """A branch out of range reads as UInt32.MAX, which `formed` rejects."""
     if PyType_GetFlags(ob_type(o)) & Py_TPFLAGS_TUPLE_SUBCLASS == 0:
         raise not_an_instance(state, o, "tuple")
     if PyTuple_Size(o) != 3:

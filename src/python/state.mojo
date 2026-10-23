@@ -123,7 +123,7 @@ struct Lease:
 
 
 def pause(mut arena: Arena, context: Int) -> Bool:
-    """Runs Python's SIGINT handler after a Ctrl-C, and stops the walk if it raised.
+    """Runs Python's SIGINT handler after a Ctrl-C and stops the walk if it raised.
 
     The handler can use the arena, so the walk lends it the real one and holds a
     placeholder meanwhile. Nothing collects while the handler runs, since the walk holds

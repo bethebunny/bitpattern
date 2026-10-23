@@ -180,7 +180,7 @@ struct Int64OrOverflow(TrivialRegisterPassable):
     @staticmethod
     @always_inline
     def from_python(o: PyObjectPtr) raises PyError -> Self:
-        """Without the cost of an OverflowError. Runs `__index__` for an int-like, and
+        """Without the cost of an OverflowError. Runs `__index__` for an int-like and
         passes on its errors (TypeError for a non-int)."""
         var overflow = c_int(0)
         var value = PyLong_AsLongLongAndOverflow(o, overflow)

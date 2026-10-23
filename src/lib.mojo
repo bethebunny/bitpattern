@@ -4,7 +4,7 @@ Invariants:
   - a node has at most one Python object, so `is` compares diagrams
   - no Python code runs while a call has the arena, since it could call back in or
     drop a node's object (eg. from the garbage collector)
-  - long walks pause for Ctrl-C, and lend the arena while Python's handler runs
+  - long walks pause for Ctrl-C and lend the arena while Python's handler runs
 """
 
 from std.ffi import c_int

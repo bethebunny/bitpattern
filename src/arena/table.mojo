@@ -382,7 +382,7 @@ struct UniqueTable(Movable, Sized):
                 self.slots.unsafe_set(slot, unique)
 
     def shrink_to(mut self, entries: Int):
-        """Keeps room for at least `entries`, and drops the DELETED slots."""
+        """Keeps room for at least `entries` and drops the DELETED slots."""
         var slots = min(len(self.slots), slots_for(max(entries, self.held)))
         if slots < len(self.slots) or self.deleted:
             self._resize(slots)

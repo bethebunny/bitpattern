@@ -13,8 +13,8 @@ from std.sys.info import CompilationTarget
 struct Limbs(Boolable, Copyable, Movable, Sized):
     """A growable array of limbs.
 
-    It allocates with malloc: Mojo's List goes through the runtime's aligned
-    allocator, which takes about four times as long for small blocks.
+    Allocated with malloc since List's aligned allocator takes about four times as long
+    for small blocks.
     """
 
     var _data: Pointer[UInt64, MutUntrackedOrigin]
@@ -414,7 +414,7 @@ def _added(
     b: Pointer[UInt64, _],
     n: Int,
 ) -> UInt64:
-    """Writes `a + b`, and returns the carry."""
+    """Writes `a + b` and returns the carry."""
     var carry = UInt64(0)
     for i in range(n):
         var s = (
@@ -431,7 +431,7 @@ def _added(
 def _add_to(
     dest: MutPointer[UInt64, _], b: Pointer[UInt64, _], n: Int
 ) -> UInt64:
-    """Adds `b` to `dest`, and returns the carry."""
+    """Adds `b` to `dest` and returns the carry."""
     var carry = UInt64(0)
     for i in range(n):
         var s = (
@@ -489,7 +489,7 @@ def _subtract(mut a: Limbs, b: Limbs):
 def _multiplied(
     dest: MutPointer[UInt64, _], a: Pointer[UInt64, _], n: Int, m: UInt64
 ) -> UInt64:
-    """Writes `a * m`, and returns the limb above."""
+    """Writes `a * m` and returns the limb above."""
     var carry = UInt64(0)
     for i in range(n):
         var p = UInt128(a[unsafe_offset=i]) * UInt128(m) + UInt128(carry)
@@ -502,7 +502,7 @@ def _multiplied(
 def _add_product_to(
     dest: MutPointer[UInt64, _], a: Pointer[UInt64, _], n: Int, m: UInt64
 ) -> UInt64:
-    """Adds `a * m` to `dest`, and returns the carry."""
+    """Adds `a * m` to `dest` and returns the carry."""
     var carry = UInt64(0)
     for i in range(n):
         # At most (2**64 - 1)**2 + 2 * (2**64 - 1), which fits.
@@ -520,7 +520,7 @@ def _add_product_to(
 def _subtract_product_from(
     dest: MutPointer[UInt64, _], a: Pointer[UInt64, _], n: Int, m: UInt64
 ) -> UInt64:
-    """Subtracts `a * m` from `dest`, and returns the borrow."""
+    """Subtracts `a * m` from `dest` and returns the borrow."""
     var borrow = UInt64(0)
     for i in range(n):
         var p = UInt128(a[unsafe_offset=i]) * UInt128(m) + UInt128(borrow)
@@ -535,7 +535,7 @@ def _subtract_product_from(
 def _shifted_left(
     dest: MutPointer[UInt64, _], a: Pointer[UInt64, _], n: Int, shift: UInt64
 ) -> UInt64:
-    """Writes `a << shift`, for 0 < shift < 64, and returns the bits shifted out
+    """Writes `a << shift` (for 0 < shift < 64) and returns the bits shifted out
     the top."""
     var top = a[unsafe_offset=n - 1] >> (64 - shift)
     for i in range(n - 1, 0, -1):
@@ -583,7 +583,7 @@ def _two_by_one(high: UInt64, low: UInt64, divisor: UInt64) -> _Division:
 def _divided(
     dest: MutPointer[UInt64, _], a: Pointer[UInt64, _], n: Int, divisor: UInt64
 ) -> UInt64:
-    """Writes `a / divisor`, and returns the remainder."""
+    """Writes `a / divisor` and returns the remainder."""
     var rest = UInt64(0)
     for i in range(n - 1, -1, -1):
         var step = _two_by_one(rest, a[unsafe_offset=i], divisor)
