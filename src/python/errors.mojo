@@ -3,6 +3,7 @@ call returns NULL."""
 
 from std.python._cpython import PyObjectPtr
 
+from .args import str_or_size
 from .capi import (
     Py_DecRef,
     PyErr_SetObject,
@@ -33,6 +34,10 @@ def error(kind: PyObjectPtr, message: String) -> PyError:
 
 def value_error(message: String) -> PyError:
     return error(pointer_symbol("PyExc_ValueError"), message)
+
+
+def out_of_range(name: StaticString, value: PyObjectPtr) -> PyError:
+    return value_error(String(t"{name} {str_or_size(value)} is out of range"))
 
 
 def type_error(message: String) -> PyError:

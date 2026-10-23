@@ -347,7 +347,7 @@ def walked[
     """The batches chained into one iterator."""
     var root = args[0]
     var id = node(state, root)
-    var at = checked_width(state, id, width(state[].ints, args[1]))
+    var at = checked_width(state, id, width(args[1]))
     var chain = from_iterable(state)
     var batches = PyType_GenericAlloc(state[].batches_type, 0)
     if not batches:

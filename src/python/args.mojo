@@ -1,7 +1,7 @@
 """Arguments. Reading one can run Python (eg. `__index__`), so calls read their
 arguments before taking the arena."""
 
-from std.ffi import external_call
+from std.ffi import c_int, external_call
 from std.memory import unsafe_memcpy
 from std.memory.alloc import unsafe_alloc
 from std.python._cpython import PyObjectPtr
@@ -16,6 +16,8 @@ from .capi import (
     Py_DecRef,
     PyDict_Next,
     PyErr_Clear,
+    PyLong_AsLongLongAndOverflow,
+    PyNumber_Index,
     PyObject_Str,
     PyTuple_GetItem,
     PyTuple_Size,
@@ -26,8 +28,8 @@ from .capi import (
     ob_type,
     text,
 )
-from .errors import PyError, type_error, value_error
-from .ints import Ints, bits_of, fitting, indexed
+from .errors import PyError, out_of_range, type_error
+from .ints import fitting
 from .objects import node_of
 from .state import StatePointer, module_state
 
@@ -250,7 +252,7 @@ def not_an_instance(
     )
 
 
-def described(ints: Ints, o: PyObjectPtr) -> String:
+def str_or_size(o: PyObjectPtr) -> String:
     """`str(o)`, or the size of an int too long for `str`."""
     var text = PyObject_Str(o)
     if text:
@@ -258,14 +260,20 @@ def described(ints: Ints, o: PyObjectPtr) -> String:
         Py_DecRef(text)
         return written^
     PyErr_Clear()
-    try:
-        var int = indexed(ints, o)
-        var bits = bits_of(ints, int)
+    var int = PyNumber_Index(o)
+    var bit_length = PyObjectPtr()
+    if int:
+        bit_length = external_call[
+            "PyObject_CallMethod", PyObjectPtr, num_fixed_args=3
+        ](int, cstr("bit_length"), cstr(""))
         Py_DecRef(int)
-        return String("an int of ", bits, " bits")
-    except:
+    if not bit_length:
         PyErr_Clear()
         return "an int"
+    var overflow = c_int(0)
+    var bits = PyLong_AsLongLongAndOverflow(bit_length, overflow)
+    Py_DecRef(bit_length)
+    return String("an int of ", bits, " bits")
 
 
 def in_range(o: PyObjectPtr, most: Int32) raises PyError -> Optional[Int32]:
@@ -275,34 +283,30 @@ def in_range(o: PyObjectPtr, most: Int32) raises PyError -> Optional[Int32]:
     return None
 
 
-def width(ints: Ints, o: PyObjectPtr) raises PyError -> Int32:
+def width(o: PyObjectPtr) raises PyError -> Int32:
     """ValueError outside `0..=MAX_WIDTH`."""
     var read = in_range(o, MAX_WIDTH)
     if not read:
-        raise value_error(
-            String("width ", described(ints, o), " is out of range")
-        )
+        raise out_of_range("width", o)
     return read.value()
 
 
-def bit(ints: Ints, o: PyObjectPtr) raises PyError -> Int32:
+def bit(o: PyObjectPtr) raises PyError -> Int32:
     """ValueError outside `0..=MAX_BIT`."""
     var read = in_range(o, MAX_BIT)
     if not read:
-        raise value_error(
-            String("bit ", described(ints, o), " is out of range")
-        )
+        raise out_of_range("bit", o)
     return read.value()
 
 
-def least_width(ints: Ints, o: PyObjectPtr) raises PyError -> Int32:
+def least_width(o: PyObjectPtr) raises PyError -> Int32:
     """A negative width is 0, as for str.ljust."""
     var read = fitting(o)
     if read.overflow < 0 or (read.fits() and read.value < 0):
         return 0
     if read.fits() and read.value <= Int64(MAX_WIDTH):
         return Int32(read.value)
-    raise value_error(String("width ", described(ints, o), " is out of range"))
+    raise out_of_range("width", o)
 
 
 def clamped(o: PyObjectPtr) raises PyError -> Int32:

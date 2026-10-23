@@ -108,7 +108,7 @@ def bdd_new(
     var state = type_state(type)
     try:
         var given = parsed[NEW](args, kwargs)
-        var at = bit(state[].ints, given[0])
+        var at = bit(given[0])
         var lo = node(state, given[1])
         var hi = node(state, given[2])
         with Call(state):

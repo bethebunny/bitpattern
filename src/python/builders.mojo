@@ -25,11 +25,11 @@ from .args import (
     Signature,
     bit,
     clamped,
-    described,
     in_range,
     least_width,
     node,
     not_an_instance,
+    str_or_size,
     utf8,
     width,
 )
@@ -122,8 +122,8 @@ def lshift(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
         var arena = take_arena(state)
         var top = arena[].decision(id).bit
         give_back(state, arena)
-        # `described` can run Python, so the arena goes back first.
-        raise shifted_out(described(state[].ints, args[1]), top)
+        # `str_or_size` can run Python, so the arena goes back first.
+        raise shifted_out(str_or_size(args[1]), top)
     if by.value == 0 or id.is_leaf():
         return Py_NewRef(args[0])
     if by.value < Int64(Int32.MIN) or by.value > Int64(Int32.MAX):
@@ -187,7 +187,7 @@ def narrowed(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
     var id = node(state, args[0])
-    var at = width(state[].ints, args[1])
+    var at = width(args[1])
     var arena = take_arena(state)
     var narrow = arena[].tests_only_below(id, at)
     give_back(state, arena)
@@ -306,7 +306,7 @@ comptime EXACTLY_THESE = Signature(
 def exactly_these(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
-    var least = least_width(state[].ints, args[1])
+    var least = least_width(args[1])
     var members = Members.read(state[].ints, args[0])
     var bits = members.bits()
     if bits > Int(MAX_WIDTH):
@@ -470,7 +470,7 @@ struct Members(Movable):
                 var error = value_error(
                     String(
                         "IntSets can't hold negative numbers, got ",
-                        described(ints, int),
+                        str_or_size(int),
                     )
                 )
                 Py_DecRef(int)
@@ -514,7 +514,7 @@ comptime INTERVAL = Signature(
 def interval(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
-    var at = width(state[].ints, args[2])
+    var at = width(args[2])
     var start = fitting(args[0])
     var stop = fitting(args[1])
     # Bounds that fit an Int64 make members that fit a UInt128.
@@ -660,7 +660,7 @@ def read_row(state: StatePointer, o: PyObjectPtr) raises PyError -> Row:
                 PyTuple_Size(o),
             )
         )
-    var at = bit(state[].ints, PyTuple_GetItem(o, 0))
+    var at = bit(PyTuple_GetItem(o, 0))
     var lo = in_range(PyTuple_GetItem(o, 1), Int32.MAX)
     var hi = in_range(PyTuple_GetItem(o, 2), Int32.MAX)
     return Row(

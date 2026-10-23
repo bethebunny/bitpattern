@@ -13,7 +13,14 @@ from arena import Arena, Id, Interrupted, NARROW_WIDTH
 from arena.export import Slots, write_rows, write_words
 from arena.walk import Narrow, Wide
 
-from .args import Arguments, Signature, described, node, not_an_instance, width
+from .args import (
+    Arguments,
+    Signature,
+    node,
+    not_an_instance,
+    str_or_size,
+    width,
+)
 from .capi import (
     Py_DecRef,
     PyTuple_GetItem,
@@ -276,9 +283,7 @@ def written(
     var made = room(members, columns, Int(dtype.bits // 8))
     if not made:
         var total = int_from_count(state[].ints, members)
-        var message = String(
-            described(state[].ints, total), " members don't fit in memory"
-        )
+        var message = String(str_or_size(total), " members don't fit in memory")
         Py_DecRef(total)
         raise error(pointer_symbol("PyExc_MemoryError"), message)
     var words = made.take()
@@ -357,7 +362,7 @@ comptime TENSOR = Signature(
 
 def tensor(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node(state, args[0])
-    var at = width(state[].ints, args[1])
+    var at = width(args[1])
     var code = unsigned(args[2], Int64(UInt8.MAX))
     var bits = unsigned(args[3], Int64(UInt8.MAX))
     var version = version_of(state, args[4])

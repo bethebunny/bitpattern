@@ -184,11 +184,6 @@ def i128_of(ints: Ints, int: PyObjectPtr) -> Optional[Int128]:
     return Int128(wide)
 
 
-def bits_of(ints: Ints, int: PyObjectPtr) -> Int:
-    """`abs(int).bit_length()`."""
-    return big_of(ints, int)[1].bits()
-
-
 def big_of(ints: Ints, int: PyObjectPtr) -> Tuple[Bool, BigUInt]:
     """`int`'s sign (True if negative) and magnitude."""
     var overflow = c_int(0)

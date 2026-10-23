@@ -66,7 +66,7 @@ comptime COUNT = Signature("count", positional=["node"], keywords=["width"])
 
 def count(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node(state, args[0])
-    var at = checked_width(state, id, width(state[].ints, args[1]))
+    var at = checked_width(state, id, width(args[1]))
     var arena = take_arena(state)
     var total = member_count(arena[], id, at)
     give_back(state, arena)
@@ -209,7 +209,7 @@ comptime NTH = Signature(
 
 def nth(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node(state, args[0])
-    var at = width(state[].ints, args[2])
+    var at = width(args[2])
     var index = integer(state[].ints, args[1])
     at = checked_width(state, id, at)
     var arena = take_arena(state)
@@ -241,7 +241,7 @@ comptime RANK = Signature(
 def rank(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node(state, args[0])
     var value = integer(state[].ints, args[1])
-    var at = checked_width(state, id, width(state[].ints, args[2]))
+    var at = checked_width(state, id, width(args[2]))
     var arena = take_arena(state)
     var below = members_below(arena[], id, at, value)
     give_back(state, arena)
