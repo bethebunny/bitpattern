@@ -319,13 +319,15 @@ def overflow_error(message: String) -> PyError:
 
 
 def unsigned(o: PyObjectPtr, most: Int64) raises PyError -> Int:
-    """An int in `0..=most`, with PyO3's errors for a u8 or a u32."""
+    """An int in `[0, most]`."""
     var int_or_overflow = Int64OrOverflow.from_python(o)
-    if not int_or_overflow.fits():
-        raise overflow_error("Python int too large to convert to C long")
-    if int_or_overflow.value < 0 or int_or_overflow.value > most:
-        raise overflow_error("out of range integral type conversion attempted")
-    return Int(int_or_overflow.value)
+    if (
+        int_or_overflow.fits()
+        and Int64(0) <= int_or_overflow.value
+        and int_or_overflow.value <= most
+    ):
+        return Int(int_or_overflow.value)
+    raise overflow_error(String("expected an int in [0, ", most, "]"))
 
 
 def version_of(

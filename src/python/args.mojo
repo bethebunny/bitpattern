@@ -203,8 +203,8 @@ def too_many[signature: Signature](given: Int) -> PyError:
 
 @no_inline
 def missing[signature: Signature](arguments: Arguments) -> PyError:
-    """PyO3's TypeError, which names every missing positional argument, or if there are
-    none, every missing keyword one."""
+    """A TypeError that names every missing positional argument. If none is missing, it
+    names every missing keyword argument."""
     var declared = materialize[signature]()
     var names = List[StaticString]()
     var kind: StaticString = "positional"
@@ -237,7 +237,8 @@ def node_as_id(state: StatePointer, node: PyObjectPtr) raises PyError -> Id:
 def not_an_instance(
     state: StatePointer, o: PyObjectPtr, type: StaticString
 ) -> PyError:
-    """The TypeError for an argument of the wrong type, as PyO3 words it."""
+    """The TypeError for an argument of the wrong type (eg. "'str' object is not an
+    instance of 'BDD'")."""
     if o == state[].none:
         return type_error(String("'None' is not an instance of '", type, "'"))
     var name = external_call["PyType_GetQualName", PyObjectPtr](ob_type(o))
@@ -288,7 +289,7 @@ def int32_up_to(o: PyObjectPtr, most: Int32) raises PyError -> Optional[Int32]:
 
 
 def width_as_int32(width: PyObjectPtr) raises PyError -> Int32:
-    """ValueError outside `0..=MAX_WIDTH`."""
+    """ValueError outside `[0, MAX_WIDTH]`."""
     var width_or_none = int32_up_to(width, MAX_WIDTH)
     if width_or_none is None:
         raise out_of_range("width", width)
@@ -296,7 +297,7 @@ def width_as_int32(width: PyObjectPtr) raises PyError -> Int32:
 
 
 def bit_as_int32(bit: PyObjectPtr) raises PyError -> Int32:
-    """ValueError outside `0..=MAX_BIT`."""
+    """ValueError outside `[0, MAX_BIT]`."""
     var bit_or_none = int32_up_to(bit, MAX_BIT)
     if bit_or_none is None:
         raise out_of_range("bit", bit)
@@ -316,7 +317,7 @@ def least_width_as_int32(width: PyObjectPtr) raises PyError -> Int32:
 
 
 def clamped(bit: PyObjectPtr) raises PyError -> Int32:
-    """A bit clamped to `0..=MAX_WIDTH`."""
+    """A bit clamped to `[0, MAX_WIDTH]`."""
     var bit_or_overflow = Int64OrOverflow.from_python(bit)
     if bit_or_overflow.overflow < 0:
         return 0

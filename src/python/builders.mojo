@@ -572,10 +572,10 @@ def formed(rows: List[Row]) -> Bool:
 
 
 def read_rows(state: StatePointer, o: PyObjectPtr) raises PyError -> List[Row]:
-    """A sequence of `(bit, lo, hi)` tuples, as PyO3 reads a Vec of them."""
+    """A sequence of `(bit, lo, hi)` tuples."""
     var flags = PyType_GetFlags(ob_type(o))
     if flags & Py_TPFLAGS_UNICODE_SUBCLASS:
-        raise type_error("Can't extract `str` to `Vec`")
+        raise type_error("rows can't be a str")
     var listed = flags & (Py_TPFLAGS_LIST_SUBCLASS | Py_TPFLAGS_TUPLE_SUBCLASS)
     if not listed and not is_sequence(o):
         raise not_an_instance(state, o, "Sequence")

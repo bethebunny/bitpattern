@@ -34,7 +34,7 @@ def collection_due(arena: Arena) -> Bool:
 
 
 def shrunk[T: Copyable & Deinitable](var list: List[T], room: Int) -> List[T]:
-    """`list` with at most `room` of room beyond its items (as Vec::shrink_to).
+    """`list` with its capacity cut to `room`, or to its length if that's more.
     """
     var keep = max(len(list), room)
     if list.capacity() <= keep:
