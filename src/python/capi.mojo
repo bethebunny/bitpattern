@@ -9,10 +9,13 @@ through a C function pointer takes memory as a pointer with the memory's own ori
 as a `mut` argument. Given an Int address, an untracked pointer or a pointer to a
 read-only argument, the compiler may drop the store before the call or miss the callee's
 write. `external_call` isn't affected.
+
+The one private stdlib name the module uses is `PyObjectPtr`, from
+`std.python._cpython`.
 """
 
 from std.ffi import CStringSpan, c_int, c_uint, external_call
-from std.python._cpython import PyObjectPtr, _fn_ptr_as_opaque
+from std.python._cpython import PyObjectPtr
 
 
 # Type slots (Include/typeslots.h).
@@ -136,7 +139,7 @@ struct ObjectHead:
 @always_inline
 def address[T: TrivialRegisterPassable](function: T) -> Int:
     """The C address of an `abi("C")` function."""
-    return Int(_fn_ptr_as_opaque(function))
+    return Pointer(to=function).unsafe_bitcast[Int]()[]
 
 
 @always_inline

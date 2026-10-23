@@ -265,8 +265,9 @@ def test_an_intset_wider_than_64_bits_exports_a_row_of_bytes_per_member(width):
     assert [row.tobytes() for row in array] == [m.to_bytes(size, "big") for m in group]
 
 
-@pytest.mark.parametrize("width", [64, 127, 128])
+@pytest.mark.parametrize("width", [59, 64, 127, 128])
 def test_a_set_too_big_for_memory_doesnt_export(width):
+    """At 59 bits the words' 2**62 bytes fit an Int, so they reach the allocator."""
     with pytest.raises(MemoryError, match=f"{2**width} members"):
         IntSet.from_bdd(BDD.ACCEPT, width).__dlpack__()
 

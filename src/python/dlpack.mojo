@@ -3,9 +3,9 @@
 https://dmlc.github.io/dlpack/latest/python_spec.html
 """
 
+from std.ffi import external_call
 from std.math import ceildiv
 from std.memory.alloc import unsafe_alloc
-from std.memory.memory import _free, _malloc
 from std.python._cpython import PyObjectPtr
 
 from arena import Arena, Id, Interrupted, NARROW_WIDTH
@@ -165,7 +165,9 @@ struct Words(Movable):
 
     def __deinit__(deinit self):
         if self.data:
-            _free(Bytes(unsafe_from_address=self.data))
+            external_call["free", NoneType](
+                Bytes(unsafe_from_address=self.data)
+            )
 
     def slots[word: DType](self) -> Slots[word]:
         """For words that aren't empty, so aren't null."""
@@ -244,7 +246,10 @@ def room(members: Count, *, columns: Int, size: Int) -> Optional[Words]:
     if rows >= 0 and rows <= (Int.MAX - 255) // (columns * size):
         if rows == 0:
             return Words(0, 0)
-        var data = _malloc[UInt8](rows * columns * size, alignment=256)
+        # aligned_alloc's size must be a multiple of the alignment (C11).
+        var data = external_call["aligned_alloc", Optional[Bytes]](
+            256, ceildiv(rows * columns * size, 256) * 256
+        )
         if data:
             return Words(Int(data.unsafe_value()), rows * columns)
     return None
