@@ -207,9 +207,14 @@ def module_exec(module: PyObjectPtr) abi("C") -> c_int:
         set_attribute(state[].bdd_type, "REJECT", wrap(state, REJECT))
         set_attribute(state[].bdd_type, "__match_args__", match_args())
         set_attribute(module, "__version__", string(VERSION))
-        var all = PyList_New(1)
-        if not all or PyList_SetItem(all, 0, string("BDD")) < 0:
+        var name = string("BDD")
+        if not name:
             raise PyError()
+        var all = PyList_New(1)
+        if not all:
+            Py_DecRef(name)
+            raise PyError()
+        _ = PyList_SetItem(all, 0, name)
         # The functions are private to bitpattern.
         set_attribute(module, "__all__", all)
         return 0
@@ -243,14 +248,11 @@ def match_args() -> PyObjectPtr:
         "right".as_c_string_span(),
     ]
     for index in range(3):
-        if (
-            PyTuple_SetItem(
-                names, index, PyUnicode_InternFromString(fields[index])
-            )
-            < 0
-        ):
+        var name = PyUnicode_InternFromString(fields[index])
+        if not name:
             Py_DecRef(names)
             return PyObjectPtr()
+        _ = PyTuple_SetItem(names, index, name)
     return names
 
 
