@@ -15,7 +15,6 @@ from .ints import Ints
 from .capi import (
     Py_DecRef,
     PyCallable_Check,
-    PyErr_CheckSignals,
     PyEval_GetFrame,
     PyImport_ImportModule,
     PyModule_GetState,
@@ -159,7 +158,8 @@ def pause(mut arena: Arena, pause_state: PauseStatePointer) -> Bool:
 
 def handle_sigint(state: StatePointer) -> Bool:
     """False if the handler raised. Raising SIGINT again instead would look like a second
-    Ctrl-C to an event loop."""
+    Ctrl-C to an event loop. A Ctrl-C that comes in after the handler waits for the next
+    pause, so each pause calls the handler at most once."""
     var signal = PyImport_ImportModule("signal".as_c_string_span())
     if not signal:
         return False
@@ -184,4 +184,4 @@ def handle_sigint(state: StatePointer) -> Bool:
         Py_DecRef(result)
     else:
         Py_DecRef(handler)
-    return PyErr_CheckSignals() == 0
+    return True

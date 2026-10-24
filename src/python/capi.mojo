@@ -258,11 +258,6 @@ def PyErr_Clear():
 
 
 @always_inline
-def PyErr_CheckSignals() -> c_int:
-    return external_call["PyErr_CheckSignals", c_int]()
-
-
-@always_inline
 def PyOS_InterruptOccurred() -> c_int:
     return external_call["PyOS_InterruptOccurred", c_int]()
 
