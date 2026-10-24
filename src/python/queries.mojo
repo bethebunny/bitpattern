@@ -57,7 +57,7 @@ def checked_width(
     state: StatePointer, id: Id, width: Int32
 ) raises PyError -> Int32:
     var arena = take_arena(state)
-    var bit = Int32(-1) if id.is_leaf() else arena[].decision(id).bit
+    var bit: Int32 = -1 if id.is_leaf() else arena[].decision(id).bit
     give_back(state, arena)
     if bit >= width:
         raise value_error(

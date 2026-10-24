@@ -206,7 +206,7 @@ def missing[signature: Signature](arguments: Arguments) -> PyError:
     """A TypeError that names every missing positional argument. If none is missing, it
     names every missing keyword argument."""
     var declared = materialize[signature]()
-    var names = List[StaticString]()
+    var names: List[StaticString] = []
     var kind: StaticString = "positional"
     for index in range(declared.arity()):
         if index == len(declared.positional):
@@ -219,12 +219,12 @@ def missing[signature: Signature](arguments: Arguments) -> PyError:
         signature.function, "() missing ", len(names), " required ", kind
     )
     message += " arguments: " if len(names) > 1 else " argument: "
-    for index in range(len(names)):
+    for index, name in enumerate(names):
         if index > 0:
             if len(names) > 2:
                 message += ","
             message += " and " if index == len(names) - 1 else " "
-        message += String("'", names[index], "'")
+        message += String("'", name, "'")
     return type_error(message)
 
 
@@ -242,7 +242,7 @@ def not_an_instance(
     if o == state[].none:
         return type_error(String("'None' is not an instance of '", type, "'"))
     var name = PyType_GetQualName(ob_type(o))
-    var written = String("?")
+    var written: String = "?"
     if name:
         written = utf8(name)
         Py_DecRef(name)
@@ -271,7 +271,7 @@ def str_or_size(o: PyObjectPtr) -> String:
     if not bit_length:
         PyErr_Clear()
         return "an int"
-    var overflow = c_int(0)
+    var overflow: c_int = 0
     var bits = PyLong_AsLongLongAndOverflow(bit_length, overflow)
     Py_DecRef(bit_length)
     return String("an int of ", bits, " bits")

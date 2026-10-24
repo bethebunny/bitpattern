@@ -2,7 +2,7 @@
 
 from std.bit import count_leading_zeros
 from std.collections import Set
-from std.ffi import c_int, c_uint
+from std.ffi import c_int
 from std.python._cpython import PyObjectPtr
 
 from arena import (
@@ -75,14 +75,11 @@ def reduction(
     nesting would recurse once per bit."""
     var id = id_of(o)
     if id.is_leaf():
-        var name: PyObjectPtr
-        if id == ACCEPT:
-            name = PyUnicode_InternFromString("BDD.ACCEPT".as_c_string_span())
-        else:
-            name = PyUnicode_InternFromString("BDD.REJECT".as_c_string_span())
-        if not name:
+        var name: StaticString = "BDD.ACCEPT" if id == ACCEPT else "BDD.REJECT"
+        var interned = PyUnicode_InternFromString(name.as_c_string_span())
+        if not interned:
             raise PyError()
-        return name
+        return interned
     var lease = Lease(state)
     var found: List[Row]
     try:
@@ -93,13 +90,9 @@ def reduction(
     var written = PyList_New(len(found))
     if not written:
         raise PyError()
-    for index in range(len(found)):
-        var row = found[index]
+    for index, row in enumerate(found):
         var item = Py_BuildValue(
-            "(iII)".as_c_string_span(),
-            c_int(row.bit),
-            c_uint(row.lo),
-            c_uint(row.hi),
+            "(iII)".as_c_string_span(), row.bit, row.lo, row.hi
         )
         # Steals `item`, even if it fails.
         if not item or PyList_SetItem(written, index, item) < 0:
@@ -232,12 +225,11 @@ def diagram(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
         )
     )
     var bytes = bits.as_bytes()
-    for index in range(size):
-        var byte = bytes[index]
+    for index, byte in enumerate(bytes):
         if (
-            byte != UInt8(ord("0"))
-            and byte != UInt8(ord("1"))
-            and byte != UInt8(ord("?"))
+            byte != Byte(ord("0"))
+            and byte != Byte(ord("1"))
+            and byte != Byte(ord("?"))
         ):
             # Bits are ASCII, so the first byte that isn't one starts a character.
             var decoded = Codepoint.unsafe_decode_utf8_codepoint(bytes[index:])
@@ -329,7 +321,7 @@ struct Distinct[T: KeyElement & Copyable & Comparable & Deinitable](Movable):
     var hashing: Bool
 
     def __init__(out self):
-        self.values = List[Self.T]()
+        self.values = []
         self.sorted_length = 0
         self.pushed = 0
         self.hashed = Set[Self.T]()
@@ -353,10 +345,9 @@ struct Distinct[T: KeyElement & Copyable & Comparable & Deinitable](Movable):
             deduplicate(self.values)
             self.sorted_length = len(self.values)
             if 2 * len(self.values) < self.pushed:
-                for value in self.values:
-                    self.hashed.add(value.copy())
+                self.hashed = {value.copy() for value in self.values}
                 self.hashing = True
-                self.values = List[Self.T]()
+                self.values = []
 
     def sorted(deinit self) -> List[Self.T]:
         var values = self.values^
@@ -459,9 +450,7 @@ struct Members(Movable):
                 raise error
             Py_DecRef(int)
             if wide is None:
-                var promoted = List[BigUInt]()
-                for value in narrow^.sorted():
-                    promoted.append(BigUInt(value))
+                var promoted = [BigUInt(value) for value in narrow^.sorted()]
                 narrow = Distinct[UInt128]()
                 wide = Distinct[BigUInt](sorted=promoted^)
             wide.value().push(signed.magnitude.copy())
@@ -469,7 +458,7 @@ struct Members(Movable):
         if PyErr_Occurred():
             raise PyError()
         if wide is not None:
-            return Members(List[UInt128](), wide.take().sorted())
+            return Members([], wide.take().sorted())
         return Members(narrow^.sorted(), None)
 
     def __init__(
@@ -502,9 +491,9 @@ def interval(
     if start.fits() and stop.fits():
         if stop.value <= 0:
             return wrap(state, REJECT)
-        var top = UInt128(0)
-        if width > 0:
-            top = UInt128.MAX >> UInt128(128 - min(width, 128))
+        var top: UInt128 = (
+            UInt128.MAX >> UInt128(128 - min(width, 128)) if width > 0 else 0
+        )
         var first = UInt128(max(start.value, 0))
         var last = min(UInt128(stop.value - 1), top)
         if first > last:
@@ -569,9 +558,9 @@ def rebuilt(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
 
 def formed(rows: List[Row]) -> Bool:
     """Whether every branch names a leaf or an earlier row."""
-    for index in range(len(rows)):
+    for index, row in enumerate(rows):
         # Row `index` makes node `2 + index`.
-        if Int(rows[index].lo) >= 2 + index or Int(rows[index].hi) >= 2 + index:
+        if Int(row.lo) >= 2 + index or Int(row.hi) >= 2 + index:
             return False
     return True
 
@@ -587,7 +576,7 @@ def rows_of(state: StatePointer, o: PyObjectPtr) raises PyError -> List[Row]:
     var iterator = PyObject_GetIter(o)
     if not iterator:
         raise PyError()
-    var rows = List[Row]()
+    var rows: List[Row] = []
     while True:
         var item = PyIter_Next(iterator)
         if not item:

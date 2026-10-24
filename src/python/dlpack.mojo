@@ -292,9 +292,9 @@ def member_words(
         Py_DecRef(total)
         raise error(pointer_symbol("PyExc_MemoryError"), message)
     var words = words_or_none.take()
-    var sign_shift: UInt64 = 0
-    if dtype.code == INT:
-        sign_shift = UInt64(64 - max(width, 1))
+    var sign_shift: UInt64 = (
+        UInt64(64 - max(width, 1)) if dtype.code == INT else 0
+    )
     var lease = Lease(state)
     try:
         with lease^ as arena:

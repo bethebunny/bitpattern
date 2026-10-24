@@ -5,7 +5,6 @@ also gives each interpreter that imports the module an arena of its own. The mod
 requires the GIL, which keeps every call into it on one thread at a time.
 """
 
-from std.ffi import c_int
 from std.memory.alloc import Layout, alloc, dealloc
 from std.python._cpython import PyObjectPtr
 
@@ -52,7 +51,7 @@ struct State(Movable):
     def __init__(out self, version: UInt64):
         self.arena = 0
         self.depth = 0
-        self.wrappers = List[PyObjectPtr]()
+        self.wrappers = []
         self.bdd_type = PyObjectPtr()
         self.batches_type = PyObjectPtr()
         self.from_iterable = PyObjectPtr()
@@ -158,7 +157,7 @@ def handle_sigint(state: StatePointer) -> Bool:
     if not signal:
         return False
     var handler = PyObject_CallMethod(
-        signal, "getsignal".as_c_string_span(), "i".as_c_string_span(), c_int(2)
+        signal, "getsignal".as_c_string_span(), "i".as_c_string_span(), 2
     )
     Py_DecRef(signal)
     if not handler:
@@ -169,7 +168,7 @@ def handle_sigint(state: StatePointer) -> Bool:
         var result = PyObject_CallFunction(
             handler,
             "iO".as_c_string_span(),
-            c_int(2),
+            2,
             frame if frame else state[].none,
         )
         Py_DecRef(handler)

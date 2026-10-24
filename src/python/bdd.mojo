@@ -143,7 +143,7 @@ def bdd_hash(o: PyObjectPtr) abi("C") -> Int:
 
 
 def bdd_bool(o: PyObjectPtr) abi("C") -> c_int:
-    return c_int(Int(id_of(o) != REJECT))
+    return c_int(id_of(o) != REJECT)
 
 
 def bdd_richcompare(
@@ -247,7 +247,7 @@ def bdd_size(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
     var state = object_state(o)
     try:
         var arena = take_arena(state)
-        var width = Int32(0) if id.is_leaf() else arena[].decision(id).bit + 1
+        var width: Int32 = 0 if id.is_leaf() else arena[].decision(id).bit + 1
         var count = member_count(arena[], id, width)
         give_back(state, arena)
         return int_from_count(state[].ints, count)

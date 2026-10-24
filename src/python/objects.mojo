@@ -70,16 +70,16 @@ def forget(state: StatePointer, o: PyObjectPtr):
 
 
 def wrapped_nodes(state: StatePointer) -> List[Id]:
-    var roots = List[Id]()
-    for index in range(len(state[].wrappers)):
-        if state[].wrappers.unsafe_get(index):
-            roots.append(Id.from_index(index))
-    return roots^
+    return [
+        Id.from_index(index)
+        for index, wrapper in enumerate(state[].wrappers)
+        if wrapper
+    ]
 
 
 def collect_garbage(state: StatePointer, mut arena: Arena) -> Int:
     var freed, room = arena_collect(arena, wrapped_nodes(state))
-    var wrappers = List[PyObjectPtr]()
+    var wrappers: List[PyObjectPtr] = []
     swap(wrappers, state[].wrappers)
     wrappers.shrink(min(len(wrappers), slots(arena)))
     state[].wrappers = shrunk(wrappers^, room)
@@ -135,7 +135,7 @@ def collect(state: StatePointer) raises PyError -> PyObjectPtr:
     if state[].depth == 0:
         freed = collect_garbage(state, arena[])
         shrink_to_fit(arena[])
-        var wrappers = List[PyObjectPtr]()
+        var wrappers: List[PyObjectPtr] = []
         swap(wrappers, state[].wrappers)
         state[].wrappers = shrunk(wrappers^, 0)
     give_back(state, arena)
@@ -147,8 +147,8 @@ def stats(state: StatePointer) raises PyError -> PyObjectPtr:
     var counts = arena_stats(arena[])
     give_back(state, arena)
     var wrapped = 0
-    for index in range(len(state[].wrappers)):
-        if state[].wrappers.unsafe_get(index):
+    for wrapper in state[].wrappers:
+        if wrapper:
             wrapped += 1
     var stats = PyDict_New()
     if not stats:
@@ -169,11 +169,11 @@ def stats(state: StatePointer) raises PyError -> PyObjectPtr:
         counts.memo,
         counts.memo_room,
     ]
-    for index in range(len(names)):
-        var value = PyLong_FromSsize_t(values[index])
-        if not value or PyDict_SetItemString(stats, names[index], value) < 0:
-            Py_DecRef(value)
+    for name, value in zip(names, values):
+        var int = PyLong_FromSsize_t(value)
+        if not int or PyDict_SetItemString(stats, name, int) < 0:
+            Py_DecRef(int)
             Py_DecRef(stats)
             raise PyError()
-        Py_DecRef(value)
+        Py_DecRef(int)
     return stats

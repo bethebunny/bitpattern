@@ -247,8 +247,8 @@ def match_args() -> PyObjectPtr:
         "left".as_c_string_span(),
         "right".as_c_string_span(),
     ]
-    for index in range(3):
-        var name = PyUnicode_InternFromString(fields[index])
+    for index, field in enumerate(fields):
+        var name = PyUnicode_InternFromString(field)
         if not name:
             Py_DecRef(names)
             return PyObjectPtr()

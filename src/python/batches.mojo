@@ -85,17 +85,17 @@ struct Runs[V: Prefix](Movable):
 
     def next_batch(mut self, arena: Arena, size: Int) -> List[Run[Self.V]]:
         """A run of `size` members or more, or runs of up to `size` in all."""
-        var runs = List[Run[Self.V]]()
+        var runs: List[Run[Self.V]] = []
         var listed = 0
+        var next: Optional[Run[Self.V]]
         while True:
             var run: Run[Self.V]
             if self.held is not None:
                 run = self.held.take()
-            else:
-                var next = self.walk.next_run(arena)
-                if next is None:
-                    break
+            elif (next := self.walk.next_run(arena)) is not None:
                 run = next.take()
+            else:
+                break
             var long = not short(run.free, size)
             if long and not runs:
                 runs.append(run^)
@@ -223,7 +223,7 @@ def next_blocks[
     state: StatePointer, mut walk: Walk[V], size: Int
 ) raises PyError -> PyObjectPtr:
     var arena = take_arena(state)
-    var runs = List[Run[V]]()
+    var runs: List[Run[V]] = []
     while len(runs) < size:
         var run = walk.next_run(arena[])
         if run is None:
@@ -259,7 +259,7 @@ def next_paths(
 ) raises PyError -> PyObjectPtr:
     var arena = take_arena(state)
     # Every path is `width` long, so they share one buffer.
-    var text = List[UInt8]()
+    var text: List[UInt8] = []
     var count = 0
     while count < size and paths.next_path(arena[]):
         text.extend(Span(paths.bits))

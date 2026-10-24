@@ -24,8 +24,8 @@ from .errors import PyError
 
 
 # Py_ASNATIVEBYTES_* flags.
-comptime LITTLE_ENDIAN = c_int(1)
-comptime UNSIGNED_BUFFER = c_int(4)
+comptime LITTLE_ENDIAN: c_int = 1
+comptime UNSIGNED_BUFFER: c_int = 4
 
 comptime NumBits = def(PyObjectPtr) thin abi("C") -> Int
 
@@ -182,7 +182,7 @@ struct Int64OrOverflow(TrivialRegisterPassable):
     def from_python(o: PyObjectPtr) raises PyError -> Self:
         """Without the cost of an OverflowError. Runs `__index__` for an int-like and
         passes on its errors (TypeError for a non-int)."""
-        var overflow = c_int(0)
+        var overflow: c_int = 0
         var value = PyLong_AsLongLongAndOverflow(o, overflow)
         if value == -1 and overflow == 0 and PyErr_Occurred():
             raise PyError()
@@ -205,13 +205,13 @@ def indexed(ints: Ints, o: PyObjectPtr) raises PyError -> PyObjectPtr:
 
 def u128_of(ints: Ints, int: PyObjectPtr) -> Optional[UInt128]:
     """`int` (an int) if it fits a UInt128."""
-    var overflow = c_int(0)
+    var overflow: c_int = 0
     var small = PyLong_AsLongLongAndOverflow(int, overflow)
     if overflow == 0:
         return None if small < 0 else Optional(UInt128(small))
     if overflow < 0:
         return None
-    var value = UInt128(0)
+    var value: UInt128 = 0
     if ints.native:
         var flags = LITTLE_ENDIAN | UNSIGNED_BUFFER
         var needed = ints.as_native_bytes(int, value, flags)
@@ -223,18 +223,18 @@ def u128_of(ints: Ints, int: PyObjectPtr) -> Optional[UInt128]:
 
 
 def i128_of(ints: Ints, int: PyObjectPtr) -> Optional[Int128]:
-    var overflow = c_int(0)
+    var overflow: c_int = 0
     var small = PyLong_AsLongLongAndOverflow(int, overflow)
     if overflow == 0:
         return Int128(small)
     if ints.native:
-        var value = Int128(0)
+        var value: Int128 = 0
         var needed = ints.as_native_bytes(int, value, LITTLE_ENDIAN)
         return Optional(value) if needed <= 16 else None
     if ints.num_bits(int) > 128:
         return None
     # Of the 128-bit ints only -2**127 fits, so read with room for the sign.
-    var wide = Int256(0)
+    var wide: Int256 = 0
     _ = ints.as_byte_array(int, wide, 1, 1)
     if wide < Int256(Int128.MIN) or wide > Int256(Int128.MAX):
         return None
@@ -250,7 +250,7 @@ struct Signed(Movable):
 
     @staticmethod
     def from_int(ints: Ints, int: PyObjectPtr) -> Self:
-        var overflow = c_int(0)
+        var overflow: c_int = 0
         var small = PyLong_AsLongLongAndOverflow(int, overflow)
         if overflow == 0:
             var magnitude = UInt64(small) if small >= 0 else 0 - UInt64(small)
@@ -258,7 +258,7 @@ struct Signed(Movable):
         # Two's complement, with room for the sign.
         var bytes: Int
         if ints.native:
-            var unused = UInt64(0)
+            var unused: UInt64 = 0
             bytes = ints.as_native_bytes(int, unused, LITTLE_ENDIAN)
         else:
             bytes = ints.num_bits(int) // 8 + 1
@@ -269,7 +269,7 @@ struct Signed(Movable):
             _ = ints.as_byte_array(int, limbs, 1, 1)
         var negative = overflow < 0
         if negative:
-            var carry = UInt64(1)
+            var carry: UInt64 = 1
             for i in range(len(limbs)):
                 var limb = ~limbs.unsafe_get(i) + carry
                 carry = 1 if carry == 1 and limb == 0 else 0
