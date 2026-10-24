@@ -5,7 +5,6 @@ import platform
 import shutil
 import subprocess
 import sys
-import sysconfig
 import tempfile
 from importlib.metadata import distribution
 from pathlib import Path
@@ -15,12 +14,33 @@ from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
 # The Mojo runtime library the module loads, and the libraries it loads.
 RUNTIME = [
-    "libKGENCompilerRTShared.so",
-    "libAsyncRTRuntimeGlobals.so",
-    "libMSupportGlobals.so",
+    "libKGENCompilerRTShared",
+    "libAsyncRTRuntimeGlobals",
+    "libMSupportGlobals",
 ]
 # The module runs on any CPU of the architecture, not just the build machine's.
-TARGET_CPUS = {"x86_64": "x86-64-v2"}
+TARGET_CPUS = {
+    "x86_64": "x86-64-v2",
+    "aarch64": "generic",  # any ARMv8-A, eg. Graviton or Raspberry Pi
+    "arm64": "apple-m1",  # every Apple Silicon Mac
+}
+if sys.platform == "darwin":
+    # macOS 13, the oldest that mojo-compiler runs on.
+    PLATFORM_TAG = "macosx_13_0_arm64"
+    TARGET_FLAGS = ["--target-triple", "arm64-apple-macosx13.0"]
+    # Python's symbols resolve when Python loads the module, as on Linux.
+    LINK_FLAGS = ["-Xlinker", "-undefined", "-Xlinker", "dynamic_lookup"]
+    STRIP_FLAGS = ["-Xlinker", "-x"]  # drops local symbols
+    LIBRARY_SUFFIX = ".dylib"
+    ORIGIN = "@loader_path"
+else:
+    # The module needs glibc 2.34 (for dlsym), as does mojo-compiler.
+    PLATFORM_TAG = f"manylinux_2_34_{platform.machine()}"
+    TARGET_FLAGS = []
+    LINK_FLAGS = []
+    STRIP_FLAGS = ["-Xlinker", "--strip-all"]
+    LIBRARY_SUFFIX = ".so"
+    ORIGIN = "$ORIGIN"
 
 
 class MojoBuildHook(BuildHookInterface):
@@ -32,6 +52,7 @@ class MojoBuildHook(BuildHookInterface):
         # Source paths in the module are the project's, so a build doesn't depend on
         # where it ran.
         flags += ["-strip-file-prefix", f"{root}/"]
+        flags += TARGET_FLAGS + LINK_FLAGS
         if cpu := TARGET_CPUS.get(platform.machine()):
             flags += ["--target-cpu", cpu]
         if version == "editable":
@@ -42,8 +63,8 @@ class MojoBuildHook(BuildHookInterface):
             # have it yet.
             lib = distribution("mojo-compiler").locate_file("modular/lib")
             for name in RUNTIME:
-                shutil.copy(str(lib / name), module.parent)
-            rpath = "$ORIGIN"
+                shutil.copy(str(lib / f"{name}{LIBRARY_SUFFIX}"), module.parent)
+            rpath = ORIGIN
         else:
             # Built outside the project, so a wheel doesn't replace an editable
             # install's module.
@@ -52,10 +73,10 @@ class MojoBuildHook(BuildHookInterface):
             build_data["force_include"][str(module)] = "bitpattern/bdd.abi3.so"
             # site-packages/modular/lib, where mojo-compiler (a dependency) puts the
             # runtime libraries.
-            rpath = "$ORIGIN/../modular/lib"
+            rpath = f"{ORIGIN}/../modular/lib"
             # The symbol table is most of the module's size. Editable installs keep the
             # symbols for debuggers and profilers.
-            flags += ["-Xlinker", "--strip-all"]
+            flags += STRIP_FLAGS
         # Linker arguments, in place of mojo's default: an rpath into this build
         # environment, which an isolated build deletes.
         shared_libs = f"-Xlinker,-rpath,-Xlinker,{rpath}"
@@ -66,11 +87,7 @@ class MojoBuildHook(BuildHookInterface):
         subprocess.run(build, check=True, env=env)
         build_data["pure_python"] = False
         # The stable ABI, from CPython 3.11 on: one wheel per platform.
-        plat = sysconfig.get_platform().replace("-", "_").replace(".", "_")
-        if sys.platform == "linux":
-            # The module needs glibc 2.34 (for dlsym), as does mojo-compiler.
-            plat = f"manylinux_2_34_{platform.machine()}"
-        build_data["tag"] = f"cp311-abi3-{plat}"
+        build_data["tag"] = f"cp311-abi3-{PLATFORM_TAG}"
 
     def finalize(
         self, version: str, build_data: dict[str, Any], artifact_path: str

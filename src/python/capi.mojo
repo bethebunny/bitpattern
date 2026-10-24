@@ -16,6 +16,7 @@ The one private stdlib name the module uses is `PyObjectPtr`, from
 
 from std.ffi import CStringSpan, c_int, c_uint, external_call
 from std.python._cpython import PyObjectPtr
+from std.sys.info import CompilationTarget
 
 
 # Type slots (Include/typeslots.h).
@@ -163,8 +164,8 @@ def leaked[T: Copyable & Deinitable](var items: List[T]) -> Int:
 
 
 def symbol(name: StaticString) -> Int:
-    # RTLD_DEFAULT is null on glibc.
-    return external_call["dlsym", Int](Int(0), name.unsafe_ptr())
+    comptime RTLD_DEFAULT: Int = -2 if CompilationTarget.is_macos() else 0
+    return external_call["dlsym", Int](RTLD_DEFAULT, name.unsafe_ptr())
 
 
 def object_symbol(name: StaticString) -> PyObjectPtr:
