@@ -270,10 +270,8 @@ def str_or_size(o: PyObjectPtr) -> String:
 
 def int32_up_to(o: PyObjectPtr, most: Int32) raises PyError -> Optional[Int32]:
     var int_or_overflow = Int64OrOverflow.from_python(o)
-    if (
-        int_or_overflow.fits()
-        and Int64(0) <= int_or_overflow.value
-        and int_or_overflow.value <= Int64(most)
+    if int_or_overflow.fits() and (
+        Int64(0) <= int_or_overflow.value <= Int64(most)
     ):
         return Int32(int_or_overflow.value)
     return None

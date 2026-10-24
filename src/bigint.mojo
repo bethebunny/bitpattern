@@ -158,7 +158,7 @@ struct BigUInt(
         """`2**width - 1`."""
         var bits = index(width)
         var limbs = Limbs(capacity=(bits + 63) >> 6)
-        limbs.resize(bits >> 6, ~UInt64(0))
+        limbs.resize(bits >> 6, UInt64.MAX)
         if bits & 63:
             limbs.append(_low_mask(bits & 63))
         return Self(limbs=limbs^)
@@ -541,7 +541,7 @@ def _shift_left(
     """Writes `a << shift` (for 0 < shift < 64) and returns the bits shifted out
     the top."""
     var top = a[unsafe_offset=n - 1] >> (64 - shift)
-    for i in range(n - 1, 0, -1):
+    for i in reversed(range(1, n)):
         dest[unsafe_offset=i] = a[unsafe_offset=i] << shift | (
             a[unsafe_offset=i - 1] >> (64 - shift)
         )
@@ -588,7 +588,7 @@ def _divide_by_limb(
 ) -> UInt64:
     """Writes `a / divisor` and returns the remainder."""
     var rest: UInt64 = 0
-    for i in range(n - 1, -1, -1):
+    for i in reversed(range(n)):
         var step = _two_by_one(
             high=rest, low=a[unsafe_offset=i], divisor=divisor
         )
@@ -641,7 +641,7 @@ def _divide(
     var top = v.unsafe_get(n - 1)
     var next = v.unsafe_get(n - 2)
     var up = u.unsafe_ptr()
-    for j in range(m, -1, -1):
+    for j in reversed(range(m + 1)):
         # Estimate the quotient limb from the top two limbs of u and the top
         # limb of v. u's top limb is at most v's.
         var high = up[unsafe_offset=j + n]
@@ -649,7 +649,7 @@ def _divide(
         var q: UInt64
         var r: UInt128
         if high >= top:
-            q = ~UInt64(0)
+            q = UInt64.MAX
             r = UInt128(low) + UInt128(top)
         else:
             var step = _two_by_one(high=high, low=low, divisor=top)
@@ -683,7 +683,7 @@ def _divide(
 
 def _less(a: Limbs, b: Limbs) -> Bool:
     """For limbs of the same length."""
-    for i in range(len(a) - 1, -1, -1):
+    for i in reversed(range(len(a))):
         var x = a.unsafe_get(i)
         var y = b.unsafe_get(i)
         if x != y:

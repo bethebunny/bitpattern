@@ -1,6 +1,6 @@
 """Questions about diagrams, as Python functions."""
 
-from std.bit import count_leading_zeros
+from std.bit import bit_width
 from std.python._cpython import PyObjectPtr
 
 from arena import ACCEPT, Arena, Id, Interrupted, NARROW_WIDTH
@@ -161,7 +161,7 @@ struct Integer(Movable):
     def bit_length(self) -> Int:
         if self.wide is not None:
             return self.wide.value().bits()
-        return 128 - Int(count_leading_zeros(self.narrow))
+        return Int(bit_width(self.narrow))
 
     def widened(self) -> BigUInt:
         """The bits in a BigUInt."""

@@ -248,7 +248,7 @@ def room(members: Count, *, columns: Int, size: Int) -> Optional[Words]:
             256, ceildiv(rows * columns * size, 256) * 256
         )
         if data is not None:
-            return Words(Int(data.unsafe_value()), rows * columns)
+            return Words(Int(data.value()), rows * columns)
     return None
 
 
@@ -328,11 +328,7 @@ def int_up_to[dtype: DType](o: PyObjectPtr) raises PyError -> Scalar[dtype]:
     """OverflowError outside `[0, Scalar[dtype].MAX]`."""
     comptime most = Int64(Scalar[dtype].MAX)
     var int_or_overflow = Int64OrOverflow.from_python(o)
-    if (
-        int_or_overflow.fits()
-        and Int64(0) <= int_or_overflow.value
-        and int_or_overflow.value <= most
-    ):
+    if int_or_overflow.fits() and Int64(0) <= int_or_overflow.value <= most:
         return Scalar[dtype](int_or_overflow.value)
     raise overflow_error(String(t"expected an int in [0, {most}]"))
 

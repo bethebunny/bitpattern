@@ -223,7 +223,7 @@ def i128_of(ints: Ints, int: PyObjectPtr) -> Optional[Int128]:
     # Of the 128-bit ints only -2**127 fits, so read with room for the sign.
     var wide: Int256 = 0
     _ = ints.as_byte_array(int, wide, signed=True)
-    if wide < Int256(Int128.MIN) or wide > Int256(Int128.MAX):
+    if not Int256(Int128.MIN) <= wide <= Int256(Int128.MAX):
         return None
     return Int128(wide)
 

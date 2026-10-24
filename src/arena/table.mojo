@@ -6,7 +6,7 @@ stay in cache when the slots don't.
 """
 
 from std.bit import count_trailing_zeros
-from std.memory import pack_bits, unsafe_memset
+from std.memory import pack_bits
 
 from .arena import Decision, Id
 
@@ -100,7 +100,7 @@ struct Control(Movable):
         return slot
 
     def clear(mut self):
-        unsafe_memset(self.bytes.unsafe_ptr(), EMPTY, len(self.bytes))
+        Span(self.bytes).fill(EMPTY)
 
 
 trait Key(Equatable, TrivialRegisterPassable):

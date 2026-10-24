@@ -40,9 +40,9 @@ def nth_narrow(arena: Arena, root: Id, n: UInt128) -> UInt128:
         # The free bits above the node are the member's highest bits.
         var size = arena.sizes.narrow.unsafe_get(id.index())
         if rest >= size:
-            var high = rest // size
+            var high: UInt128
+            high, rest = divmod(rest, size)
             member |= high << UInt128(node.bit + 1)
-            rest -= high * size
         var lo_count = arena.count_narrow(node.lo, node.bit)
         if rest < lo_count:
             id = node.lo

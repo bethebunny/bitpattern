@@ -1,6 +1,6 @@
 """Functions that make diagrams."""
 
-from std.bit import count_leading_zeros
+from std.bit import bit_width
 from std.collections import Set
 from std.ffi import c_int
 from std.python._cpython import PyObjectPtr
@@ -126,7 +126,7 @@ def lshift(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
         raise shifted_out(str_or_size(args[1]), top)
     if by.value == 0 or id.is_leaf():
         return Py_NewRef(args[0])
-    if by.value < Int64(Int32.MIN) or by.value > Int64(Int32.MAX):
+    if not Int64(Int32.MIN) <= by.value <= Int64(Int32.MAX):
         var arena = take_arena(state)
         var top = arena[].decision(id).bit
         give_back(state, arena)
@@ -471,7 +471,7 @@ struct Members(Movable):
             return values[len(values) - 1].bits() if values else 0
         if not self.narrow:
             return 0
-        return 128 - Int(count_leading_zeros(self.narrow[len(self.narrow) - 1]))
+        return Int(bit_width(self.narrow[len(self.narrow) - 1]))
 
 
 comptime INTERVAL = Signature(

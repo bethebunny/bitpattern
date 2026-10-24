@@ -62,7 +62,7 @@ struct Wide(Copyable, Prefix):
     var value: BigUInt
 
     def __init__(out self):
-        self.value = BigUInt()
+        self.value = 0
 
     def bit(self, bit: Int32) -> Bool:
         return self.value.bit(bit)

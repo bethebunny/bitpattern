@@ -60,7 +60,7 @@ def collect(mut arena: Arena, var roots: List[Id]) -> Tuple[Int, Int]:
     arena.sizes.narrow.shrink(end)
     arena.free = [
         Id.from_index(index)
-        for index in range(end - 1, 1, -1)
+        for index in reversed(range(2, end))
         if arena.nodes.unsafe_get(index).bit == FREED
     ]
     arena.schedule.made = 0
