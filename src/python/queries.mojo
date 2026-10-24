@@ -152,7 +152,7 @@ struct Integer(Movable):
         var bits = signed.magnitude.copy()
         if signed.negative:
             # A negative int's complement is its magnitude less one.
-            bits -= BigUInt(1)
+            bits -= 1
         var narrow = bits.uint128_or_none()
         if narrow is not None:
             return Self(signed.negative, narrow.value(), None)

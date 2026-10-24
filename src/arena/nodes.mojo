@@ -24,7 +24,7 @@ def node_count(mut arena: Arena, root: Id) raises Interrupted -> Int:
 def path_count(mut arena: Arena, root: Id) raises Interrupted -> BigUInt:
     # Results are indices into `counts`, so the walk copies no counts. A leaf's id is
     # its count's index.
-    var counts: List[BigUInt] = [BigUInt(), BigUInt(1)]
+    var counts: List[BigUInt] = [0, 1]
     var counted = Table()
     var steps: List[Step[Id]] = [Step[Id].visit(root)]
     var results = List[Int]()

@@ -143,6 +143,7 @@ struct BigUInt(
         elif value:
             self.limbs.append(UInt64(value))
 
+    @implicit
     def __init__(out self, value: IntLiteral):
         # Else a literal could be a UInt64 or a UInt128.
         self = Self(UInt128(value))
@@ -315,7 +316,7 @@ struct BigUInt(
             return Self(limbs=_sum(rhs.limbs, self.limbs))
         return Self(limbs=_sum(self.limbs, rhs.limbs))
 
-    def __add__(self, rhs: UInt64) -> Self:
+    def plus(self, rhs: UInt64) -> Self:
         var n = len(self.limbs)
         var limbs = Limbs(capacity=n + 1)
         limbs.resize(unsafe_uninit_length=n)

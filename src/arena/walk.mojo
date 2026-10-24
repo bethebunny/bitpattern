@@ -74,7 +74,7 @@ struct Wide(Copyable, Prefix):
         return Self((self.value >> Int(width)) << Int(width))
 
     def plus(self, n: UInt64) -> Self:
-        return Self(self.value + n)
+        return Self(self.value.plus(n))
 
     def limb(self, i: Int) -> UInt64:
         return self.value.limb(i)

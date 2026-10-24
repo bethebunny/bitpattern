@@ -514,7 +514,7 @@ def interval(
     var high = Signed.from_python(state[].ints, args[1])
     if high.negative or not high.magnitude:
         return wrap(state, REJECT)
-    var last = high.magnitude - BigUInt(1)
+    var last = high.magnitude - 1
     if last.bits() > Int(width):
         last = BigUInt.mask(Int(width))
     var first = BigUInt() if low.negative else low.magnitude.copy()
