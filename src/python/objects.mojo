@@ -4,6 +4,7 @@ from std.python._cpython import PyObjectPtr
 
 from arena import ACCEPT, Arena, Id, Interrupted
 from arena.collect import (
+    Stats,
     collect as arena_collect,
     collection_due,
     memos_full,
@@ -138,15 +139,16 @@ comptime COLLECT = Signature(
 
 
 def collect(state: StatePointer) raises PyError -> PyObjectPtr:
-    var arena = take_arena(state)
     var freed = 0
-    if state[].depth == 0:
-        freed = collect_garbage(state, arena[])
-        shrink_to_fit(arena[])
-        var wrappers: List[PyObjectPtr] = []
-        swap(wrappers, state[].wrappers)
-        state[].wrappers = shrunk(wrappers^, 0)
-    give_back(state, arena)
+    with Lease(state) as arena:
+        comptime if False:
+            raise PyError()  # TODO(#7206)
+        if state[].depth == 0:
+            freed = collect_garbage(state, arena[])
+            shrink_to_fit(arena[])
+            var wrappers: List[PyObjectPtr] = []
+            swap(wrappers, state[].wrappers)
+            state[].wrappers = shrunk(wrappers^, 0)
     return PyLong_FromSsize_t(freed)
 
 
@@ -166,9 +168,11 @@ comptime STATS = Signature(
 
 
 def stats(state: StatePointer) raises PyError -> PyObjectPtr:
-    var arena = take_arena(state)
-    var counts = arena_stats(arena[])
-    give_back(state, arena)
+    var counts: Stats
+    with Lease(state) as arena:
+        comptime if False:
+            raise PyError()  # TODO(#7206)
+        counts = arena_stats(arena[])
     var wrapped = 0
     for wrapper in state[].wrappers:
         if wrapper:

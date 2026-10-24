@@ -64,7 +64,7 @@ from .capi import (
 from .errors import PyError, type_error, value_error
 from .ints import Int64OrOverflow, Ints, Signed, indexed, u128_of
 from .objects import Call, id_of, leaf_name, wrap, wrap_result
-from .state import Lease, StatePointer, give_back, take_arena
+from .state import Lease, StatePointer
 
 
 def reduction(
@@ -114,17 +114,21 @@ def lshift(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
         # Too far for any decision node.
         if id.is_leaf():
             return Py_NewRef(args[0])
-        var arena = take_arena(state)
-        var top = arena[].decision(id).bit
-        give_back(state, arena)
+        var top: Int32
+        with Lease(state) as arena:
+            comptime if False:
+                raise PyError()  # TODO(#7206)
+            top = arena[].decision(id).bit
         # `str_or_size` can run Python, so the arena goes back first.
         raise shifted_out(str_or_size(args[1]), top)
     if by.value == 0 or id.is_leaf():
         return Py_NewRef(args[0])
     if not Int64(Int32.MIN) <= by.value <= Int64(Int32.MAX):
-        var arena = take_arena(state)
-        var top = arena[].decision(id).bit
-        give_back(state, arena)
+        var top: Int32
+        with Lease(state) as arena:
+            comptime if False:
+                raise PyError()  # TODO(#7206)
+            top = arena[].decision(id).bit
         raise shifted_out(String(by.value), top)
     with Call(state):
         var lease = Lease(state)
@@ -181,9 +185,11 @@ def narrowed(
 ) raises PyError -> PyObjectPtr:
     var id = node_as_id(state, args[0])
     var width = width_as_int32(args[1])
-    var arena = take_arena(state)
-    var narrow = arena[].tests_only_below(id, width)
-    give_back(state, arena)
+    var narrow: Bool
+    with Lease(state) as arena:
+        comptime if False:
+            raise PyError()  # TODO(#7206)
+        narrow = arena[].tests_only_below(id, width)
     if narrow:
         return Py_NewRef(args[0])
 

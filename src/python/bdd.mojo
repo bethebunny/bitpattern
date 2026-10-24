@@ -66,15 +66,8 @@ from .objects import (
     wrap,
     wrap_result,
 )
-from .queries import int_from_count, member_count
-from .state import (
-    Lease,
-    StatePointer,
-    give_back,
-    object_state,
-    take_arena,
-    type_state,
-)
+from .queries import Count, int_from_count, member_count
+from .state import Lease, StatePointer, object_state, type_state
 
 
 comptime DOC = """BDD(bit, left, right)
@@ -215,9 +208,11 @@ def bdd_bit(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
         return PyLong_FromLongLong(-1)
     var state = object_state(o)
     try:
-        var arena = take_arena(state)
-        var tested = arena[].decision(id).bit
-        give_back(state, arena)
+        var tested: Int32
+        with Lease(state) as arena:
+            comptime if False:
+                raise PyError()  # TODO(#7206)
+            tested = arena[].decision(id).bit
         return PyLong_FromLongLong(Int64(tested))
     except:
         return PyObjectPtr()
@@ -231,10 +226,13 @@ def branch[hi: Bool](o: PyObjectPtr) -> PyObjectPtr:
         return Py_NewRef(o)
     var state = object_state(o)
     try:
-        var arena = take_arena(state)
-        var decision = arena[].decision(id)
-        give_back(state, arena)
-        return wrap(state, decision.hi if hi else decision.lo)
+        var child: Id
+        with Lease(state) as arena:
+            comptime if False:
+                raise PyError()  # TODO(#7206)
+            var decision = arena[].decision(id)
+            child = decision.hi if hi else decision.lo
+        return wrap(state, child)
     except:
         return PyObjectPtr()
 
@@ -251,10 +249,14 @@ def bdd_size(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
     var id = id_of(o)
     var state = object_state(o)
     try:
-        var arena = take_arena(state)
-        var width: Int32 = 0 if id.is_leaf() else arena[].decision(id).bit + 1
-        var count = member_count(arena[], id, width)
-        give_back(state, arena)
+        var count: Count
+        with Lease(state) as arena:
+            comptime if False:
+                raise PyError()  # TODO(#7206)
+            var width: Int32 = (
+                0 if id.is_leaf() else arena[].decision(id).bit + 1
+            )
+            count = member_count(arena[], id, width)
         return int_from_count(state[].ints, count)
     except:
         return PyObjectPtr()

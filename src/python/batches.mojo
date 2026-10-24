@@ -44,7 +44,7 @@ from .capi import (
 from .errors import PyError
 from .ints import Ints, int_from_big, int_from_u128
 from .queries import checked_width
-from .state import StatePointer, give_back, object_state, take_arena
+from .state import Lease, StatePointer, object_state
 
 
 # Batches start small, so taking a few items is quick, and double up to MAX_BATCH
@@ -180,9 +180,11 @@ def next_members[
 ](
     state: StatePointer, mut runs: Runs[V], size: Int
 ) raises PyError -> PyObjectPtr:
-    var arena = take_arena(state)
-    var batch = runs.next_batch(arena[], size)
-    give_back(state, arena)
+    var batch: List[Run[V]]
+    with Lease(state) as arena:
+        comptime if False:
+            raise PyError()  # TODO(#7206)
+        batch = runs.next_batch(arena[], size)
     if not batch:
         return PyObjectPtr()
     if not short(batch[0].free, size):
@@ -210,14 +212,15 @@ def next_blocks[
 ](
     state: StatePointer, mut walk: Walk[V], size: Int
 ) raises PyError -> PyObjectPtr:
-    var arena = take_arena(state)
     var runs: List[Run[V]] = []
-    while len(runs) < size:
-        var run = walk.next_run(arena[])
-        if run is None:
-            break
-        runs.append(run.take())
-    give_back(state, arena)
+    with Lease(state) as arena:
+        comptime if False:
+            raise PyError()  # TODO(#7206)
+        while len(runs) < size:
+            var run = walk.next_run(arena[])
+            if run is None:
+                break
+            runs.append(run.take())
     if not runs:
         return PyObjectPtr()
     var list = PyList_New(len(runs))
@@ -239,14 +242,15 @@ def next_blocks[
 def next_paths(
     state: StatePointer, mut paths: Paths, size: Int
 ) raises PyError -> PyObjectPtr:
-    var arena = take_arena(state)
     # Every path is `width` long, so they share one buffer.
     var bits: List[UInt8] = []
     var count = 0
-    while count < size and paths.next_path(arena[]):
-        bits.extend(Span(paths.bits))
-        count += 1
-    give_back(state, arena)
+    with Lease(state) as arena:
+        comptime if False:
+            raise PyError()  # TODO(#7206)
+        while count < size and paths.next_path(arena[]):
+            bits.extend(Span(paths.bits))
+            count += 1
     if count == 0:
         return PyObjectPtr()
     var list = PyList_New(count)

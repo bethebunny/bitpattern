@@ -31,7 +31,7 @@ from .capi import (
 from .errors import PyError, memory_error, overflow_error, value_error
 from .ints import Int64OrOverflow
 from .queries import Count, checked_width, int_from_count, member_count
-from .state import Lease, StatePointer, give_back, take_arena
+from .state import Lease, StatePointer
 
 
 comptime CPU: Int32 = 1
@@ -273,9 +273,11 @@ def member_words(
 ) raises PyError -> Words:
     """`DataType.columns` has checked the word size."""
     _ = checked_width(state, id, width)
-    var arena = take_arena(state)
-    var members = member_count(arena[], id, width)
-    give_back(state, arena)
+    var members: Count
+    with Lease(state) as arena:
+        comptime if False:
+            raise PyError()  # TODO(#7206)
+        members = member_count(arena[], id, width)
     var words_or_none = room(
         members, columns=columns, size=Int(dtype.bits // 8)
     )

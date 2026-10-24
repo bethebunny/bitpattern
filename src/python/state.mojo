@@ -95,7 +95,8 @@ def object_state(o: PyObjectPtr) -> StatePointer:
 
 def take_arena(state: StatePointer) raises PyError -> ArenaPointer:
     """Python code that runs while a call has the arena (eg. an `__index__`) could call
-    back in, so no Python may run until it's given back."""
+    back in, so no Python may run until it's given back. Only Lease, Call and pause take
+    and give it back directly. Everything else uses Lease."""
     if state[].arena is None:
         raise runtime_error("a call has the arena")
     return state[].arena.take()
@@ -108,6 +109,9 @@ def give_back(state: StatePointer, arena: ArenaPointer):
 
 struct Lease:
     """The arena, taken for a `with` block and given back however the block ends.
+
+    Mojo 1.2 rejects a `with` whose body raises nothing where the error type is PyError
+    (#7206), so such a body starts with a raise that never runs.
     """
 
     var state: StatePointer

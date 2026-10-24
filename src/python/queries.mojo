@@ -22,7 +22,7 @@ from .ints import (
     repr_of_count,
 )
 from .ints import Ints, Signed, i128_of
-from .state import Lease, StatePointer, give_back, take_arena
+from .state import Lease, StatePointer
 
 
 @fieldwise_init
@@ -56,9 +56,11 @@ def int_from_count(ints: Ints, count: Count) raises PyError -> PyObjectPtr:
 def checked_width(
     state: StatePointer, id: Id, width: Int32
 ) raises PyError -> Int32:
-    var arena = take_arena(state)
-    var bit: Int32 = -1 if id.is_leaf() else arena[].decision(id).bit
-    give_back(state, arena)
+    var bit: Int32
+    with Lease(state) as arena:
+        comptime if False:
+            raise PyError()  # TODO(#7206)
+        bit = -1 if id.is_leaf() else arena[].decision(id).bit
     if bit >= width:
         raise value_error(
             String(t"node tests bit {bit}, outside width {width}")
@@ -72,9 +74,11 @@ comptime COUNT = Signature("count", positional=["node"], keywords=["width"])
 def count(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node_as_id(state, args[0])
     var width = checked_width(state, id, width_as_int32(args[1]))
-    var arena = take_arena(state)
-    var total = member_count(arena[], id, width)
-    give_back(state, arena)
+    var total: Count
+    with Lease(state) as arena:
+        comptime if False:
+            raise PyError()  # TODO(#7206)
+        total = member_count(arena[], id, width)
     return int_from_count(state[].ints, total)
 
 
@@ -180,9 +184,11 @@ comptime ACCEPTS = Signature("accepts", positional=["node", "value"])
 def accepts(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node_as_id(state, args[0])
     var value = Integer.from_python(state[].ints, args[1])
-    var arena = take_arena(state)
-    var answer = members.accepts[integer_bit](arena[], id, value)
-    give_back(state, arena)
+    var answer: Bool
+    with Lease(state) as arena:
+        comptime if False:
+            raise PyError()  # TODO(#7206)
+        answer = members.accepts[integer_bit](arena[], id, value)
     return PyBool_FromLong(answer)
 
 
@@ -218,9 +224,11 @@ def nth(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var width = width_as_int32(args[2])
     var index = Integer.from_python(state[].ints, args[1])
     width = checked_width(state, id, width)
-    var arena = take_arena(state)
-    var member = member_at(arena[], id, width, index)
-    give_back(state, arena)
+    var member: Optional[Count]
+    with Lease(state) as arena:
+        comptime if False:
+            raise PyError()  # TODO(#7206)
+        member = member_at(arena[], id, width, index)
     if member is None:
         raise index_error(args[1])
     return int_from_count(state[].ints, member.value())
@@ -248,9 +256,11 @@ def rank(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node_as_id(state, args[0])
     var value = Integer.from_python(state[].ints, args[1])
     var width = checked_width(state, id, width_as_int32(args[2]))
-    var arena = take_arena(state)
-    var below = members_below(arena[], id, width, value)
-    give_back(state, arena)
+    var below: Count
+    with Lease(state) as arena:
+        comptime if False:
+            raise PyError()  # TODO(#7206)
+        below = members_below(arena[], id, width, value)
     return int_from_count(state[].ints, below)
 
 
