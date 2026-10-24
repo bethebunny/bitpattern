@@ -1,8 +1,8 @@
 """Subset and disjointness tests, which make no nodes."""
 
 from .arena import ACCEPT, Arena, Id, Interrupted, REJECT
-from .steps import Pair, emptied
-from .table import Table, pair, sorted_pair
+from .steps import Pair, emptied, take
+from .table import pair, sorted_pair
 
 comptime WORTH_KEEPING = 8
 """Walks shorter than this cost less to redo than to memoise."""
@@ -70,10 +70,8 @@ def walk_pairs[
 ](mut arena: Arena, a: Id, b: Id) raises Interrupted -> Tuple[Bool, Int]:
     """Walks `a` and `b` together as apply does, until `trivial` answers False. Returns
     the answer and how many pairs the walk visited."""
-    var pairs: List[Pair] = []
-    swap(pairs, arena.scratch.pending_pairs)
-    var seen = Table()
-    swap(seen, arena.scratch.seen_pairs)
+    var pairs = take(arena.scratch.pending_pairs)
+    var seen = take(arena.scratch.seen_pairs)
     pairs.append(Pair(a, b))
     var answer = True
     while pairs:

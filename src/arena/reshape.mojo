@@ -4,8 +4,8 @@ from std.utils import Variant
 
 from .apply import union
 from .arena import Arena, Id, Interrupted, MAX_BIT
-from .steps import Step, emptied, pop_branches, push_branches
-from .table import Table, single
+from .steps import Step, emptied, pop_branches, push_branches, take
+from .table import single
 
 
 @fieldwise_init
@@ -23,12 +23,9 @@ def lshift(
         MAX_BIT
     ):
         raise ShiftedOut(arena.decision(root).bit)
-    var moved = Table()
-    swap(moved, arena.scratch.node_results)
-    var steps: List[Step[Id]] = []
-    swap(steps, arena.scratch.node_steps)
-    var results: List[Id] = []
-    swap(results, arena.scratch.results)
+    var moved = take(arena.scratch.node_results)
+    var steps = take(arena.scratch.node_steps)
+    var results = take(arena.scratch.results)
     steps.append(Step.visit(root))
     var found: Optional[UInt32]
     while steps:
@@ -58,12 +55,9 @@ def lshift(
 def freed_between(
     mut arena: Arena, root: Id, *, low_bit: Int32, high_bit: Int32
 ) raises Interrupted -> Id:
-    var freed = Table()
-    swap(freed, arena.scratch.node_results)
-    var steps: List[Step[Id]] = []
-    swap(steps, arena.scratch.node_steps)
-    var results: List[Id] = []
-    swap(results, arena.scratch.results)
+    var freed = take(arena.scratch.node_results)
+    var steps = take(arena.scratch.node_steps)
+    var results = take(arena.scratch.results)
     steps.append(Step.visit(root))
     var found: Optional[UInt32]
     while steps:

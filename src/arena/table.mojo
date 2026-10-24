@@ -148,14 +148,17 @@ struct Entry[K: Key](TrivialRegisterPassable):
     var value: UInt32
 
 
-struct HashTable[K: Key](Movable, Sized):
+struct HashTable[K: Key](Defaultable, Movable, Sized):
     """Maps UInt64 keys (an id, or two packed by `pair`) to UInt32 values."""
 
     var control: Control
     var entries: List[Entry[Self.K]]
     var held: Int
 
-    def __init__(out self, slots: Int = 0):
+    def __init__(out self):
+        self = Self(slots=0)
+
+    def __init__(out self, slots: Int):
         self.control = Control(slots)
         self.entries = List[Entry[Self.K]](unsafe_uninit_length=slots)
         self.held = 0

@@ -51,8 +51,9 @@ struct Span(TrivialRegisterPassable):
 
 
 struct Scratch(Movable):
-    """Stacks kept between walks, so short walks allocate nothing. A walk nested in
-    another (eg. the `|` in freed_between) finds them taken and allocates its own.
+    """Stacks kept between walks, so short walks allocate nothing. Walks nest (eg. the
+    `|` in freed_between), so each walk takes them while it runs. A nested walk finds
+    them taken and allocates its own.
     """
 
     var pair_steps: List[Step[Pair]]
@@ -71,6 +72,13 @@ struct Scratch(Movable):
         self.node_results = Table()
         self.pending_pairs = []
         self.seen_pairs = Table()
+
+
+def take[T: Movable & Defaultable](mut value: T) -> T:
+    """`value`, leaving `T()` in its place."""
+    var taken = T()
+    swap(taken, value)
+    return taken^
 
 
 def emptied[T: Copyable & Deinitable](var stack: List[T]) -> List[T]:

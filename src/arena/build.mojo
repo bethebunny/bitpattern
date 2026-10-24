@@ -3,7 +3,7 @@
 from bigint import BigUInt
 
 from .arena import ACCEPT, Arena, Id, Interrupted, REJECT
-from .steps import Span, Step, emptied, pop_branches
+from .steps import Span, Step, emptied, pop_branches, take
 
 
 @always_inline
@@ -20,10 +20,8 @@ def exactly_these[
     T: Copyable, //, bit_of: def(T, Int32) thin -> Bool
 ](mut arena: Arena, values: List[T], width: Int32) raises Interrupted -> Id:
     """`values` is sorted and distinct, and below `2 ** width`."""
-    var steps: List[Step[Span]] = []
-    swap(steps, arena.scratch.span_steps)
-    var results: List[Id] = []
-    swap(results, arena.scratch.results)
+    var steps = take(arena.scratch.span_steps)
+    var results = take(arena.scratch.results)
     steps.append(Step.visit(Span(0, len(values), width - 1)))
     while steps:
         arena.tick()

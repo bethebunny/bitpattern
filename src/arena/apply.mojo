@@ -1,7 +1,7 @@
 """Diagrams' `&`, `|`, `^` and `~`."""
 
 from .arena import ACCEPT, Arena, Id, Interrupted, REJECT
-from .steps import Pair, Step, emptied, pop_branches, push_branches
+from .steps import Pair, Step, emptied, pop_branches, push_branches, take
 from .table import Table, single, sorted_pair
 
 
@@ -39,10 +39,8 @@ def apply[op: Op](mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
     var answer = known[op](arena, a, b)
     if answer is not None:
         return answer.value()
-    var steps: List[Step[Pair]] = []
-    swap(steps, arena.scratch.pair_steps)
-    var results: List[Id] = []
-    swap(results, arena.scratch.results)
+    var steps = take(arena.scratch.pair_steps)
+    var results = take(arena.scratch.results)
     steps.append(Step.visit(Pair(a, b)))
     while steps:
         arena.tick()
@@ -132,10 +130,8 @@ def complement(mut arena: Arena, root: Id) raises Interrupted -> Id:
     var answer = known_complement(arena, root)
     if answer is not None:
         return answer.value()
-    var steps: List[Step[Id]] = []
-    swap(steps, arena.scratch.node_steps)
-    var results: List[Id] = []
-    swap(results, arena.scratch.results)
+    var steps = take(arena.scratch.node_steps)
+    var results = take(arena.scratch.results)
     steps.append(Step.visit(root))
     while steps:
         arena.tick()
