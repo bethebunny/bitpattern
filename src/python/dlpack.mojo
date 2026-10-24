@@ -186,7 +186,7 @@ struct Export[M: Managed](Movable):
 
 
 def delete[M: Managed](managed: Int) abi("C"):
-    # It frees only Mojo memory, so any thread can call it.
+    # It frees only libc and Mojo memory, so any thread can call it.
     var export = Pointer[Export[M], MutUntrackedOrigin](
         unsafe_from_address=managed
     )

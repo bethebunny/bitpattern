@@ -20,7 +20,7 @@ comptime Group = SIMD[DType.uint8, GROUP]
 
 @always_inline
 def mixed(key: UInt64) -> UInt64:
-    # Fibonacci hashing: the multiply spreads sequential ids over the high bits.
+    # Fibonacci hashing spreads sequential ids over the high bits.
     return key * 0x9E3779B97F4A7C15
 
 
@@ -167,7 +167,6 @@ struct HashTable[K: Key](Defaultable, Movable, Sized):
         return self.held
 
     def capacity(self) -> Int:
-        """How many entries fit before the table grows."""
         return room(len(self.entries))
 
     @always_inline

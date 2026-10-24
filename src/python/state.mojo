@@ -33,8 +33,8 @@ struct State(Movable):
     var arena: Int
     """The arena's address, or 0 while a call has it."""
     var depth: Int
-    """Calls under way. Only the outermost collects, since an outer call can hold a
-    node it hasn't wrapped yet."""
+    """Calls under way. An outer call can hold a node it hasn't wrapped yet, so only the
+    outermost collects."""
     var wrappers: List[PyObjectPtr]
     """Each node's object by index (borrowed: an object clears its entry as it dies),
     or null. A node has at most one, so `is` compares diagrams."""
@@ -125,7 +125,7 @@ def pause(mut arena: Arena, pause_state: PauseStatePointer) -> Bool:
     """Runs Python's SIGINT handler after a Ctrl-C and stops the walk if it raised.
 
     The handler can use the arena, so the walk lends it the real one and holds a
-    placeholder meanwhile. Nothing collects while the handler runs, since the walk holds
+    placeholder meanwhile. Nothing collects while the handler runs since the walk holds
     nodes nothing else reaches. What the handler raised stays in Python's error
     indicator for the call to return.
     """

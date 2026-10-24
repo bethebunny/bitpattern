@@ -29,7 +29,7 @@ def error(kind: PyObjectPtr, message: String) -> PyError:
     return PyError()
 
 
-# Exception types are looked up when raised, since errors are rare.
+# Errors are rare, so exception types are looked up when raised.
 
 
 def value_error(message: String) -> PyError:

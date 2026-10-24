@@ -34,7 +34,7 @@ def difference(mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
 
 
 def apply[op: Op](mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
-    """Bryant's apply, specialised for `op` at compile time."""
+    """Bryant's apply."""
     # Skips taking the stacks for the many calls that need no walk.
     var answer = known[op](arena, a, b)
     if answer is not None:

@@ -47,8 +47,8 @@ def shrunk[T: Copyable & Deinitable](var list: List[T], room: Int) -> List[T]:
 def collect(mut arena: Arena, var roots: List[Id]) -> Tuple[Int, Int]:
     """Frees the nodes `roots` don't reach. Returns how many it freed, and the room kept.
 
-    The tables keep room for as many new nodes as last time and give back the rest. The
-    unique table keeps only twice the nodes left, since sparser is slower.
+    The tables keep room for as many new nodes as last time and give back the rest.
+    Sparser is slower, so the unique table keeps room for only twice the nodes left.
     """
     var made = arena.schedule.made
     var freed = sweep(arena, marks(arena, roots^))

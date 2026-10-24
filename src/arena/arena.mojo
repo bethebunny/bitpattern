@@ -2,7 +2,7 @@
 
 Terms:
   - a node's _members_ are the integers it accepts
-  - a _decision node_ tests one bit, and follows `lo` if it's clear or `hi` if it's set
+  - a _decision node_ tests one bit and follows `lo` if it's clear or `hi` if it's set
   - a _set_ is a node's members below `2 ** width`
   - a bit is _free_ on a path if no node on the path tests it
 
@@ -64,8 +64,8 @@ struct Decision(Equatable, TrivialRegisterPassable):
 
     @always_inline
     def sole_branch(self) -> Id:
-        """The branch that isn't REJECT. An OR (REJECT is 0) has no jump to mispredict.
-        """
+        """The branch that isn't REJECT."""
+        # REJECT is 0, so an OR has no jump to mispredict.
         return Id(self.lo.value | self.hi.value)
 
 

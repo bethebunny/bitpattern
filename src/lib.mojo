@@ -2,7 +2,7 @@
 
 Invariants:
   - a node has at most one Python object, so `is` compares diagrams
-  - no Python code runs while a call has the arena, since it could call back in or
+  - no Python code runs while a call has the arena since it could call back in or
     drop a node's object (eg. from the garbage collector)
   - long walks pause for Ctrl-C and lend the arena while Python's handler runs
 """
@@ -108,7 +108,7 @@ def python_version() -> UInt64:
 
 
 def methods() -> Int:
-    """The module's functions, in memory that lives as long as the process."""
+    """The module's functions."""
     var table: List[MethodDef] = [
         keywords_method[accepts, ACCEPTS](),
         keywords_method[count, COUNT](),
@@ -133,8 +133,8 @@ def methods() -> Int:
         no_arguments_method[collect](
             "collect",
             (
-                "collect()\n--\n\nFrees unreachable nodes and gives back all"
-                " spare room. Returns how many it freed."
+                "collect()\n--\n\nFrees unreachable nodes and shrinks the node"
+                " and memo tables to fit. Returns how many it freed."
             ),
         ),
         no_arguments_method[stats](
@@ -225,7 +225,7 @@ def module_exec(module: PyObjectPtr) abi("C") -> c_int:
 def set_attribute(
     o: PyObjectPtr, name: StringLiteral, var value: PyObjectPtr
 ) raises PyError:
-    """Sets `o.name` to `value`, which it steals."""
+    """Steals `value`."""
     if not value:
         raise PyError()
     var failed = PyObject_SetAttrString(o, name.as_c_string_span(), value) < 0

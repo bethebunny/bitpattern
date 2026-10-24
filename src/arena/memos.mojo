@@ -4,8 +4,7 @@ from .table import IdTable, Table
 
 
 struct Memos(Movable, Sized):
-    """Emptying the tables never changes an answer. Symmetric operations key by
-    `sorted_pair`."""
+    """Emptying the tables never changes an answer."""
 
     var intersection: Table
     var union: Table

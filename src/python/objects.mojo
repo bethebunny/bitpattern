@@ -87,9 +87,8 @@ def collect_garbage(state: StatePointer, mut arena: Arena) -> Int:
 
 
 struct Call:
-    """A call that makes a node, counted in `depth` for a `with` block. The outermost
-    call collects first, if due. Calls that make no node just take the arena and never
-    collect."""
+    """A call that makes a node, counted in `depth` for a `with` block. Calls that make
+    no node just take the arena and never collect."""
 
     var state: StatePointer
 
@@ -131,7 +130,6 @@ def wrap_result[
 def collect(state: StatePointer) raises PyError -> PyObjectPtr:
     var arena = take_arena(state)
     var freed = 0
-    # An outer call might be about to wrap a node.
     if state[].depth == 0:
         freed = collect_garbage(state, arena[])
         shrink_to_fit(arena[])

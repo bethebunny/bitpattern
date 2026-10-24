@@ -101,10 +101,11 @@ comptime COUNT_REPR = Signature(
     "count_repr",
     positional=["total"],
     doc=(
-        "A count as reprs write it:\n"
-        "  - `2**k` for powers of two from `2**10`\n"
-        "  - `~2**k` for ints too long to write out\n"
-        "  - the digits otherwise"
+        "A count as reprs write it.\n\n"
+        "Formats:\n"
+        "  - powers of two from `2**10` as a power, eg. `2**64`\n"
+        "  - ints too long to write out as a rounded power, eg. `~2**20000.3`\n"
+        "  - other ints as their digits, eg. `1000`"
     ),
 )
 
@@ -133,7 +134,6 @@ struct Integer(Movable):
     var negative: Bool
     var narrow: UInt128
     var wide: Optional[BigUInt]
-    """The bits, if they don't fit a UInt128."""
 
     @staticmethod
     def from_python(ints: Ints, o: PyObjectPtr) raises PyError -> Self:
@@ -171,7 +171,7 @@ struct Integer(Movable):
 
 
 def integer_bit(value: Integer, bit: Int32) -> Bool:
-    """As Python reads ints: two's complement, so a negative int's bits are its
+    """Reads ints in two's complement (as Python does). A negative int's bits are its
     complement's flipped."""
     if value.wide is not None:
         return build.wide_bit(value.wide.value(), bit) != value.negative

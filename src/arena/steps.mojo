@@ -1,4 +1,4 @@
-"""Walks keep their own stacks instead of recursing, since a path can test up to
+"""Walks keep their own stacks instead of recursing since a path can test up to
 MAX_WIDTH bits."""
 
 from .arena import Arena, Id
@@ -6,7 +6,7 @@ from .table import Table
 
 
 comptime SCRATCH_ROOM = 1 << 12
-"""Room a scratch stack keeps between walks."""
+"""Scratch stacks and tables keep up to this much room between walks."""
 
 comptime VISIT: Int32 = -1
 
@@ -51,9 +51,9 @@ struct Span(TrivialRegisterPassable):
 
 
 struct Scratch(Movable):
-    """Stacks kept between walks, so short walks allocate nothing. Walks nest (eg. the
-    `|` in freed_between), so each walk takes them while it runs. A nested walk finds
-    them taken and allocates its own.
+    """Stacks and tables kept between walks, so short walks allocate nothing. Each walk
+    takes the ones it uses while it runs. A nested walk (eg. the `|` in freed_between)
+    finds them taken and allocates its own.
     """
 
     var pair_steps: List[Step[Pair]]

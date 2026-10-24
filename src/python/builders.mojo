@@ -71,7 +71,7 @@ from .state import Lease, StatePointer, give_back, take_arena
 def reduction(
     state: StatePointer, o: PyObjectPtr
 ) raises PyError -> PyObjectPtr:
-    """BDD.__reduce__: leaves pickle by name, and other nodes as flat rows, since
+    """BDD.__reduce__: leaves pickle by name, and other nodes as flat rows since
     nesting would recurse once per bit."""
     var id = id_of(o)
     if id.is_leaf():

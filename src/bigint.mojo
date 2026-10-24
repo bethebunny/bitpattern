@@ -149,7 +149,7 @@ struct BigUInt(
         self = Self(UInt128(value))
 
     def __init__(out self, *, var limbs: Limbs):
-        """Least significant first. High zero limbs are dropped."""
+        """High zero limbs are dropped."""
         self.limbs = limbs^
         _trim(self.limbs)
 
@@ -356,7 +356,6 @@ struct BigUInt(
         return Self(limbs=limbs^)
 
     def __isub__(mut self, rhs: Self):
-        """`rhs` must not be above `self`."""
         _subtract(self.limbs, rhs.limbs)
 
     def __mul__(self, rhs: Self) -> Self:
@@ -461,7 +460,6 @@ def _sum(a: Limbs, b: Limbs) -> Limbs:
 
 
 def _subtract(mut a: Limbs, b: Limbs):
-    """`a -= b`, for `b <= a`."""
     var nb = len(b)
     assert nb <= len(a)
     var dest = a.unsafe_ptr()
@@ -549,7 +547,7 @@ def _shift_left(
 def _shift_right(
     dest: MutPointer[UInt64, _], a: Pointer[UInt64, _], n: Int, shift: UInt64
 ):
-    """Writes `a >> shift`, for 0 < shift < 64."""
+    """Writes `a >> shift` (for 0 < shift < 64)."""
     for i in range(n - 1):
         dest[unsafe_offset=i] = a[unsafe_offset=i] >> shift | (
             a[unsafe_offset=i + 1] << (64 - shift)

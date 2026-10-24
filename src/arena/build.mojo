@@ -49,8 +49,9 @@ def exactly_these[
 def partition_point[
     T: Copyable, //, bit_of: def(T, Int32) thin -> Bool
 ](values: List[T], span: Span) -> Int:
-    """The first value in `span` with `span.bit` set. Those with it clear come first,
-    since they share every bit above it."""
+    """The index of the first value in `span` with `span.bit` set."""
+    # A span's values share every bit above `span.bit`, so values with it clear
+    # come first.
     var low = span.start
     var high = span.end
     while low < high:

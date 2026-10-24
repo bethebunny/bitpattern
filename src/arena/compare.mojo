@@ -32,7 +32,7 @@ def subset(mut arena: Arena, a: Id, b: Id) raises Interrupted -> Bool:
     var known = trivial_subset(a, b)
     if known is not None:
         return known.value()
-    # Unsorted keys, since subset isn't symmetric.
+    # Unsorted keys since subset isn't symmetric.
     var key = pair(a, b)
     var memoised = arena.memos.subset.get(key)
     if memoised is not None:
@@ -95,7 +95,8 @@ def walk_pairs[
 
 
 def bound_answers(mut arena: Arena):
-    """These walks make no nodes, so no collection empties their memos."""
+    """Subset and disjoint walks make no nodes, so no collection empties their memos.
+    """
     if len(arena.memos.subset) + len(arena.memos.disjoint) >= MAX_ANSWERS:
         arena.memos.subset.clear()
         arena.memos.disjoint.clear()

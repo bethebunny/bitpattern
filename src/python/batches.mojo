@@ -396,8 +396,6 @@ def paths(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
 
 
 def batches_type(module: PyObjectPtr) raises PyError -> PyObjectPtr:
-    """The iterator type `members`, `blocks` and `paths` return, made at init. Its
-    specs live as long as the process, as PyType_FromSpec needs."""
     var slots: List[TypeSlot] = [
         TypeSlot(Py_tp_dealloc, address(batches_dealloc)),
         TypeSlot(Py_tp_iter, address(batches_iter)),

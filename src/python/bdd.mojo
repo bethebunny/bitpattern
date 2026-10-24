@@ -316,8 +316,6 @@ def bdd_reduce(o: PyObjectPtr, unused: PyObjectPtr) abi("C") -> PyObjectPtr:
 
 
 def bdd_type(module: PyObjectPtr) raises PyError -> PyObjectPtr:
-    """Makes the BDD type for `module`. Its specs live as long as the process, as
-    PyType_FromSpec needs."""
     var getset: List[GetSetDef] = [
         GetSetDef(
             text("bit"),

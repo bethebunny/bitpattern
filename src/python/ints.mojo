@@ -314,10 +314,12 @@ comptime WRITABLE_BITS = 14_284
 
 
 def repr_of_count(ints: Ints, total: PyObjectPtr) raises PyError -> String:
-    """A count (a non-negative int) as reprs write it:
-    - `2**k` for powers of two from `2**10`
-    - `~2**k` for ints too long to write out
-    - the digits otherwise
+    """A count (a non-negative int) as reprs write it.
+
+    Formats:
+      - powers of two from `2**10` as a power, eg. `2**64`
+      - ints too long to write out as a rounded power, eg. `~2**20000.3`
+      - other ints as their digits, eg. `1000`
     """
     var magnitude = Signed.from_int(ints, total).magnitude.copy()
     var bits = magnitude.bits()

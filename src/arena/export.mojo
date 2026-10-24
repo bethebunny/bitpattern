@@ -221,7 +221,7 @@ def write_rows[
         var run = walk.next_run(arena)
         if run is None:
             return
-        # Copied once a run, since calling `limb` for each member is slower.
+        # Copied once a run since calling `limb` for each member is slower.
         for i in range(len(member)):
             member.unsafe_get(i) = run.value().first.limb(i)
         var low = member[0]
