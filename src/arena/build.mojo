@@ -3,6 +3,7 @@
 from bigint import BigUInt
 
 from .arena import ACCEPT, Arena, Id, Interrupted, REJECT
+from .paths import ONE, ZERO
 from .steps import Span, Step, emptied, pop_branches, take
 
 
@@ -71,9 +72,9 @@ def diagram(mut arena: Arena, bits: StringSlice[_]) raises Interrupted -> Id:
     var bit: Int32 = 0
     for symbol in reversed(bytes):
         arena.tick()
-        if symbol == Byte(ord("0")):
+        if symbol == ZERO:
             id = arena.make(bit, id, REJECT)
-        elif symbol == Byte(ord("1")):
+        elif symbol == ONE:
             id = arena.make(bit, REJECT, id)
         bit += 1
     return id

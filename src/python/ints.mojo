@@ -15,10 +15,11 @@ from .capi import (
     PyLong_FromUnsignedLongLong,
     PyNumber_Index,
     PyObject_Str,
-    PyUnicode_AsUTF8AndSize,
+    c_function,
     ob_type,
     object_symbol,
     symbol,
+    utf8,
 )
 from .errors import PyError
 
@@ -28,12 +29,6 @@ comptime LITTLE_ENDIAN: c_int = 1
 comptime UNSIGNED_BUFFER: c_int = 4
 
 comptime NumBits = def(PyObjectPtr) thin abi("C") -> Int
-
-
-@always_inline
-def c_function[T: TrivialRegisterPassable](address: Int) -> T:
-    """The C function at `address`, which must have type `T`."""
-    return Pointer(to=address).unsafe_bitcast[T]()[]
 
 
 struct Ints(Movable):
@@ -321,12 +316,6 @@ def repr_of_count(ints: Ints, total: PyObjectPtr) raises PyError -> String:
     var digits = PyObject_Str(total)
     if not digits:
         raise PyError()
-    var size = 0
-    var data = PyUnicode_AsUTF8AndSize(digits, size)
-    var written = String(
-        unsafe_from_utf8_ptr=Pointer[UInt8, MutUntrackedOrigin](
-            unsafe_from_address=data
-        ).as_imm()
-    )
+    var written = utf8(digits)
     Py_DecRef(digits)
     return written^

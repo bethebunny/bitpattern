@@ -2,7 +2,7 @@
 
 from std.python._cpython import PyObjectPtr
 
-from arena import Arena, Id, Interrupted
+from arena import ACCEPT, Arena, Id, Interrupted
 from arena.collect import (
     collect as arena_collect,
     collection_due,
@@ -13,6 +13,7 @@ from arena.collect import (
     stats as arena_stats,
 )
 
+from .args import Signature
 from .capi import (
     Py_DecRef,
     Py_NewRef,
@@ -37,6 +38,10 @@ struct BddObject:
 @always_inline
 def id_of(o: PyObjectPtr) -> Id:
     return o.bitcast[BddObject]().unsafe_value()[].id
+
+
+def leaf_name(id: Id) -> StaticString:
+    return "BDD.ACCEPT" if id == ACCEPT else "BDD.REJECT"
 
 
 def wrap(state: StatePointer, id: Id) raises PyError -> PyObjectPtr:
@@ -127,6 +132,16 @@ def wrap_result[
         return wrap(state, id)
 
 
+comptime COLLECT = Signature(
+    "collect",
+    positional=[],
+    doc=(
+        "Frees unreachable nodes and shrinks the node and memo tables to fit."
+        " Returns how many it freed."
+    ),
+)
+
+
 def collect(state: StatePointer) raises PyError -> PyObjectPtr:
     var arena = take_arena(state)
     var freed = 0
@@ -138,6 +153,21 @@ def collect(state: StatePointer) raises PyError -> PyObjectPtr:
         state[].wrappers = shrunk(wrappers^, 0)
     give_back(state, arena)
     return PyLong_FromSsize_t(freed)
+
+
+comptime STATS = Signature(
+    "stats",
+    positional=[],
+    doc=(
+        "The arena's counts:\n"
+        "  - nodes: slots in use\n"
+        "  - free: freed slots\n"
+        "  - wrapped: nodes with a Python object\n"
+        "  - room: slots allocated\n"
+        "  - memo: memo entries\n"
+        "  - memo_room: memo entries allocated"
+    ),
+)
 
 
 def stats(state: StatePointer) raises PyError -> PyObjectPtr:

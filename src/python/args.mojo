@@ -12,6 +12,7 @@ from .capi import (
     METH_NOARGS,
     MethodDef,
     Py_DecRef,
+    Py_TPFLAGS_TUPLE_SUBCLASS,
     PyDict_Next,
     PyErr_Clear,
     PyLong_AsLongLongAndOverflow,
@@ -20,15 +21,16 @@ from .capi import (
     PyObject_Str,
     PyTuple_GetItem,
     PyTuple_Size,
+    PyType_GetFlags,
     PyType_GetQualName,
-    PyUnicode_AsUTF8AndSize,
     PyUnicode_CompareWithASCIIString,
     address,
     leaked,
     ob_type,
     text,
+    utf8,
 )
-from .errors import PyError, out_of_range, type_error
+from .errors import PyError, out_of_range, type_error, value_error
 from .ints import Int64OrOverflow
 from .objects import id_of
 from .state import StatePointer, module_state
@@ -88,22 +90,8 @@ struct Arguments(Movable):
         self.items = Array[PyObjectPtr, MAX_ARGUMENTS](fill=PyObjectPtr())
 
     @always_inline
-    def __getitem__(self, index: Int) -> PyObjectPtr:
+    def __getitem__(ref self, index: Int) -> ref[self.items] PyObjectPtr:
         return self.items[index]
-
-
-def utf8(o: PyObjectPtr) -> String:
-    """A str's text, or "?" if it can't be read."""
-    var size = 0
-    var data = PyUnicode_AsUTF8AndSize(o, size)
-    if data == 0:
-        PyErr_Clear()
-        return "?"
-    return String(
-        unsafe_from_utf8_ptr=Pointer[UInt8, MutUntrackedOrigin](
-            unsafe_from_address=data
-        ).as_imm()
-    )
 
 
 def parsed[
@@ -118,7 +106,7 @@ def parsed[
     )
     var arguments = Arguments()
     for index in range(nargs):
-        arguments.items[index] = vector[unsafe_offset=index]
+        arguments[index] = vector[unsafe_offset=index]
     var keywords = PyTuple_Size(kwnames) if kwnames else 0
     for k in range(keywords):
         var value = vector[unsafe_offset=nargs + k]
@@ -136,7 +124,7 @@ def parsed[
         raise too_many[signature](given)
     var arguments = Arguments()
     for index in range(given):
-        arguments.items[index] = PyTuple_GetItem(args, index)
+        arguments[index] = PyTuple_GetItem(args, index)
     if kwargs:
         var position = 0
         var key = PyObjectPtr()
@@ -154,14 +142,14 @@ def add_keyword[
     comptime for index in range(signature.arity()):
         comptime name = signature.name(index)
         if PyUnicode_CompareWithASCIIString(key, name.as_c_string_span()) == 0:
-            if arguments.items[index]:
+            if arguments[index]:
                 raise type_error(
                     String(
                         t"{signature.function}() got multiple values"
                         t" for argument '{name}'"
                     )
                 )
-            arguments.items[index] = value
+            arguments[index] = value
             return
     raise type_error(
         String(
@@ -176,7 +164,7 @@ def completed[
 ](var arguments: Arguments) raises PyError -> Arguments:
     comptime assert signature.arity() <= MAX_ARGUMENTS
     comptime for index in range(signature.arity()):
-        if not arguments.items[index]:
+        if not arguments[index]:
             raise missing[signature](arguments)
     return arguments^
 
@@ -223,6 +211,22 @@ def node_as_id(state: StatePointer, node: PyObjectPtr) raises PyError -> Id:
     if ob_type(node) != state[].bdd_type:
         raise not_an_instance(state, node, "BDD")
     return id_of(node)
+
+
+def check_tuple(
+    state: StatePointer, o: PyObjectPtr, *, length: Int
+) raises PyError:
+    """TypeError for a non-tuple and ValueError for another length."""
+    if PyType_GetFlags(ob_type(o)) & Py_TPFLAGS_TUPLE_SUBCLASS == 0:
+        raise not_an_instance(state, o, "tuple")
+    var given = PyTuple_Size(o)
+    if given != length:
+        raise value_error(
+            String(
+                t"expected tuple of length {length}, but got tuple of length"
+                t" {given}"
+            )
+        )
 
 
 def not_an_instance(
@@ -346,20 +350,19 @@ def no_arguments[
         return PyObjectPtr()
 
 
-def keywords_method[function: Function, signature: Signature]() -> MethodDef:
+def method[signature: Signature](meth: Int, flags: c_int) -> MethodDef:
     var doc = List(materialize[signature]().method_doc().as_bytes())
     doc.append(0)  # C strings end in a NUL
-    return MethodDef(
-        text(signature.function),
-        address(fastcall[function, signature]),
-        METH_FASTCALL | METH_KEYWORDS,
-        leaked(doc^),
+    return MethodDef(text(signature.function), meth, flags, leaked(doc^))
+
+
+def keywords_method[function: Function, signature: Signature]() -> MethodDef:
+    return method[signature](
+        address(fastcall[function, signature]), METH_FASTCALL | METH_KEYWORDS
     )
 
 
 def no_arguments_method[
-    function: NoArguments
-](name: StaticString, doc: StaticString) -> MethodDef:
-    return MethodDef(
-        text(name), address(no_arguments[function]), METH_NOARGS, text(doc)
-    )
+    function: NoArguments, signature: Signature
+]() -> MethodDef:
+    return method[signature](address(no_arguments[function]), METH_NOARGS)

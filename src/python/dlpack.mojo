@@ -15,25 +15,20 @@ from arena.walk import Narrow, Wide
 from .args import (
     Arguments,
     Signature,
+    check_tuple,
     node_as_id,
-    not_an_instance,
     str_or_size,
     width_as_int32,
 )
 from .capi import (
     Py_DecRef,
-    Py_TPFLAGS_TUPLE_SUBCLASS,
     PyCapsule_GetPointer,
     PyCapsule_IsValid,
     PyCapsule_New,
     PyTuple_GetItem,
-    PyTuple_Size,
-    PyType_GetFlags,
     address,
-    ob_type,
-    pointer_symbol,
 )
-from .errors import PyError, error, value_error
+from .errors import PyError, memory_error, overflow_error, value_error
 from .ints import Int64OrOverflow
 from .queries import Count, checked_width, int_from_count, member_count
 from .state import Lease, StatePointer, give_back, take_arena
@@ -291,7 +286,7 @@ def member_words(
             t"{str_or_size(total)} members don't fit in memory"
         )
         Py_DecRef(total)
-        raise error(pointer_symbol("PyExc_MemoryError"), message)
+        raise memory_error(message)
     var words = words_or_none.take()
     var sign_shift: UInt64 = (
         UInt64(64 - max(width, 1)) if dtype.code == INT else 0
@@ -320,10 +315,6 @@ def member_words(
     return words^
 
 
-def overflow_error(message: String) -> PyError:
-    return error(pointer_symbol("PyExc_OverflowError"), message)
-
-
 def int_up_to[dtype: DType](o: PyObjectPtr) raises PyError -> Scalar[dtype]:
     """OverflowError outside `[0, Scalar[dtype].MAX]`."""
     comptime most = Int64(Scalar[dtype].MAX)
@@ -339,15 +330,7 @@ def version_of(
     """None, or a `(major, minor)` tuple."""
     if o == state[].none:
         return None
-    if PyType_GetFlags(ob_type(o)) & Py_TPFLAGS_TUPLE_SUBCLASS == 0:
-        raise not_an_instance(state, o, "tuple")
-    var length = PyTuple_Size(o)
-    if length != 2:
-        raise value_error(
-            String(
-                t"expected tuple of length 2, but got tuple of length {length}"
-            )
-        )
+    check_tuple(state, o, length=2)
     var major = int_up_to[DType.uint32](PyTuple_GetItem(o, 0))
     var minor = int_up_to[DType.uint32](PyTuple_GetItem(o, 1))
     return Version(major, minor)

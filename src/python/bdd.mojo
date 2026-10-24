@@ -5,7 +5,7 @@ from std.memory.alloc import unsafe_alloc
 from std.python._cpython import PyObjectPtr
 from std.sys.info import size_of
 
-from arena import ACCEPT, Arena, Id, Interrupted, REJECT
+from arena import Arena, Id, Interrupted, REJECT
 from arena import apply, nodes
 from bigint import BigUInt
 
@@ -49,14 +49,23 @@ from .capi import (
     TypeSlot,
     TypeSpec,
     address,
+    c_function,
     leaked,
     ob_type,
     object_symbol,
     text,
 )
 from .errors import PyError, value_error
-from .ints import c_function, int_from_big, repr_of_count
-from .objects import BddObject, Call, forget, id_of, wrap, wrap_result
+from .ints import int_from_big, repr_of_count
+from .objects import (
+    BddObject,
+    Call,
+    forget,
+    id_of,
+    leaf_name,
+    wrap,
+    wrap_result,
+)
 from .queries import int_from_count, member_count
 from .state import (
     Lease,
@@ -94,10 +103,6 @@ Invariants:
     - `BDD` instances are interned. Constructing the same diagram will always
         yield exactly the same object.
 """
-
-
-def leaf_name(id: Id) -> StaticString:
-    return "BDD.ACCEPT" if id == ACCEPT else "BDD.REJECT"
 
 
 comptime NEW = Signature("BDD.__new__", positional=["bit", "left", "right"])

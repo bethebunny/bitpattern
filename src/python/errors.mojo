@@ -48,6 +48,18 @@ def runtime_error(message: String) -> PyError:
     return error(pointer_symbol("PyExc_RuntimeError"), message)
 
 
+def overflow_error(message: String) -> PyError:
+    return error(pointer_symbol("PyExc_OverflowError"), message)
+
+
+def memory_error(message: String) -> PyError:
+    return error(pointer_symbol("PyExc_MemoryError"), message)
+
+
+def import_error(message: String) -> PyError:
+    return error(pointer_symbol("PyExc_ImportError"), message)
+
+
 def index_error(index: PyObjectPtr) -> PyError:
     """IndexError with the index as given, like a list's."""
     PyErr_SetObject(pointer_symbol("PyExc_IndexError"), index)

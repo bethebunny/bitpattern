@@ -143,6 +143,12 @@ def address[T: TrivialRegisterPassable](function: T) -> Int:
 
 
 @always_inline
+def c_function[T: TrivialRegisterPassable](address: Int) -> T:
+    """The C function at `address`, which must have type `T`."""
+    return Pointer(to=address).unsafe_bitcast[T]()[]
+
+
+@always_inline
 def text(literal: StaticString) -> Int:
     """A literal's address as a C string (literals end in a NUL)."""
     return Int(literal.unsafe_ptr())
@@ -291,6 +297,20 @@ def PyUnicode_AsUTF8AndSize(o: PyObjectPtr, mut size: Int) -> Int:
     return external_call["PyUnicode_AsUTF8AndSize", Int](o, Pointer(to=size))
 
 
+def utf8(o: PyObjectPtr) -> String:
+    """A str's text, or "?" if it can't be read."""
+    var size = 0
+    var data = PyUnicode_AsUTF8AndSize(o, size)
+    if data == 0:
+        PyErr_Clear()
+        return "?"
+    return String(
+        unsafe_from_utf8_ptr=Pointer[UInt8, MutUntrackedOrigin](
+            unsafe_from_address=data
+        ).as_imm()
+    )
+
+
 @always_inline
 def PyObject_Str(o: PyObjectPtr) -> PyObjectPtr:
     return external_call["PyObject_Str", PyObjectPtr](o)
@@ -321,6 +341,18 @@ def PyTuple_GetItem(o: PyObjectPtr, index: Int) -> PyObjectPtr:
 def PyTuple_SetItem(o: PyObjectPtr, index: Int, item: PyObjectPtr) -> c_int:
     """Steals `item`."""
     return external_call["PyTuple_SetItem", c_int](o, index, item)
+
+
+def pair(first: PyObjectPtr, second: PyObjectPtr) -> PyObjectPtr:
+    """`(first, second)`, stealing both. Null if either is (after an error)."""
+    var made = PyTuple_New(2) if first and second else PyObjectPtr()
+    if not made:
+        Py_DecRef(first)
+        Py_DecRef(second)
+        return made
+    _ = PyTuple_SetItem(made, 0, first)
+    _ = PyTuple_SetItem(made, 1, second)
+    return made
 
 
 @always_inline

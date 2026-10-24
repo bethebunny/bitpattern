@@ -28,8 +28,6 @@ from .capi import (
     PyObject_CallFunctionObjArgs,
     PyObject_CallObject,
     PyObject_GetAttrString,
-    PyTuple_New,
-    PyTuple_SetItem,
     PyType_FromModuleAndSpec,
     PyType_GenericAlloc,
     PyType_GetSlot,
@@ -37,12 +35,14 @@ from .capi import (
     TypeSlot,
     TypeSpec,
     address,
+    c_function,
     leaked,
     ob_type,
+    pair,
     text,
 )
 from .errors import PyError
-from .ints import Ints, c_function, int_from_big, int_from_u128
+from .ints import Ints, int_from_big, int_from_u128
 from .queries import checked_width
 from .state import StatePointer, give_back, object_state, take_arena
 
@@ -151,18 +151,6 @@ def int_of[V: Prefix](ints: Ints, value: V) -> PyObjectPtr:
         return int_from_u128(ints, rebind[Narrow](value).value)
     else:
         return int_from_big(ints, rebind[Wide](value).value)
-
-
-def pair(first: PyObjectPtr, second: PyObjectPtr) -> PyObjectPtr:
-    """`(first, second)`, stealing both. Null if either is (after an error)."""
-    var made = PyTuple_New(2) if first and second else PyObjectPtr()
-    if not made:
-        Py_DecRef(first)
-        Py_DecRef(second)
-        return made
-    _ = PyTuple_SetItem(made, 0, first)
-    _ = PyTuple_SetItem(made, 1, second)
-    return made
 
 
 def run_range[

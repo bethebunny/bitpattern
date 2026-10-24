@@ -66,12 +66,16 @@ comptime ArenaPointer = Pointer[Arena, MutUntrackedOrigin]
 
 
 @always_inline
-def module_state(module: PyObjectPtr) -> StatePointer:
-    """The module's state holds the address of a State."""
-    var slot = Pointer[Int, MutUntrackedOrigin](
+def state_slot(module: PyObjectPtr) -> Pointer[Int, MutUntrackedOrigin]:
+    """The module's state, which holds the address of a State."""
+    return Pointer[Int, MutUntrackedOrigin](
         unsafe_from_address=PyModule_GetState(module)
     )
-    return StatePointer(unsafe_from_address=slot[])
+
+
+@always_inline
+def module_state(module: PyObjectPtr) -> StatePointer:
+    return StatePointer(unsafe_from_address=state_slot(module)[])
 
 
 @always_inline

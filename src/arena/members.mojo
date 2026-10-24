@@ -62,8 +62,9 @@ def nth(arena: Arena, root: Id, n: BigUInt) -> BigUInt:
         var node = arena.decision(id)
         var size = arena.size(id)
         if rest >= size:
-            member |= (rest // size) << (node.bit + 1)
-            rest = rest % size
+            var high = rest // size
+            member |= high << (node.bit + 1)
+            rest -= high * size
         if node.bit < NARROW_WIDTH:
             var low = nth_narrow(arena, id, rest.uint128_or_none().value())
             return member | BigUInt(low)

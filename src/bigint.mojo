@@ -259,12 +259,9 @@ struct BigUInt(
     # Bitwise
 
     def __or__(self, rhs: Self) -> Self:
-        if len(self.limbs) < len(rhs.limbs):
-            return rhs | self
-        var limbs = self.limbs.copy()
-        for i in range(len(rhs.limbs)):
-            limbs.unsafe_get(i) |= rhs.limbs.unsafe_get(i)
-        return Self(limbs=limbs^)
+        var result = self.copy()
+        result |= rhs
+        return result^
 
     def __ior__(mut self, rhs: Self):
         if len(self.limbs) < len(rhs.limbs):
@@ -323,18 +320,9 @@ struct BigUInt(
         return Self(limbs=_sum(self.limbs, rhs.limbs))
 
     def plus(self, rhs: UInt64) -> Self:
-        var n = len(self.limbs)
-        var limbs = Limbs(capacity=n + 1)
-        limbs.resize(unsafe_uninit_length=n)
-        var dest = limbs.unsafe_ptr()
-        var carry = rhs
-        for i in range(n):
-            var s = self.limbs.unsafe_get(i) + carry
-            carry = UInt64(s < carry)
-            dest[unsafe_offset=i] = s
-        if carry:
-            limbs.append(carry)
-        return Self(limbs=limbs^)
+        var result = self.copy()
+        result._carry_from(0, rhs)
+        return result^
 
     def __iadd__(mut self, rhs: Self):
         var n = len(rhs.limbs)
@@ -357,9 +345,9 @@ struct BigUInt(
 
     def __sub__(self, rhs: Self) -> Self:
         """`rhs` must not be above `self`."""
-        var limbs = self.limbs.copy()
-        _subtract(limbs, rhs.limbs)
-        return Self(limbs=limbs^)
+        var result = self.copy()
+        result -= rhs
+        return result^
 
     def __isub__(mut self, rhs: Self):
         _subtract(self.limbs, rhs.limbs)

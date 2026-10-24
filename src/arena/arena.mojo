@@ -199,7 +199,7 @@ struct Arena(Movable):
         if lo == hi:
             return lo
         for child in [lo, hi]:
-            if not child.is_leaf() and self.decision(child).bit >= bit:
+            if not self.tests_only_below(child, bit):
                 raise Misordered(bit=bit, child_bit=self.decision(child).bit)
         return self.make(bit, lo, hi)
 

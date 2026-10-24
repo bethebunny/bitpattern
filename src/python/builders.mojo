@@ -6,7 +6,6 @@ from std.ffi import c_int
 from std.python._cpython import PyObjectPtr
 
 from arena import (
-    ACCEPT,
     Arena,
     Id,
     Interrupted,
@@ -16,6 +15,7 @@ from arena import (
     REJECT,
 )
 from arena import build, reshape, rows
+from arena.paths import FREE, ONE, ZERO
 from arena.reshape import ShiftedOut
 from arena.rows import Row
 from bigint import BigUInt
@@ -24,13 +24,13 @@ from .args import (
     Arguments,
     Signature,
     bit_as_int32,
+    check_tuple,
     clamped,
     int32_up_to,
     least_width_as_int32,
     node_as_id,
     not_an_instance,
     str_or_size,
-    utf8,
     width_as_int32,
 )
 from .capi import (
@@ -52,19 +52,18 @@ from .capi import (
     PyObject_IsInstance,
     PyObject_Repr,
     PyTuple_GetItem,
-    PyTuple_New,
-    PyTuple_SetItem,
-    PyTuple_Size,
     PyType_GetFlags,
     PyType_GetModule,
     PyUnicode_AsUTF8AndSize,
     PyUnicode_FromOrdinal,
     PyUnicode_InternFromString,
     ob_type,
+    pair,
+    utf8,
 )
 from .errors import PyError, type_error, value_error
 from .ints import Int64OrOverflow, Ints, Signed, indexed, u128_of
-from .objects import Call, id_of, wrap, wrap_result
+from .objects import Call, id_of, leaf_name, wrap, wrap_result
 from .state import Lease, StatePointer, give_back, take_arena
 
 
@@ -75,7 +74,7 @@ def reduction(
     nesting would recurse once per bit."""
     var id = id_of(o)
     if id.is_leaf():
-        var name: StaticString = "BDD.ACCEPT" if id == ACCEPT else "BDD.REJECT"
+        var name = leaf_name(id)
         var interned = PyUnicode_InternFromString(name.as_c_string_span())
         if not interned:
             raise PyError()
@@ -224,11 +223,7 @@ def diagram(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     )
     var bytes = bits.as_bytes()
     for index, byte in enumerate(bytes):
-        if (
-            byte != Byte(ord("0"))
-            and byte != Byte(ord("1"))
-            and byte != Byte(ord("?"))
-        ):
+        if byte != ZERO and byte != ONE and byte != FREE:
             # Bits are ASCII, so the first byte that isn't one starts a character.
             var decoded = Codepoint.unsafe_decode_utf8_codepoint(bytes[index:])
             raise value_error(
@@ -293,17 +288,10 @@ def exactly_these(
             arena, members.narrow, width
         )
 
-    var node = wrap_result(state, walk)
-    var pair = PyTuple_New(2)
-    var width_int = PyLong_FromLongLong(Int64(width))
-    if not pair or not width_int:
-        Py_DecRef(node)
-        Py_DecRef(pair)
-        Py_DecRef(width_int)
+    var made = pair(wrap_result(state, walk), PyLong_FromLongLong(Int64(width)))
+    if not made:
         raise PyError()
-    _ = PyTuple_SetItem(pair, 0, node)
-    _ = PyTuple_SetItem(pair, 1, width_int)
-    return pair
+    return made
 
 
 struct Distinct[T: KeyElement & Copyable & Comparable & Deinitable](Movable):
@@ -610,15 +598,7 @@ def is_sequence(o: PyObjectPtr) raises PyError -> Bool:
 
 def row_of(state: StatePointer, o: PyObjectPtr) raises PyError -> Row:
     """A branch out of range reads as UInt32.MAX, which `formed` rejects."""
-    if PyType_GetFlags(ob_type(o)) & Py_TPFLAGS_TUPLE_SUBCLASS == 0:
-        raise not_an_instance(state, o, "tuple")
-    if PyTuple_Size(o) != 3:
-        raise value_error(
-            String(
-                t"expected tuple of length 3,"
-                t" but got tuple of length {PyTuple_Size(o)}"
-            )
-        )
+    check_tuple(state, o, length=3)
     var bit = bit_as_int32(PyTuple_GetItem(o, 0))
     var lo = int32_up_to(PyTuple_GetItem(o, 1), Int32.MAX)
     var hi = int32_up_to(PyTuple_GetItem(o, 2), Int32.MAX)

@@ -53,22 +53,20 @@ from python.capi import (
     PyList_New,
     PyList_SetItem,
     PyModuleDef_Init,
-    PyModule_GetState,
     PyObject_SetAttrString,
     PyTuple_New,
     PyTuple_SetItem,
     PyUnicode_FromStringAndSize,
     PyUnicode_InternFromString,
     address,
+    c_function,
     leaked,
-    pointer_symbol,
     symbol,
     text,
 )
 from python.dlpack import TENSOR, tensor
-from python.errors import PyError, error
-from python.ints import c_function
-from python.objects import collect, stats, wrap
+from python.errors import PyError, import_error
+from python.objects import COLLECT, STATS, collect, stats, wrap
 from python.queries import (
     ACCEPTS,
     COUNT,
@@ -89,7 +87,7 @@ from python.queries import (
     rank,
     subset,
 )
-from python.state import State, StatePointer, pause
+from python.state import State, StatePointer, pause, state_slot
 
 
 comptime VERSION = get_defined_string["VERSION"]()  # from pyproject.toml
@@ -130,22 +128,8 @@ def methods() -> Int:
         keywords_method[exactly_these, EXACTLY_THESE](),
         keywords_method[interval, INTERVAL](),
         keywords_method[rebuilt, REBUILT](),
-        no_arguments_method[collect](
-            "collect",
-            (
-                "collect()\n--\n\nFrees unreachable nodes and shrinks the node"
-                " and memo tables to fit. Returns how many it freed."
-            ),
-        ),
-        no_arguments_method[stats](
-            "stats",
-            (
-                "stats()\n--\n\nThe arena's counts:\n  - nodes: slots in use\n "
-                " - free: freed slots\n  - wrapped: nodes with a Python"
-                " object\n  - room: slots allocated\n  - memo: memo entries\n "
-                " - memo_room: memo entries allocated"
-            ),
-        ),
+        no_arguments_method[collect, COLLECT](),
+        no_arguments_method[stats, STATS](),
         MethodDef(0, 0, 0, 0),
     ]
     return leaked(table^)
@@ -190,13 +174,10 @@ def module_exec(module: PyObjectPtr) abi("C") -> c_int:
         var version = python_version()
         var state = unsafe_alloc[State](1)
         state.unsafe_write(State(version))
-        Pointer[Int, MutUntrackedOrigin](
-            unsafe_from_address=PyModule_GetState(module)
-        )[] = Int(state)
+        state_slot(module)[] = Int(state)
         if not state[].ints.complete():
-            raise error(
-                pointer_symbol("PyExc_ImportError"),
-                "bitpattern.bdd can't find the int functions it needs",
+            raise import_error(
+                "bitpattern.bdd can't find the int functions it needs"
             )
         var arena = unsafe_alloc[Arena](1)
         arena.unsafe_write(Arena(pause, state.unsafe_bitcast[NoneType]()))
@@ -260,9 +241,7 @@ def match_args() -> PyObjectPtr:
 def module_traverse(
     module: PyObjectPtr, visit_address: Int, arg: Int
 ) abi("C") -> c_int:
-    var slot = Pointer[Int, MutUntrackedOrigin](
-        unsafe_from_address=PyModule_GetState(module)
-    )
+    var slot = state_slot(module)
     if slot[] == 0:
         return 0
     var state = StatePointer(unsafe_from_address=slot[])
@@ -278,9 +257,7 @@ def module_traverse(
 
 
 def module_clear(module: PyObjectPtr) abi("C") -> c_int:
-    var slot = Pointer[Int, MutUntrackedOrigin](
-        unsafe_from_address=PyModule_GetState(module)
-    )
+    var slot = state_slot(module)
     if slot[] == 0:
         return 0
     var state = StatePointer(unsafe_from_address=slot[])
@@ -299,9 +276,7 @@ def clear(mut o: PyObjectPtr):
 
 def module_free(module: PyObjectPtr) abi("C"):
     _ = module_clear(module)
-    var slot = Pointer[Int, MutUntrackedOrigin](
-        unsafe_from_address=PyModule_GetState(module)
-    )
+    var slot = state_slot(module)
     if slot[] == 0:
         return
     var state = StatePointer(unsafe_from_address=slot[])

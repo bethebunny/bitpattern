@@ -3,6 +3,7 @@
 from bigint import BigUInt
 
 from .arena import Arena, Id, REJECT
+from .steps import VISIT
 
 
 trait Prefix(Copyable, Defaultable, Deinitable):
@@ -88,7 +89,6 @@ struct Run[V: Prefix](Copyable):
     var free: Int32
 
 
-comptime VISIT: Int32 = -1
 comptime HI_BRANCH: Int32 = -2
 
 
