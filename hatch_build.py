@@ -68,7 +68,10 @@ class MojoBuildHook(BuildHookInterface):
             # have it yet.
             lib = distribution("mojo-compiler").locate_file("modular/lib")
             for name in RUNTIME:
-                shutil.copy(str(lib / f"{name}{LIBRARY_SUFFIX}"), module.parent)
+                copy = module.parent / f"{name}{LIBRARY_SUFFIX}"
+                # macOS kills a process that loads a signed library rewritten in place.
+                copy.unlink(missing_ok=True)
+                shutil.copy(str(lib / copy.name), copy)
             rpath = ORIGIN
         else:
             # Built outside the project, so a wheel doesn't replace an editable
