@@ -50,7 +50,7 @@ struct Span(TrivialRegisterPassable):
     var bit: Int32
 
 
-struct Scratch(Movable):
+struct Scratch(Defaultable, Movable):
     """Stacks and tables kept between walks, so short walks allocate nothing. Each walk
     takes the ones it uses while it runs. A nested walk (eg. the `|` in freed_between)
     finds them taken and allocates its own.
@@ -63,15 +63,6 @@ struct Scratch(Movable):
     var node_results: Table
     var pending_pairs: List[Pair]
     var seen_pairs: Table
-
-    def __init__(out self):
-        self.pair_steps = []
-        self.node_steps = []
-        self.span_steps = []
-        self.results = []
-        self.node_results = Table()
-        self.pending_pairs = []
-        self.seen_pairs = Table()
 
 
 def take[T: Movable & Defaultable](mut value: T) -> T:

@@ -9,7 +9,6 @@ from arena.collect import (
     memos_full,
     shrink_to_fit,
     shrunk,
-    slots,
     stats as arena_stats,
 )
 
@@ -86,7 +85,7 @@ def collect_garbage(state: StatePointer, mut arena: Arena) -> Int:
     var freed, room = arena_collect(arena, wrapped_nodes(state))
     var wrappers: List[PyObjectPtr] = []
     swap(wrappers, state[].wrappers)
-    wrappers.shrink(min(len(wrappers), slots(arena)))
+    wrappers.shrink(min(len(wrappers), len(arena.nodes)))
     state[].wrappers = shrunk(wrappers^, room)
     return freed
 

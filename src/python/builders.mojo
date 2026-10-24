@@ -387,6 +387,7 @@ def byte_at(value: UInt128, place: Int) -> Int:
     return Int((value >> UInt128(8 * place)) & 0xFF)
 
 
+@fieldwise_init
 struct Members(Movable):
     """Sorted and distinct. In UInt128s, which are smaller and sort faster, unless a
     value doesn't fit one."""
@@ -442,12 +443,6 @@ struct Members(Movable):
         if wide is not None:
             return Members([], wide.take().sorted())
         return Members(narrow^.sorted(), None)
-
-    def __init__(
-        out self, var narrow: List[UInt128], var wide: Optional[List[BigUInt]]
-    ):
-        self.narrow = narrow^
-        self.wide = wide^
 
     def bits(self) -> Int:
         if self.wide is not None:

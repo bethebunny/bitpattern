@@ -267,15 +267,10 @@ struct Signed(Movable):
         return signed^
 
 
-@always_inline
-def int_from_u64(value: UInt64) -> PyObjectPtr:
-    return PyLong_FromUnsignedLongLong(value)
-
-
 def int_from_u128(ints: Ints, value: UInt128) -> PyObjectPtr:
     # Most values fit a UInt64, which converts faster.
     if value >> 64 == 0:
-        return int_from_u64(UInt64(value))
+        return PyLong_FromUnsignedLongLong(UInt64(value))
     var bytes = value
     if ints.native:
         return ints.from_unsigned_native_bytes(bytes, LITTLE_ENDIAN)

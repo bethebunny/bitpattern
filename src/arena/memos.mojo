@@ -3,7 +3,7 @@
 from .table import IdTable, Table
 
 
-struct Memos(Movable, Sized):
+struct Memos(Defaultable, Movable, Sized):
     """Emptying the tables never changes an answer."""
 
     var intersection: Table
@@ -12,14 +12,6 @@ struct Memos(Movable, Sized):
     var complement: IdTable
     var subset: Table
     var disjoint: Table
-
-    def __init__(out self):
-        self.intersection = Table()
-        self.union = Table()
-        self.symmetric_difference = Table()
-        self.complement = IdTable()
-        self.subset = Table()
-        self.disjoint = Table()
 
     def __len__(self) -> Int:
         return (

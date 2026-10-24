@@ -119,10 +119,6 @@ def used_slots(arena: Arena) -> Int:
     return len(arena.nodes) - len(arena.free)
 
 
-def slots(arena: Arena) -> Int:
-    return len(arena.nodes)
-
-
 def stats(arena: Arena) -> Stats:
     return Stats(
         nodes=used_slots(arena),

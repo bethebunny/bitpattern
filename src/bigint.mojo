@@ -10,7 +10,7 @@ from std.sys import inlined_assembly
 from std.sys.info import CompilationTarget
 
 
-struct Limbs(Boolable, Copyable, Movable, Sized):
+struct Limbs(Boolable, Copyable, Defaultable, Movable, Sized):
     """A growable array of limbs.
 
     Allocated with malloc since List's aligned allocator takes about four times as long
@@ -124,9 +124,6 @@ struct BigUInt(
 
     var limbs: Limbs
     """Least significant first, and never a zero last, so zero has none."""
-
-    def __init__(out self):
-        self.limbs = Limbs()
 
     def __init__(out self, value: UInt64):
         self.limbs = Limbs()

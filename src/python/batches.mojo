@@ -236,12 +236,6 @@ def next_blocks[
     return list
 
 
-def string_of(text: List[UInt8], start: Int, length: Int) -> PyObjectPtr:
-    return PyUnicode_FromStringAndSize(
-        StringSpan(unsafe_from_utf8=Span(text)[start : start + length])
-    )
-
-
 def next_paths(
     state: StatePointer, mut paths: Paths, size: Int
 ) raises PyError -> PyObjectPtr:
@@ -260,7 +254,10 @@ def next_paths(
         raise PyError()
     var width = Int(paths.width)
     for index in range(count):
-        var path = string_of(bits, index * width, width)
+        var start = index * width
+        var path = PyUnicode_FromStringAndSize(
+            StringSpan(unsafe_from_utf8=Span(bits)[start : start + width])
+        )
         if not path:
             Py_DecRef(list)
             raise PyError()

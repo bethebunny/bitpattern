@@ -147,15 +147,12 @@ struct Legacy(Managed):
 comptime Bytes = Pointer[UInt8, MutUntrackedOrigin]
 
 
+@fieldwise_init
 struct Words(Movable):
     """Aligned to 256 bytes, and null when empty, as DLPack asks."""
 
     var data: Int
     var len: Int
-
-    def __init__(out self, data: Int, len: Int):
-        self.data = data
-        self.len = len
 
     def __deinit__(deinit self):
         if self.data:

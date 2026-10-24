@@ -30,9 +30,6 @@ trait Prefix(Copyable, Defaultable, Deinitable):
 struct Narrow(Prefix, TrivialRegisterPassable):
     var value: UInt128
 
-    def __init__(out self):
-        self.value = 0
-
     @always_inline
     def bit(self, bit: Int32) -> Bool:
         return (self.value >> UInt128(bit)) & 1 == 1
@@ -61,9 +58,6 @@ struct Narrow(Prefix, TrivialRegisterPassable):
 @fieldwise_init
 struct Wide(Copyable, Prefix):
     var value: BigUInt
-
-    def __init__(out self):
-        self.value = 0
 
     def bit(self, bit: Int32) -> Bool:
         return self.value.bit(bit)

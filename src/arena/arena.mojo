@@ -36,9 +36,6 @@ struct Id(Equatable, TrivialRegisterPassable, Writable):
     def is_leaf(self) -> Bool:
         return self.value < LEAVES
 
-    def write_to(self, mut writer: Some[Writer]):
-        writer.write("Id(", self.value, ")")
-
 
 comptime REJECT = Id(0)
 comptime ACCEPT = Id(1)
@@ -79,8 +76,7 @@ comptime LEAF_SLOT = Decision(-1, REJECT, REJECT)
 struct Interrupted(TrivialRegisterPassable, Writable):
     """A pause stopped the walk (Python's Ctrl-C handler raised)."""
 
-    def write_to(self, mut writer: Some[Writer]):
-        writer.write("Interrupted")
+    pass
 
 
 @fieldwise_init
