@@ -22,8 +22,9 @@ classifiers = [
     "Topic :: Software Development :: Testing",
     "Typing :: Typed",
 ]
-# The module loads the Mojo runtime library from the mojo-compiler that built it.
-dependencies = ["mojo-compiler==1.2.0"]
+# The module calls only three functions in the Mojo runtime library (aligned alloc,
+# aligned free and fprintf), and later releases keep them.
+dependencies = ["mojo-compiler>=1.2.0"]
 
 [project.optional-dependencies]
 hypothesis = ["hypothesis>=6"]

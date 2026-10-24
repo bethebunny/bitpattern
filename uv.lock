@@ -32,7 +32,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "hypothesis", marker = "extra == 'hypothesis'", specifier = ">=6" },
-    { name = "mojo-compiler", specifier = "==1.2.0" },
+    { name = "mojo-compiler", specifier = ">=1.2.0" },
 ]
 provides-extras = ["hypothesis"]
 
