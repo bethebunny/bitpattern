@@ -3,7 +3,7 @@
 
 from std.bit import count_leading_zeros, pop_count
 from std.ffi import external_call
-from std.hashlib import Hasher
+from std.hash import Hasher
 from std.memory import unsafe_memcmp, unsafe_memcpy, unsafe_memset_zero
 from std.os import abort
 from std.sys import inlined_assembly

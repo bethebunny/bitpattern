@@ -23,7 +23,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 # The module loads the Mojo runtime library from the mojo-compiler that built it.
-dependencies = ["mojo-compiler==1.1.0"]
+dependencies = ["mojo-compiler==1.2.0"]
 
 [project.optional-dependencies]
 hypothesis = ["hypothesis>=6"]
@@ -34,10 +34,10 @@ Issues = "https://github.com/bethebunny/bitpattern/issues"
 
 [dependency-groups]
 # hatchling so ty can check hatch_build.py.
-dev = ["pytest>=8", "hypothesis>=6", "numpy>=2.1", "max>=26.6", "hatchling"]
+dev = ["pytest>=8", "hypothesis>=6", "numpy>=2.1", "max>=26.7", "hatchling"]
 
 [build-system]
-requires = ["hatchling", "mojo-compiler==1.1.0"]
+requires = ["hatchling", "mojo-compiler==1.2.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
