@@ -4,6 +4,7 @@ import os
 import platform
 import shutil
 import subprocess
+import sys
 import sysconfig
 import tempfile
 from importlib.metadata import distribution
@@ -66,6 +67,9 @@ class MojoBuildHook(BuildHookInterface):
         build_data["pure_python"] = False
         # The stable ABI, from CPython 3.11 on: one wheel per platform.
         plat = sysconfig.get_platform().replace("-", "_").replace(".", "_")
+        if sys.platform == "linux":
+            # The module needs glibc 2.34 (for dlsym), as does mojo-compiler.
+            plat = f"manylinux_2_34_{platform.machine()}"
         build_data["tag"] = f"cp311-abi3-{plat}"
 
     def finalize(
