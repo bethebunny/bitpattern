@@ -41,6 +41,8 @@ comptime IS_COPIED: UInt64 = 1 << 1
 comptime INT: UInt8 = 0
 comptime UINT: UInt8 = 1
 
+comptime ALIGNMENT = 256
+
 
 @fieldwise_init
 struct Device(TrivialRegisterPassable):
@@ -234,13 +236,13 @@ def room(members: Count, *, columns: Int, size: Int) -> Optional[Words]:
             rows = Int(small.value())
     elif members.narrow <= UInt128(Int.MAX):
         rows = Int(members.narrow)
-    # The bytes, and up to 255 more to align them, must fit an Int.
-    if rows >= 0 and rows <= (Int.MAX - 255) // (columns * size):
+    # The bytes, and up to ALIGNMENT - 1 more to align them, must fit an Int.
+    if rows >= 0 and rows <= (Int.MAX - (ALIGNMENT - 1)) // (columns * size):
         if rows == 0:
             return Words(0, 0)
         # aligned_alloc's size must be a multiple of the alignment (C11).
         var data = external_call["aligned_alloc", Optional[Bytes]](
-            256, ceildiv(rows * columns * size, 256) * 256
+            ALIGNMENT, ceildiv(rows * columns * size, ALIGNMENT) * ALIGNMENT
         )
         if data is not None:
             return Words(Int(data.value()), rows * columns)

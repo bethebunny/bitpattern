@@ -23,6 +23,7 @@ from .capi import (
     PyObject_CallMethod,
     PyOS_InterruptOccurred,
     PyType_GetModuleState,
+    SIGINT,
     object_symbol,
     ob_type,
 )
@@ -159,7 +160,7 @@ def handle_sigint(state: StatePointer) -> Bool:
     if not signal:
         return False
     var handler = PyObject_CallMethod(
-        signal, "getsignal".as_c_string_span(), "i".as_c_string_span(), 2
+        signal, "getsignal".as_c_string_span(), "i".as_c_string_span(), SIGINT
     )
     Py_DecRef(signal)
     if not handler:
@@ -170,7 +171,7 @@ def handle_sigint(state: StatePointer) -> Bool:
         var result = PyObject_CallFunction(
             handler,
             "iO".as_c_string_span(),
-            2,
+            SIGINT,
             frame if frame else state[].none,
         )
         Py_DecRef(handler)

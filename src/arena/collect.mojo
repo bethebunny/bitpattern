@@ -2,7 +2,7 @@
 
 from bigint import BigUInt
 
-from .arena import ACCEPT, Arena, Id, REJECT
+from .arena import ACCEPT, Arena, Id, LEAVES, REJECT
 
 comptime FREED: Int32 = Int32.MIN
 """A freed slot's bit."""
@@ -54,13 +54,13 @@ def collect(mut arena: Arena, var roots: List[Id]) -> Tuple[Int, Int]:
     var freed = sweep(arena, marks(arena, roots^))
     # New nodes take the lowest slots, so the end can come free.
     var end = len(arena.nodes)
-    while end > 2 and arena.nodes.unsafe_get(end - 1).bit == FREED:
+    while end > LEAVES and arena.nodes.unsafe_get(end - 1).bit == FREED:
         end -= 1
     arena.nodes.shrink(end)
     arena.sizes.narrow.shrink(end)
     arena.free = [
         Id.from_index(index)
-        for index in reversed(range(2, end))
+        for index in reversed(range(LEAVES, end))
         if arena.nodes.unsafe_get(index).bit == FREED
     ]
     arena.schedule.made = 0
@@ -91,7 +91,7 @@ def marks(arena: Arena, var roots: List[Id]) -> List[Bool]:
 
 def sweep(mut arena: Arena, marks: List[Bool]) -> Int:
     var freed = 0
-    for index in range(2, len(arena.nodes)):
+    for index in range(LEAVES, len(arena.nodes)):
         var node = arena.nodes.unsafe_get(index)
         if not marks[index] and node.bit != FREED:
             arena.unique.remove(node)

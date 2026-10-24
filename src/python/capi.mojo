@@ -63,6 +63,8 @@ comptime Py_NE: c_int = 3
 comptime T_PYSSIZET: c_int = 19
 comptime READONLY: c_int = 1
 
+comptime SIGINT: c_int = 2
+
 
 @fieldwise_init
 struct TypeSlot(TrivialRegisterPassable):

@@ -34,7 +34,7 @@ struct Id(Equatable, TrivialRegisterPassable, Writable):
 
     @always_inline
     def is_leaf(self) -> Bool:
-        return self.value <= 1
+        return self.value < LEAVES
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("Id(", self.value, ")")
@@ -42,6 +42,8 @@ struct Id(Equatable, TrivialRegisterPassable, Writable):
 
 comptime REJECT = Id(0)
 comptime ACCEPT = Id(1)
+comptime LEAVES = 2
+"""REJECT and ACCEPT, below every decision node's id."""
 
 comptime NARROW_WIDTH: Int32 = 128
 """Sets up to this width work in UInt128s rather than BigUInts. Their members, counts and
@@ -135,8 +137,8 @@ struct Arena(Movable):
     """Steps until the next pause."""
 
     def __init__(out self, pause: Pause, pause_state: PauseStatePointer):
-        self.nodes = List[Decision](length=2, fill=LEAF_SLOT)
-        self.sizes = Sizes(2)
+        self.nodes = List[Decision](length=LEAVES, fill=LEAF_SLOT)
+        self.sizes = Sizes(LEAVES)
         self.unique = UniqueTable()
         self.free = []
         self.memos = Memos()

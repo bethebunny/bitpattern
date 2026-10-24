@@ -141,7 +141,7 @@ def PyInit_bdd() abi("C") -> PyObjectPtr:
         ModuleSlot(Py_mod_exec, address(module_exec))
     ]
     # No globals, so each interpreter gets an arena of its own, even with its own GIL.
-    if python_version() >= 0x030C0000:
+    if python_version() >= 0x030C0000:  # 3.12 on
         slots.append(
             ModuleSlot(
                 Py_mod_multiple_interpreters,
@@ -221,14 +221,14 @@ def string(literal: StaticString) -> PyObjectPtr:
 
 
 def match_args() -> PyObjectPtr:
-    var names = PyTuple_New(3)
-    if not names:
-        return names
     var fields = [
         "bit".as_c_string_span(),
         "left".as_c_string_span(),
         "right".as_c_string_span(),
     ]
+    var names = PyTuple_New(len(fields))
+    if not names:
+        return names
     for index, field in enumerate(fields):
         var name = PyUnicode_InternFromString(field)
         if not name:
