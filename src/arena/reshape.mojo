@@ -24,11 +24,11 @@ def lshift(
     ):
         raise ShiftedOut(arena.decision(root).bit)
     var moved = Table()
-    swap(moved, arena.spare.node_results)
+    swap(moved, arena.scratch.node_results)
     var steps: List[Step[Id]] = []
-    swap(steps, arena.spare.node_steps)
+    swap(steps, arena.scratch.node_steps)
     var results: List[Id] = []
-    swap(results, arena.spare.results)
+    swap(results, arena.scratch.results)
     steps.append(Step.visit(root))
     var found: Optional[UInt32]
     while steps:
@@ -49,9 +49,9 @@ def lshift(
             moved.insert(single(step.item), result.value)
             results.append(result)
     var result = results.pop()
-    arena.spare.node_steps = emptied(steps^)
-    arena.spare.results = emptied(results^)
-    arena.spare.node_results = emptied(moved^)
+    arena.scratch.node_steps = emptied(steps^)
+    arena.scratch.results = emptied(results^)
+    arena.scratch.node_results = emptied(moved^)
     return result
 
 
@@ -59,11 +59,11 @@ def freed_between(
     mut arena: Arena, root: Id, *, low_bit: Int32, high_bit: Int32
 ) raises Interrupted -> Id:
     var freed = Table()
-    swap(freed, arena.spare.node_results)
+    swap(freed, arena.scratch.node_results)
     var steps: List[Step[Id]] = []
-    swap(steps, arena.spare.node_steps)
+    swap(steps, arena.scratch.node_steps)
     var results: List[Id] = []
-    swap(results, arena.spare.results)
+    swap(results, arena.scratch.results)
     steps.append(Step.visit(root))
     var found: Optional[UInt32]
     while steps:
@@ -86,9 +86,9 @@ def freed_between(
             freed.insert(single(step.item), result.value)
             results.append(result)
     var result = results.pop()
-    arena.spare.node_steps = emptied(steps^)
-    arena.spare.results = emptied(results^)
-    arena.spare.node_results = emptied(freed^)
+    arena.scratch.node_steps = emptied(steps^)
+    arena.scratch.results = emptied(results^)
+    arena.scratch.node_results = emptied(freed^)
     return result
 
 

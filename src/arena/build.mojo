@@ -21,9 +21,9 @@ def exactly_these[
 ](mut arena: Arena, values: List[T], width: Int32) raises Interrupted -> Id:
     """`values` is sorted and distinct, and below `2 ** width`."""
     var steps: List[Step[Span]] = []
-    swap(steps, arena.spare.span_steps)
+    swap(steps, arena.scratch.span_steps)
     var results: List[Id] = []
-    swap(results, arena.spare.results)
+    swap(results, arena.scratch.results)
     steps.append(Step.visit(Span(0, len(values), width - 1)))
     while steps:
         arena.tick()
@@ -43,8 +43,8 @@ def exactly_these[
             var lo, hi = pop_branches(results)
             results.append(arena.make(step.bit, lo, hi))
     var result = results.pop()
-    arena.spare.span_steps = emptied(steps^)
-    arena.spare.results = emptied(results^)
+    arena.scratch.span_steps = emptied(steps^)
+    arena.scratch.results = emptied(results^)
     return result
 
 

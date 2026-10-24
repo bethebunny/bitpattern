@@ -40,9 +40,9 @@ def apply[op: Op](mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
     if answer is not None:
         return answer.value()
     var steps: List[Step[Pair]] = []
-    swap(steps, arena.spare.pair_steps)
+    swap(steps, arena.scratch.pair_steps)
     var results: List[Id] = []
-    swap(results, arena.spare.results)
+    swap(results, arena.scratch.results)
     steps.append(Step.visit(Pair(a, b)))
     while steps:
         arena.tick()
@@ -65,8 +65,8 @@ def apply[op: Op](mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
             memoise[op](arena, sorted_pair(step.item.a, step.item.b), made)
             results.append(made)
     var result = results.pop()
-    arena.spare.pair_steps = emptied(steps^)
-    arena.spare.results = emptied(results^)
+    arena.scratch.pair_steps = emptied(steps^)
+    arena.scratch.results = emptied(results^)
     return result
 
 
@@ -133,9 +133,9 @@ def complement(mut arena: Arena, root: Id) raises Interrupted -> Id:
     if answer is not None:
         return answer.value()
     var steps: List[Step[Id]] = []
-    swap(steps, arena.spare.node_steps)
+    swap(steps, arena.scratch.node_steps)
     var results: List[Id] = []
-    swap(results, arena.spare.results)
+    swap(results, arena.scratch.results)
     steps.append(Step.visit(root))
     while steps:
         arena.tick()
@@ -152,8 +152,8 @@ def complement(mut arena: Arena, root: Id) raises Interrupted -> Id:
             arena.memos.complement.insert(single(step.item), made.value)
             results.append(made)
     var result = results.pop()
-    arena.spare.node_steps = emptied(steps^)
-    arena.spare.results = emptied(results^)
+    arena.scratch.node_steps = emptied(steps^)
+    arena.scratch.results = emptied(results^)
     return result
 
 

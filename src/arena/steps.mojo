@@ -5,8 +5,8 @@ from .arena import Arena, Id
 from .table import Table
 
 
-comptime SPARE_ROOM = 1 << 12
-"""Room a spare stack keeps between walks."""
+comptime SCRATCH_ROOM = 1 << 12
+"""Room a scratch stack keeps between walks."""
 
 comptime VISIT: Int32 = -1
 
@@ -50,7 +50,7 @@ struct Span(TrivialRegisterPassable):
     var bit: Int32
 
 
-struct Spare(Movable):
+struct Scratch(Movable):
     """Stacks kept between walks, so short walks allocate nothing. A walk nested in
     another (eg. the `|` in freed_between) finds them taken and allocates its own.
     """
@@ -74,15 +74,15 @@ struct Spare(Movable):
 
 
 def emptied[T: Copyable & Deinitable](var stack: List[T]) -> List[T]:
-    """`stack` with nothing in it, keeping at most SPARE_ROOM of room."""
-    if stack.capacity() > SPARE_ROOM:
-        return List[T](capacity=SPARE_ROOM)
+    """`stack` with nothing in it, keeping at most SCRATCH_ROOM of room."""
+    if stack.capacity() > SCRATCH_ROOM:
+        return List[T](capacity=SCRATCH_ROOM)
     stack.clear()
     return stack^
 
 
 def emptied(var table: Table) -> Table:
-    if table.capacity() > SPARE_ROOM:
+    if table.capacity() > SCRATCH_ROOM:
         return Table()
     table.clear()
     return table^

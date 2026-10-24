@@ -71,9 +71,9 @@ def walk_pairs[
     """Walks `a` and `b` together as apply does, until `trivial` answers False. Returns
     the answer and how many pairs the walk visited."""
     var pairs: List[Pair] = []
-    swap(pairs, arena.spare.pending_pairs)
+    swap(pairs, arena.scratch.pending_pairs)
     var seen = Table()
-    swap(seen, arena.spare.seen_pairs)
+    swap(seen, arena.scratch.seen_pairs)
     pairs.append(Pair(a, b))
     var answer = True
     while pairs:
@@ -91,8 +91,8 @@ def walk_pairs[
             answer = False
             break
     var walked = len(seen)
-    arena.spare.pending_pairs = emptied(pairs^)
-    arena.spare.seen_pairs = emptied(seen^)
+    arena.scratch.pending_pairs = emptied(pairs^)
+    arena.scratch.seen_pairs = emptied(seen^)
     return (answer, walked)
 
 

@@ -14,7 +14,7 @@ from bigint import BigUInt
 
 from .collect import MIN_COLLECTION_INTERVAL, Schedule
 from .memos import Memos
-from .steps import Spare
+from .steps import Scratch
 from .table import UniqueTable
 
 
@@ -128,7 +128,7 @@ struct Arena(Movable):
     var free: List[Id]
     """Freed slots, lowest last so it's reused first."""
     var memos: Memos
-    var spare: Spare
+    var scratch: Scratch
     var schedule: Schedule
     var pause: Pause
     var pause_state: OpaquePointer[MutUntrackedOrigin]
@@ -143,7 +143,7 @@ struct Arena(Movable):
         self.unique = UniqueTable()
         self.free = []
         self.memos = Memos()
-        self.spare = Spare()
+        self.scratch = Scratch()
         self.schedule = Schedule(made=0, due=MIN_COLLECTION_INTERVAL)
         self.pause = pause
         self.pause_state = pause_state
