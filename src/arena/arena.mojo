@@ -107,14 +107,13 @@ struct Sizes(Movable):
         self.wide = Dict[Int, BigUInt]()
 
 
-comptime Pause = def(mut Arena, OpaquePointer[MutUntrackedOrigin]) thin -> Bool
+comptime PauseStatePointer = OpaquePointer[MutUntrackedOrigin]
+comptime Pause = def(mut Arena, PauseStatePointer) thin -> Bool
 """Runs every PAUSE_INTERVAL steps of a walk with the arena's `pause_state` and
 returns whether the walk goes on."""
 
 
-def never_pause(
-    mut arena: Arena, pause_state: OpaquePointer[MutUntrackedOrigin]
-) -> Bool:
+def never_pause(mut arena: Arena, pause_state: PauseStatePointer) -> Bool:
     return True
 
 
@@ -131,13 +130,11 @@ struct Arena(Movable):
     var scratch: Scratch
     var schedule: Schedule
     var pause: Pause
-    var pause_state: OpaquePointer[MutUntrackedOrigin]
+    var pause_state: PauseStatePointer
     var countdown: Int
     """Steps until the next pause."""
 
-    def __init__(
-        out self, pause: Pause, pause_state: OpaquePointer[MutUntrackedOrigin]
-    ):
+    def __init__(out self, pause: Pause, pause_state: PauseStatePointer):
         self.nodes = List[Decision](length=2, fill=LEAF_SLOT)
         self.sizes = Sizes(2)
         self.unique = UniqueTable()
@@ -153,9 +150,7 @@ struct Arena(Movable):
     def placeholder() -> Arena:
         """No nodes at all, not even the leaves. A paused walk holds this while Python's
         Ctrl-C handler has the real arena."""
-        var arena = Arena(
-            never_pause, OpaquePointer[MutUntrackedOrigin].unsafe_dangling()
-        )
+        var arena = Arena(never_pause, PauseStatePointer.unsafe_dangling())
         arena.nodes = []
         arena.sizes = Sizes(0)
         return arena^

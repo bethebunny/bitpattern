@@ -8,7 +8,7 @@ requires the GIL, which keeps every call into it on one thread at a time.
 from std.memory.alloc import Layout, alloc, dealloc
 from std.python._cpython import PyObjectPtr
 
-from arena import Arena
+from arena import Arena, PauseStatePointer
 
 from .ints import Ints
 
@@ -121,9 +121,7 @@ struct Lease:
         give_back(self.state, self.arena)
 
 
-def pause(
-    mut arena: Arena, pause_state: OpaquePointer[MutUntrackedOrigin]
-) -> Bool:
+def pause(mut arena: Arena, pause_state: PauseStatePointer) -> Bool:
     """Runs Python's SIGINT handler after a Ctrl-C and stops the walk if it raised.
 
     The handler can use the arena, so the walk lends it the real one and holds a

@@ -9,5 +9,6 @@ from .arena import (
     MAX_WIDTH,
     Misordered,
     NARROW_WIDTH,
+    PauseStatePointer,
     REJECT,
 )
