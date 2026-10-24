@@ -25,11 +25,15 @@ TARGET_CPUS = {
     "arm64": "apple-m1",  # every Apple Silicon Mac
 }
 if sys.platform == "darwin":
-    # macOS 13, the oldest that mojo-compiler runs on.
+    # macOS 13, the oldest that mojo-compiler runs on. The triple sets it for the
+    # compiler, and MACOSX_DEPLOYMENT_TARGET for the linker.
     PLATFORM_TAG = "macosx_13_0_arm64"
     TARGET_FLAGS = ["--target-triple", "arm64-apple-macosx13.0"]
+    BUILD_ENV = {"MACOSX_DEPLOYMENT_TARGET": "13.0"}
     # Python's symbols resolve when Python loads the module, as on Linux.
     LINK_FLAGS = ["-Xlinker", "-undefined", "-Xlinker", "dynamic_lookup"]
+    # A fixed install name, so a build doesn't depend on where it ran.
+    LINK_FLAGS += ["-Xlinker", "-install_name", "-Xlinker", "@rpath/bdd.abi3.so"]
     STRIP_FLAGS = ["-Xlinker", "-x"]  # drops local symbols
     LIBRARY_SUFFIX = ".dylib"
     ORIGIN = "@loader_path"
@@ -37,6 +41,7 @@ else:
     # The module needs glibc 2.34 (for dlsym), as does mojo-compiler.
     PLATFORM_TAG = f"manylinux_2_34_{platform.machine()}"
     TARGET_FLAGS = []
+    BUILD_ENV = {}
     LINK_FLAGS = []
     STRIP_FLAGS = ["-Xlinker", "--strip-all"]
     LIBRARY_SUFFIX = ".so"
@@ -80,7 +85,7 @@ class MojoBuildHook(BuildHookInterface):
         # Linker arguments, in place of mojo's default: an rpath into this build
         # environment, which an isolated build deletes.
         shared_libs = f"-Xlinker,-rpath,-Xlinker,{rpath}"
-        env = dict(os.environ, MODULAR_MOJO_MAX_SHARED_LIBS=shared_libs)
+        env = dict(os.environ, **BUILD_ENV, MODULAR_MOJO_MAX_SHARED_LIBS=shared_libs)
         source = root / "src" / "lib.mojo"
         # The build environment's mojo, which pip and uv put first on PATH.
         build = ["mojo", "build", source, "--emit", "shared-lib", "-o", module, *flags]
