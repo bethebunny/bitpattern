@@ -414,7 +414,7 @@ def _add(
     n: Int,
 ) -> UInt64:
     """Writes `a + b` and returns the carry."""
-    var carry = UInt64(0)
+    var carry: UInt64 = 0
     for i in range(n):
         var s = (
             UInt128(a[unsafe_offset=i])
@@ -431,7 +431,7 @@ def _add_to(
     dest: MutPointer[UInt64, _], b: Pointer[UInt64, _], n: Int
 ) -> UInt64:
     """Adds `b` to `dest` and returns the carry."""
-    var carry = UInt64(0)
+    var carry: UInt64 = 0
     for i in range(n):
         var s = (
             UInt128(dest[unsafe_offset=i])
@@ -465,7 +465,7 @@ def _subtract(mut a: Limbs, b: Limbs):
     var nb = len(b)
     assert nb <= len(a)
     var dest = a.unsafe_ptr()
-    var borrow = UInt64(0)
+    var borrow: UInt64 = 0
     for i in range(nb):
         var d = (
             UInt128(dest[unsafe_offset=i])
@@ -489,7 +489,7 @@ def _multiply(
     dest: MutPointer[UInt64, _], a: Pointer[UInt64, _], n: Int, m: UInt64
 ) -> UInt64:
     """Writes `a * m` and returns the limb above."""
-    var carry = UInt64(0)
+    var carry: UInt64 = 0
     for i in range(n):
         var p = UInt128(a[unsafe_offset=i]) * UInt128(m) + UInt128(carry)
         dest[unsafe_offset=i] = UInt64(p)
@@ -502,7 +502,7 @@ def _add_product_to(
     dest: MutPointer[UInt64, _], a: Pointer[UInt64, _], n: Int, m: UInt64
 ) -> UInt64:
     """Adds `a * m` to `dest` and returns the carry."""
-    var carry = UInt64(0)
+    var carry: UInt64 = 0
     for i in range(n):
         # At most (2**64 - 1)**2 + 2 * (2**64 - 1), which fits.
         var p = (
@@ -520,7 +520,7 @@ def _subtract_product_from(
     dest: MutPointer[UInt64, _], a: Pointer[UInt64, _], n: Int, m: UInt64
 ) -> UInt64:
     """Subtracts `a * m` from `dest` and returns the borrow."""
-    var borrow = UInt64(0)
+    var borrow: UInt64 = 0
     for i in range(n):
         var p = UInt128(a[unsafe_offset=i]) * UInt128(m) + UInt128(borrow)
         var low = UInt64(p)
@@ -583,7 +583,7 @@ def _divide_by_limb(
     dest: MutPointer[UInt64, _], a: Pointer[UInt64, _], n: Int, divisor: UInt64
 ) -> UInt64:
     """Writes `a / divisor` and returns the remainder."""
-    var rest = UInt64(0)
+    var rest: UInt64 = 0
     for i in range(n - 1, -1, -1):
         var step = _two_by_one(
             high=rest, low=a[unsafe_offset=i], divisor=divisor

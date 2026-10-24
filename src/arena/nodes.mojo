@@ -9,8 +9,7 @@ from .table import Table, single
 
 def node_count(mut arena: Arena, root: Id) raises Interrupted -> Int:
     var seen = Table()
-    var stack = List[Id]()
-    stack.append(root)
+    var stack: List[Id] = [root]
     while stack:
         arena.tick()
         var id = stack.pop()
@@ -26,8 +25,9 @@ def path_count(mut arena: Arena, root: Id) raises Interrupted -> BigUInt:
     # its count's index.
     var counts: List[BigUInt] = [0, 1]
     var counted = Table()
-    var steps: List[Step[Id]] = [Step[Id].visit(root)]
-    var results = List[Int]()
+    var steps: List[Step[Id]] = [Step.visit(root)]
+    var results: List[Int] = []
+    var found: Optional[UInt32]
     while steps:
         arena.tick()
         var step = steps.pop()
@@ -39,10 +39,8 @@ def path_count(mut arena: Arena, root: Id) raises Interrupted -> BigUInt:
             counts.append(counts[lo] + counts[hi])
         elif step.item.is_leaf():
             results.append(step.item.index())
+        elif (found := counted.get(single(step.item))) is not None:
+            results.append(Int(found.value()))
         else:
-            var found = counted.get(single(step.item))
-            if found is not None:
-                results.append(Int(found.value()))
-            else:
-                push_branches(arena, steps, step.item)
+            push_branches(arena, steps, step.item)
     return counts[results.pop()].copy()

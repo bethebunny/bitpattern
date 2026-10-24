@@ -20,9 +20,8 @@ struct Row(TrivialRegisterPassable):
 def rows(mut arena: Arena, root: Id) raises Interrupted -> List[Row]:
     """Children first."""
     var numbers = Table()
-    var found = List[Row]()
-    var steps = List[Step[Id]]()
-    steps.append(Step[Id].visit(root))
+    var found: List[Row] = []
+    var steps: List[Step[Id]] = [Step.visit(root)]
     while steps:
         arena.tick()
         var step = steps.pop()

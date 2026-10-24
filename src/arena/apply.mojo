@@ -39,11 +39,11 @@ def apply[op: Op](mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
     var answer = known[op](arena, a, b)
     if answer is not None:
         return answer.value()
-    var steps = List[Step[Pair]]()
+    var steps: List[Step[Pair]] = []
     swap(steps, arena.spare.pair_steps)
-    var results = List[Id]()
+    var results: List[Id] = []
     swap(results, arena.spare.results)
-    steps.append(Step[Pair].visit(Pair(a, b)))
+    steps.append(Step.visit(Pair(a, b)))
     while steps:
         arena.tick()
         var step = steps.pop()
@@ -56,9 +56,9 @@ def apply[op: Op](mut arena: Arena, a: Id, b: Id) raises Interrupted -> Id:
             var bit = arena.top_bit(pair.a, pair.b)
             var a_lo, a_hi = arena.cofactors(pair.a, bit)
             var b_lo, b_hi = arena.cofactors(pair.b, bit)
-            steps.append(Step[Pair].make(bit, pair))
-            steps.append(Step[Pair].visit(Pair(a_hi, b_hi)))
-            steps.append(Step[Pair].visit(Pair(a_lo, b_lo)))
+            steps.append(Step.make(bit, pair))
+            steps.append(Step.visit(Pair(a_hi, b_hi)))
+            steps.append(Step.visit(Pair(a_lo, b_lo)))
         else:
             var lo, hi = pop_branches(results)
             var made = arena.make(step.bit, lo, hi)
@@ -132,11 +132,11 @@ def complement(mut arena: Arena, root: Id) raises Interrupted -> Id:
     var answer = known_complement(arena, root)
     if answer is not None:
         return answer.value()
-    var steps = List[Step[Id]]()
+    var steps: List[Step[Id]] = []
     swap(steps, arena.spare.node_steps)
-    var results = List[Id]()
+    var results: List[Id] = []
     swap(results, arena.spare.results)
-    steps.append(Step[Id].visit(root))
+    steps.append(Step.visit(root))
     while steps:
         arena.tick()
         var step = steps.pop()

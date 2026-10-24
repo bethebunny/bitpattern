@@ -137,7 +137,7 @@ struct Arena(Movable):
         self.nodes = List[Decision](length=2, fill=LEAF_SLOT)
         self.sizes = Sizes(2)
         self.unique = UniqueTable()
-        self.free = List[Id]()
+        self.free = []
         self.memos = Memos()
         self.spare = Spare()
         self.schedule = Schedule(made=0, due=MIN_COLLECTION_INTERVAL)
@@ -150,7 +150,7 @@ struct Arena(Movable):
         """No nodes at all, not even the leaves. A paused walk holds this while Python's
         Ctrl-C handler has the real arena."""
         var arena = Arena(never_pause, 0)
-        arena.nodes = List[Decision]()
+        arena.nodes = []
         arena.sizes = Sizes(0)
         return arena^
 

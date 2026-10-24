@@ -49,7 +49,7 @@ def write_words[
 ) raises Interrupted:
     """For widths up to 64. Members under free bits are written once, then copied for
     each other value of the free bits."""
-    var steps = List[WriteStep]()
+    var steps: List[WriteStep] = []
     if id != REJECT:
         steps.append(WriteStep.visit(id, width, 0))
     var written = 0

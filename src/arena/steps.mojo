@@ -64,12 +64,12 @@ struct Spare(Movable):
     var seen_pairs: Table
 
     def __init__(out self):
-        self.pair_steps = List[Step[Pair]]()
-        self.node_steps = List[Step[Id]]()
-        self.span_steps = List[Step[Span]]()
-        self.results = List[Id]()
+        self.pair_steps = []
+        self.node_steps = []
+        self.span_steps = []
+        self.results = []
         self.node_results = Table()
-        self.pending_pairs = List[Pair]()
+        self.pending_pairs = []
         self.seen_pairs = Table()
 
 
@@ -98,6 +98,6 @@ def pop_branches(mut results: List[Id]) -> Tuple[Id, Id]:
 @always_inline
 def push_branches(arena: Arena, mut steps: List[Step[Id]], id: Id):
     var node = arena.decision(id)
-    steps.append(Step[Id].make(node.bit, id))
-    steps.append(Step[Id].visit(node.hi))
-    steps.append(Step[Id].visit(node.lo))
+    steps.append(Step.make(node.bit, id))
+    steps.append(Step.visit(node.hi))
+    steps.append(Step.visit(node.lo))

@@ -18,9 +18,9 @@ struct Paths(Movable):
     var width: Int32
 
     def __init__(out self, id: Id, width: Int32):
-        self.bits = List[UInt8]()
+        self.bits = []
         self.start = id
-        self.frames = List[Tuple[Id, Int32]]()
+        self.frames = []
         self.width = width
 
     def next_path(mut self, arena: Arena) -> Bool:

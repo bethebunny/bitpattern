@@ -70,7 +70,7 @@ def walk_pairs[
 ](mut arena: Arena, a: Id, b: Id) raises Interrupted -> Tuple[Bool, Int]:
     """Walks `a` and `b` together as apply does, until `trivial` answers False. Returns
     the answer and how many pairs the walk visited."""
-    var pairs = List[Pair]()
+    var pairs: List[Pair] = []
     swap(pairs, arena.spare.pending_pairs)
     var seen = Table()
     swap(seen, arena.spare.seen_pairs)

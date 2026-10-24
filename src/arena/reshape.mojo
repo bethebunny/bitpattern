@@ -25,20 +25,19 @@ def lshift(
         raise ShiftedOut(arena.decision(root).bit)
     var moved = Table()
     swap(moved, arena.spare.node_results)
-    var steps = List[Step[Id]]()
+    var steps: List[Step[Id]] = []
     swap(steps, arena.spare.node_steps)
-    var results = List[Id]()
+    var results: List[Id] = []
     swap(results, arena.spare.results)
-    steps.append(Step[Id].visit(root))
+    steps.append(Step.visit(root))
+    var found: Optional[UInt32]
     while steps:
         arena.tick()
         var step = steps.pop()
         if step.is_visit():
             if step.item.is_leaf():
                 results.append(step.item)
-                continue
-            var found = moved.get(single(step.item))
-            if found is not None:
+            elif (found := moved.get(single(step.item))) is not None:
                 results.append(Id(found.value()))
             else:
                 push_branches(arena, steps, step.item)
@@ -61,20 +60,19 @@ def freed_between(
 ) raises Interrupted -> Id:
     var freed = Table()
     swap(freed, arena.spare.node_results)
-    var steps = List[Step[Id]]()
+    var steps: List[Step[Id]] = []
     swap(steps, arena.spare.node_steps)
-    var results = List[Id]()
+    var results: List[Id] = []
     swap(results, arena.spare.results)
-    steps.append(Step[Id].visit(root))
+    steps.append(Step.visit(root))
+    var found: Optional[UInt32]
     while steps:
         arena.tick()
         var step = steps.pop()
         if step.is_visit():
             if arena.tests_only_below(step.item, low_bit):
                 results.append(step.item)
-                continue
-            var found = freed.get(single(step.item))
-            if found is not None:
+            elif (found := freed.get(single(step.item))) is not None:
                 results.append(Id(found.value()))
             else:
                 push_branches(arena, steps, step.item)

@@ -20,11 +20,11 @@ def exactly_these[
     T: Copyable, //, bit_of: def(T, Int32) thin -> Bool
 ](mut arena: Arena, values: List[T], width: Int32) raises Interrupted -> Id:
     """`values` is sorted and distinct, and below `2 ** width`."""
-    var steps = List[Step[Span]]()
+    var steps: List[Step[Span]] = []
     swap(steps, arena.spare.span_steps)
-    var results = List[Id]()
+    var results: List[Id] = []
     swap(results, arena.spare.results)
-    steps.append(Step[Span].visit(Span(0, len(values), width - 1)))
+    steps.append(Step.visit(Span(0, len(values), width - 1)))
     while steps:
         arena.tick()
         var step = steps.pop()
@@ -36,13 +36,9 @@ def exactly_these[
                 results.append(ACCEPT)
             else:
                 var split = partition_point[bit_of](values, span)
-                steps.append(Step[Span].make(span.bit, span))
-                steps.append(
-                    Step[Span].visit(Span(split, span.end, span.bit - 1))
-                )
-                steps.append(
-                    Step[Span].visit(Span(span.start, split, span.bit - 1))
-                )
+                steps.append(Step.make(span.bit, span))
+                steps.append(Step.visit(Span(split, span.end, span.bit - 1)))
+                steps.append(Step.visit(Span(span.start, split, span.bit - 1)))
         else:
             var lo, hi = pop_branches(results)
             results.append(arena.make(step.bit, lo, hi))
@@ -73,13 +69,12 @@ def diagram(mut arena: Arena, bits: StringSlice[_]) raises Interrupted -> Id:
     """
     var bytes = bits.as_bytes()
     var id = ACCEPT
-    var bit = Int32(0)
-    for index in range(len(bytes) - 1, -1, -1):
+    var bit: Int32 = 0
+    for symbol in reversed(bytes):
         arena.tick()
-        var symbol = bytes[index]
-        if symbol == UInt8(ord("0")):
+        if symbol == Byte(ord("0")):
             id = arena.make(bit, id, REJECT)
-        elif symbol == UInt8(ord("1")):
+        elif symbol == Byte(ord("1")):
             id = arena.make(bit, REJECT, id)
         bit += 1
     return id
@@ -98,7 +93,7 @@ def interval[
         # and `at_most` those up to `last`. Below `low` any bits will do.
         var at_least = ACCEPT
         var at_most = ACCEPT
-        var low = Int32(0)
+        var low: Int32 = 0
         while low < split and not bit_of(first, low) and bit_of(last, low):
             low += 1
         for bit in range(low, split):

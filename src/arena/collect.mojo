@@ -58,10 +58,11 @@ def collect(mut arena: Arena, var roots: List[Id]) -> Tuple[Int, Int]:
         end -= 1
     arena.nodes.shrink(end)
     arena.sizes.narrow.shrink(end)
-    arena.free.clear()
-    for index in range(end - 1, 1, -1):
-        if arena.nodes.unsafe_get(index).bit == FREED:
-            arena.free.append(Id.from_index(index))
+    arena.free = [
+        Id.from_index(index)
+        for index in range(end - 1, 1, -1)
+        if arena.nodes.unsafe_get(index).bit == FREED
+    ]
     arena.schedule.made = 0
     arena.schedule.due = max(MIN_COLLECTION_INTERVAL, used_slots(arena))
     var room = used_slots(arena) + max(arena.schedule.due, made)

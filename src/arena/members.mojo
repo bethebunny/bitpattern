@@ -34,7 +34,7 @@ def nth_narrow(arena: Arena, root: Id, n: UInt128) -> UInt128:
     """The caller checks that `n` is in range."""
     var id = root
     var rest = n
-    var member = UInt128(0)
+    var member: UInt128 = 0
     while not id.is_leaf():
         var node = arena.decision(id)
         # The free bits above the node are the member's highest bits.
@@ -82,7 +82,7 @@ def rank_narrow(
 ) -> UInt128:
     """`value` is below `2 ** width`."""
     var id = root
-    var below = UInt128(0)
+    var below: UInt128 = 0
     var top = width
     while not id.is_leaf():
         var node = arena.decision(id)
