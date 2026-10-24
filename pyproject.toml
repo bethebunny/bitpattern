@@ -1,6 +1,6 @@
 [project]
 name = "bitpattern"
-version = "0.2.0"
+version = "0.3.0"
 description = "Very large sets of floats, IP addresses and other structured data, backed by binary decision diagrams"
 readme = "README.md"
 requires-python = ">=3.11"
