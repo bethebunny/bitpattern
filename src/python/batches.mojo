@@ -259,10 +259,10 @@ def next_paths(
 ) raises PyError -> PyObjectPtr:
     var arena = take_arena(state)
     # Every path is `width` long, so they share one buffer.
-    var text: List[UInt8] = []
+    var bits: List[UInt8] = []
     var count = 0
     while count < size and paths.next_path(arena[]):
-        text.extend(Span(paths.bits))
+        bits.extend(Span(paths.bits))
         count += 1
     give_back(state, arena)
     if count == 0:
@@ -272,7 +272,7 @@ def next_paths(
         raise PyError()
     var width = Int(paths.width)
     for index in range(count):
-        var path = string_of(text, index * width, width)
+        var path = string_of(bits, index * width, width)
         if not path:
             Py_DecRef(list)
             raise PyError()

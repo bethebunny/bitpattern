@@ -22,23 +22,23 @@ struct Memos(Movable, Sized):
         self.disjoint = Table()
 
     def __len__(self) -> Int:
-        var answers = len(self.subset) + len(self.disjoint)
-        var made = len(self.intersection) + len(self.union)
         return (
-            made
+            len(self.intersection)
+            + len(self.union)
             + len(self.symmetric_difference)
             + len(self.complement)
-            + answers
+            + len(self.subset)
+            + len(self.disjoint)
         )
 
     def capacity(self) -> Int:
-        var answers = self.subset.capacity() + self.disjoint.capacity()
-        var made = self.intersection.capacity() + self.union.capacity()
         return (
-            made
+            self.intersection.capacity()
+            + self.union.capacity()
             + self.symmetric_difference.capacity()
             + self.complement.capacity()
-            + answers
+            + self.subset.capacity()
+            + self.disjoint.capacity()
         )
 
     def clear(mut self):

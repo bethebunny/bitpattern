@@ -103,10 +103,10 @@ def reduction(
     if not rebuild:
         Py_DecRef(written)
         raise PyError()
-    var reduction = Py_BuildValue("(N(N))".as_c_string_span(), rebuild, written)
-    if not reduction:
+    var reduced = Py_BuildValue("(N(N))".as_c_string_span(), rebuild, written)
+    if not reduced:
         raise PyError()
-    return reduction
+    return reduced
 
 
 comptime LSHIFT = Signature("lshift", positional=["node", "by"])
@@ -554,9 +554,9 @@ def rebuilt(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
         return wrap(state, built)
 
 
-def formed(rows: List[Row]) -> Bool:
+def formed(given: List[Row]) -> Bool:
     """Whether every branch names a leaf or an earlier row."""
-    for index, row in enumerate(rows):
+    for index, row in enumerate(given):
         # Row `index` makes node `2 + index`.
         if Int(row.lo) >= 2 + index or Int(row.hi) >= 2 + index:
             return False
@@ -574,13 +574,13 @@ def rows_of(state: StatePointer, o: PyObjectPtr) raises PyError -> List[Row]:
     var iterator = PyObject_GetIter(o)
     if not iterator:
         raise PyError()
-    var rows: List[Row] = []
+    var found: List[Row] = []
     while True:
         var item = PyIter_Next(iterator)
         if not item:
             break
         try:
-            rows.append(row_of(state, item))
+            found.append(row_of(state, item))
         except e:
             Py_DecRef(item)
             Py_DecRef(iterator)
@@ -589,7 +589,7 @@ def rows_of(state: StatePointer, o: PyObjectPtr) raises PyError -> List[Row]:
     Py_DecRef(iterator)
     if PyErr_Occurred():
         raise PyError()
-    return rows^
+    return found^
 
 
 def is_sequence(o: PyObjectPtr) raises PyError -> Bool:

@@ -231,8 +231,8 @@ struct HashTable[K: Key](Defaultable, Movable, Sized):
 
     @no_inline
     def _resize(mut self, slots: Int):
-        var old = Self(slots)
-        swap(old, self)
+        var old = self^
+        self = Self(slots)
         self.held = old.held
         for i in range(len(old.entries)):
             if old.control.is_full(i):
@@ -296,13 +296,13 @@ struct UniqueTable(Movable, Sized):
     """Maps each decision node to its id."""
 
     var control: Control
-    var slots: List[Unique]
+    var entries: List[Unique]
     var held: Int
     var deleted: Int
 
     def __init__(out self, slots: Int = 0):
         self.control = Control(slots)
-        self.slots = List[Unique](unsafe_uninit_length=slots)
+        self.entries = List[Unique](unsafe_uninit_length=slots)
         self.held = 0
         self.deleted = 0
 
@@ -316,15 +316,15 @@ struct UniqueTable(Movable, Sized):
             return -1
         var hash = node_hash(node)
         var byte = self.control.byte(hash)
-        var mask = len(self.slots) - 1
-        var slots = self.slots.unsafe_ptr()
+        var mask = len(self.entries) - 1
+        var entries = self.entries.unsafe_ptr()
         var start = self.control.home(hash)
         while True:
             var group = self.control.group(start)
             var found = matches(group, byte)
             while found:
                 var slot = (start + lowest(found)) & mask
-                if slots[unsafe_offset=slot].node == node:
+                if entries[unsafe_offset=slot].node == node:
                     return slot
                 found &= found - 1
             if matches(group, EMPTY):
@@ -336,18 +336,17 @@ struct UniqueTable(Movable, Sized):
         var slot = self._find(node)
         if slot < 0:
             return None
-        return self.slots.unsafe_get(slot).id
+        return self.entries.unsafe_get(slot).id
 
     def insert(mut self, node: Decision, id: Id):
         """`node` isn't in the table."""
-        if self.held + self.deleted >= room(len(self.slots)):
+        if self.held + self.deleted >= room(len(self.entries)):
+            var slots = len(self.entries)
             # Dropping the DELETED slots makes room enough unless nodes fill half of it.
-            var grow = self.held >= room(len(self.slots)) // 2
-            self._resize(
-                max(MIN_SLOTS, 2 * len(self.slots)) if grow else len(self.slots)
-            )
+            var grow = self.held >= room(slots) // 2
+            self._resize(max(MIN_SLOTS, 2 * slots) if grow else slots)
         var hash = node_hash(node)
-        var mask = len(self.slots) - 1
+        var mask = len(self.entries) - 1
         var start = self.control.home(hash)
         while True:
             var free = free_in(self.control.group(start))
@@ -356,7 +355,7 @@ struct UniqueTable(Movable, Sized):
                 if self.control.bytes.unsafe_get(slot) == DELETED:
                     self.deleted -= 1
                 self.control.set(slot, self.control.byte(hash))
-                self.slots.unsafe_set(slot, Unique(node, id))
+                self.entries.unsafe_set(slot, Unique(node, id))
                 self.held += 1
                 return
             start = (start + GROUP) & mask
@@ -372,19 +371,19 @@ struct UniqueTable(Movable, Sized):
 
     @no_inline
     def _resize(mut self, slots: Int):
-        var old = UniqueTable(slots)
-        swap(old, self)
+        var old = self^
+        self = UniqueTable(slots)
         self.held = old.held
-        for i in range(len(old.slots)):
+        for i in range(len(old.entries)):
             if old.control.is_full(i):
-                var unique = old.slots.unsafe_get(i)
+                var unique = old.entries.unsafe_get(i)
                 var hash = node_hash(unique.node)
                 var slot = self.control.empty_slot(hash)
                 self.control.set(slot, self.control.byte(hash))
-                self.slots.unsafe_set(slot, unique)
+                self.entries.unsafe_set(slot, unique)
 
     def shrink_to(mut self, entries: Int):
         """Keeps room for at least `entries` and drops the DELETED slots."""
-        var slots = min(len(self.slots), slots_for(max(entries, self.held)))
-        if slots < len(self.slots) or self.deleted:
+        var slots = min(len(self.entries), slots_for(max(entries, self.held)))
+        if slots < len(self.entries) or self.deleted:
             self._resize(slots)

@@ -191,11 +191,11 @@ def delete[M: Managed](managed: Int) abi("C"):
     export.unsafe_free()
 
 
-def destructor[M: Managed](capsule: PyObjectPtr) abi("C"):
+def destructor[M: Managed](o: PyObjectPtr) abi("C"):
     """Frees the export unless a consumer renamed the capsule (and so owns the
     tensor)."""
-    if PyCapsule_IsValid(capsule, M.NAME.as_c_string_span()):
-        delete[M](PyCapsule_GetPointer(capsule, M.NAME.as_c_string_span()))
+    if PyCapsule_IsValid(o, M.NAME.as_c_string_span()):
+        delete[M](PyCapsule_GetPointer(o, M.NAME.as_c_string_span()))
 
 
 def capsule[
