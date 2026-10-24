@@ -79,13 +79,9 @@ def reduction(
         if not interned:
             raise PyError()
         return interned
-    var lease = Lease(state)
     var found: List[Row]
-    try:
-        with lease^ as arena:
-            found = rows.rows(arena[], id)
-    except:
-        raise PyError()
+    with Lease(state) as arena:
+        found = rows.rows(arena[], id)
     var written = PyList_New(len(found))
     if not written:
         raise PyError()

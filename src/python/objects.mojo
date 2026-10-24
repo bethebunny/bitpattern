@@ -121,13 +121,9 @@ def wrap_result[
     """Runs `walk` with the arena and returns its node's object. If a pause stopped
     the walk, Python's error is the handler's."""
     with Call(state):
-        var lease = Lease(state)
         var id: Id
-        try:
-            with lease^ as arena:
-                id = walk(arena[])
-        except:
-            raise PyError()
+        with Lease(state) as arena:
+            id = walk(arena[])
         # Inside the call, so nothing collects `id` first.
         return wrap(state, id)
 

@@ -3,6 +3,8 @@ call returns NULL."""
 
 from std.python._cpython import PyObjectPtr
 
+from arena import Interrupted
+
 from .args import str_or_size
 from .capi import (
     Py_DecRef,
@@ -15,6 +17,11 @@ from .capi import (
 @fieldwise_init
 struct PyError(TrivialRegisterPassable, Writable):
     """Python's error indicator is set."""
+
+    @implicit
+    def __init__(out self, interrupted: Interrupted):
+        """Python's error is the Ctrl-C handler's, which `pause` leaves set."""
+        pass
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("PyError")

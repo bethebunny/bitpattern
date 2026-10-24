@@ -87,13 +87,9 @@ def node_count(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
     var id = node_as_id(state, args[0])
-    var lease = Lease(state)
     var found: Int
-    try:
-        with lease^ as arena:
-            found = nodes.node_count(arena[], id)
-    except:
-        raise PyError()
+    with Lease(state) as arena:
+        found = nodes.node_count(arena[], id)
     return PyLong_FromSsize_t(found)
 
 
@@ -263,13 +259,9 @@ def bool_of[
 ](state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var a = node_as_id(state, args[0])
     var b = node_as_id(state, args[1])
-    var lease = Lease(state)
     var answer: Bool
-    try:
-        with lease^ as arena:
-            answer = walk(arena[], a, b)
-    except:
-        raise PyError()
+    with Lease(state) as arena:
+        answer = walk(arena[], a, b)
     return PyBool_FromLong(answer)
 
 
@@ -300,13 +292,9 @@ def path_count(
     state: StatePointer, args: Arguments
 ) raises PyError -> PyObjectPtr:
     var id = node_as_id(state, args[0])
-    var lease = Lease(state)
     var paths: BigUInt
-    try:
-        with lease^ as arena:
-            paths = nodes.path_count(arena[], id)
-    except:
-        raise PyError()
+    with Lease(state) as arena:
+        paths = nodes.path_count(arena[], id)
     var int = int_from_big(state[].ints, paths)
     if not int:
         raise PyError()

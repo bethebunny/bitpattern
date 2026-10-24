@@ -293,27 +293,15 @@ def member_words(
     var sign_shift: UInt64 = (
         UInt64(64 - max(width, 1)) if dtype.code == INT else 0
     )
-    var lease = Lease(state)
-    try:
-        with lease^ as arena:
-            if dtype.bits == 8:
-                fill[DType.uint8](
-                    arena[], id, width, columns, sign_shift, words
-                )
-            elif dtype.bits == 16:
-                fill[DType.uint16](
-                    arena[], id, width, columns, sign_shift, words
-                )
-            elif dtype.bits == 32:
-                fill[DType.uint32](
-                    arena[], id, width, columns, sign_shift, words
-                )
-            else:
-                fill[DType.uint64](
-                    arena[], id, width, columns, sign_shift, words
-                )
-    except:
-        raise PyError()  # the Ctrl-C handler's
+    with Lease(state) as arena:
+        if dtype.bits == 8:
+            fill[DType.uint8](arena[], id, width, columns, sign_shift, words)
+        elif dtype.bits == 16:
+            fill[DType.uint16](arena[], id, width, columns, sign_shift, words)
+        elif dtype.bits == 32:
+            fill[DType.uint32](arena[], id, width, columns, sign_shift, words)
+        else:
+            fill[DType.uint64](arena[], id, width, columns, sign_shift, words)
     return words^
 
 

@@ -273,17 +273,13 @@ def bdd_repr(o: PyObjectPtr) abi("C") -> PyObjectPtr:
         if id.is_leaf():
             written = leaf_name(id)
         else:
-            var lease = Lease(state)
             var found: Int
             var tested: Int32
             var size: BigUInt
-            try:
-                with lease^ as arena:
-                    found = nodes.node_count(arena[], id)
-                    tested = arena[].decision(id).bit
-                    size = arena[].size(id)
-            except:
-                raise PyError()
+            with Lease(state) as arena:
+                found = nodes.node_count(arena[], id)
+                tested = arena[].decision(id).bit
+                size = arena[].size(id)
             var total = int_from_big(state[].ints, size)
             if not total:
                 raise PyError()
