@@ -187,7 +187,7 @@ def accepts(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var arena = take_arena(state)
     var answer = members.accepts[integer_bit](arena[], id, value)
     give_back(state, arena)
-    return PyBool_FromLong(Int(answer))
+    return PyBool_FromLong(answer)
 
 
 def member_at(
@@ -270,7 +270,7 @@ def bool_of[
             answer = walk(arena[], a, b)
     except:
         raise PyError()
-    return PyBool_FromLong(Int(answer))
+    return PyBool_FromLong(answer)
 
 
 comptime SUBSET = Signature("subset", positional=["a", "b"])

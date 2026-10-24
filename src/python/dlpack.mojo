@@ -197,7 +197,7 @@ def delete[M: Managed](managed: Int) abi("C"):
 def destructor[M: Managed](capsule: PyObjectPtr) abi("C"):
     """Frees the export unless a consumer renamed the capsule (and so owns the
     tensor)."""
-    if PyCapsule_IsValid(capsule, M.NAME.as_c_string_span()) == 1:
+    if PyCapsule_IsValid(capsule, M.NAME.as_c_string_span()):
         delete[M](PyCapsule_GetPointer(capsule, M.NAME.as_c_string_span()))
 
 
@@ -323,15 +323,16 @@ def overflow_error(message: String) -> PyError:
     return error(pointer_symbol("PyExc_OverflowError"), message)
 
 
-def int_up_to(o: PyObjectPtr, most: Int64) raises PyError -> Int:
-    """OverflowError outside `[0, most]`."""
+def int_up_to[dtype: DType](o: PyObjectPtr) raises PyError -> Scalar[dtype]:
+    """OverflowError outside `[0, Scalar[dtype].MAX]`."""
+    comptime most = Int64(Scalar[dtype].MAX)
     var int_or_overflow = Int64OrOverflow.from_python(o)
     if (
         int_or_overflow.fits()
         and Int64(0) <= int_or_overflow.value
         and int_or_overflow.value <= most
     ):
-        return Int(int_or_overflow.value)
+        return Scalar[dtype](int_or_overflow.value)
     raise overflow_error(String("expected an int in [0, ", most, "]"))
 
 
@@ -350,9 +351,9 @@ def version_of(
                 "expected tuple of length 2, but got tuple of length ", length
             )
         )
-    var major = int_up_to(PyTuple_GetItem(o, 0), Int64(UInt32.MAX))
-    var minor = int_up_to(PyTuple_GetItem(o, 1), Int64(UInt32.MAX))
-    return Version(UInt32(major), UInt32(minor))
+    var major = int_up_to[DType.uint32](PyTuple_GetItem(o, 0))
+    var minor = int_up_to[DType.uint32](PyTuple_GetItem(o, 1))
+    return Version(major, minor)
 
 
 comptime TENSOR = Signature(
@@ -370,10 +371,10 @@ comptime TENSOR = Signature(
 def tensor(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
     var id = node_as_id(state, args[0])
     var width = width_as_int32(args[1])
-    var code = int_up_to(args[2], Int64(UInt8.MAX))
-    var bits = int_up_to(args[3], Int64(UInt8.MAX))
+    var code = int_up_to[DType.uint8](args[2])
+    var bits = int_up_to[DType.uint8](args[3])
     var version = version_of(state, args[4])
-    var dtype = DataType(UInt8(code), UInt8(bits), 1)
+    var dtype = DataType(code, bits, 1)
     var columns = dtype.columns(width)
     var words = member_words(state, id, width, dtype, columns)
     if version is not None:

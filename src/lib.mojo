@@ -199,7 +199,7 @@ def module_exec(module: PyObjectPtr) abi("C") -> c_int:
             )
         var arena = unsafe_alloc[Arena](1)
         arena.unsafe_write(Arena(pause, state.unsafe_bitcast[NoneType]()))
-        state[].arena = Int(arena)
+        state[].arena = arena
         state[].bdd_type = bdd_type(module)
         state[].batches_type = batches_type(module)
         set_attribute(module, "BDD", Py_NewRef(state[].bdd_type))
@@ -304,10 +304,8 @@ def module_free(module: PyObjectPtr) abi("C"):
     if slot[] == 0:
         return
     var state = StatePointer(unsafe_from_address=slot[])
-    if state[].arena:
-        var arena = Pointer[Arena, MutUntrackedOrigin](
-            unsafe_from_address=state[].arena
-        )
+    if state[].arena is not None:
+        var arena = state[].arena.take()
         arena.unsafe_deinit_pointee()
         arena.unsafe_free()
     state.unsafe_deinit_pointee()

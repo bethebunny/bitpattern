@@ -30,8 +30,8 @@ from .errors import PyError, runtime_error
 
 
 struct State(Movable):
-    var arena: Int
-    """The arena's address, or 0 while a call has it."""
+    var arena: Optional[ArenaPointer]
+    """None while a call has it."""
     var depth: Int
     """Calls under way. An outer call can hold a node it hasn't wrapped yet, so only the
     outermost collects."""
@@ -49,7 +49,7 @@ struct State(Movable):
     var ints: Ints
 
     def __init__(out self, version: UInt64):
-        self.arena = 0
+        self.arena = None
         self.depth = 0
         self.wrappers = []
         self.bdd_type = PyObjectPtr()
@@ -91,16 +91,14 @@ def object_state(o: PyObjectPtr) -> StatePointer:
 def take_arena(state: StatePointer) raises PyError -> ArenaPointer:
     """Python code that runs while a call has the arena (eg. an `__index__`) could call
     back in, so no Python may run until it's given back."""
-    var address = state[].arena
-    if address == 0:
+    if state[].arena is None:
         raise runtime_error("a call has the arena")
-    state[].arena = 0
-    return ArenaPointer(unsafe_from_address=address)
+    return state[].arena.take()
 
 
 @always_inline
 def give_back(state: StatePointer, arena: ArenaPointer):
-    state[].arena = Int(arena)
+    state[].arena = arena
 
 
 struct Lease:
@@ -138,13 +136,13 @@ def pause(mut arena: Arena, pause_state: PauseStatePointer) -> Bool:
     var real = lent.unsafe_ptr()
     real.unsafe_write(Arena.placeholder())
     swap(arena, real[])
-    state[].arena = Int(real)
+    state[].arena = real.unsafe_origin_cast[MutUntrackedOrigin]()
     state[].depth += 1  # so the handler's calls aren't outermost
     var handled = handle_sigint(state)
     state[].depth -= 1
     # Every call the handler made has given the arena back.
     swap(arena, real[])
-    state[].arena = 0
+    state[].arena = None
     real.unsafe_deinit_pointee()
     dealloc(lent^)
     return handled
@@ -162,7 +160,7 @@ def handle_sigint(state: StatePointer) -> Bool:
     Py_DecRef(signal)
     if not handler:
         return False
-    if PyCallable_Check(handler) != 0:
+    if PyCallable_Check(handler):
         # The frame the signal came in, as Python passes it.
         var frame = PyEval_GetFrame()
         var result = PyObject_CallFunction(

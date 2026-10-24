@@ -153,7 +153,7 @@ def bdd_richcompare(
     if ob_type(b) != ob_type(a) or (op != Py_EQ and op != Py_NE):
         return Py_NewRef(state[].not_implemented)
     var equal = id_of(a) == id_of(b)
-    return PyBool_FromLong(Int(equal == (op == Py_EQ)))
+    return PyBool_FromLong(equal == (op == Py_EQ))
 
 
 def bdd_invert(o: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -256,7 +256,7 @@ def bdd_size(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
 
 
 def bdd_leaf(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
-    return PyBool_FromLong(Int(id_of(o).is_leaf()))
+    return PyBool_FromLong(id_of(o).is_leaf())
 
 
 def bdd_repr(o: PyObjectPtr) abi("C") -> PyObjectPtr:

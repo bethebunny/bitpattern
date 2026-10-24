@@ -227,8 +227,8 @@ def PyNumber_Index(o: PyObjectPtr) -> PyObjectPtr:
 
 
 @always_inline
-def PyBool_FromLong(value: Int) -> PyObjectPtr:
-    return external_call["PyBool_FromLong", PyObjectPtr](value)
+def PyBool_FromLong(value: Bool) -> PyObjectPtr:
+    return external_call["PyBool_FromLong", PyObjectPtr](Int(value))
 
 
 # Errors.
@@ -448,8 +448,8 @@ def PyEval_GetFrame() -> PyObjectPtr:
 
 
 @always_inline
-def PyCallable_Check(o: PyObjectPtr) -> c_int:
-    return external_call["PyCallable_Check", c_int](o)
+def PyCallable_Check(o: PyObjectPtr) -> Bool:
+    return external_call["PyCallable_Check", c_int](o) != 0
 
 
 @always_inline
@@ -548,5 +548,5 @@ def PyCapsule_GetPointer(capsule: PyObjectPtr, name: CStringSpan) -> Int:
 
 
 @always_inline
-def PyCapsule_IsValid(capsule: PyObjectPtr, name: CStringSpan) -> c_int:
-    return external_call["PyCapsule_IsValid", c_int](capsule, name)
+def PyCapsule_IsValid(capsule: PyObjectPtr, name: CStringSpan) -> Bool:
+    return external_call["PyCapsule_IsValid", c_int](capsule, name) != 0
