@@ -235,11 +235,11 @@ def branch[hi: Bool](o: PyObjectPtr) -> PyObjectPtr:
 
 
 def bdd_left(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
-    return branch[False](o)
+    return branch[hi=False](o)
 
 
 def bdd_right(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
-    return branch[True](o)
+    return branch[hi=True](o)
 
 
 def bdd_size(o: PyObjectPtr, closure: Int) abi("C") -> PyObjectPtr:
@@ -312,22 +312,42 @@ def bdd_reduce(o: PyObjectPtr, unused: PyObjectPtr) abi("C") -> PyObjectPtr:
 def bdd_type(module: PyObjectPtr) raises PyError -> PyObjectPtr:
     var getset: List[GetSetDef] = [
         GetSetDef(
-            text("bit"),
-            address(bdd_bit),
-            0,
-            text("The bit the node tests, or -1 for a leaf."),
-            0,
+            name=text("bit"),
+            get=address(bdd_bit),
+            set=0,
+            doc=text("The bit the node tests, or -1 for a leaf."),
+            closure=0,
         ),
-        GetSetDef(text("left"), address(bdd_left), 0, 0, 0),
-        GetSetDef(text("right"), address(bdd_right), 0, 0, 0),
         GetSetDef(
-            text("size"),
-            address(bdd_size),
-            0,
-            text("How many integers below `2 ** (bit + 1)` the node accepts."),
-            0,
+            name=text("left"),
+            get=address(bdd_left),
+            set=0,
+            doc=0,
+            closure=0,
         ),
-        GetSetDef(text("leaf"), address(bdd_leaf), 0, 0, 0),
+        GetSetDef(
+            name=text("right"),
+            get=address(bdd_right),
+            set=0,
+            doc=0,
+            closure=0,
+        ),
+        GetSetDef(
+            name=text("size"),
+            get=address(bdd_size),
+            set=0,
+            doc=text(
+                "How many integers below `2 ** (bit + 1)` the node accepts."
+            ),
+            closure=0,
+        ),
+        GetSetDef(
+            name=text("leaf"),
+            get=address(bdd_leaf),
+            set=0,
+            doc=0,
+            closure=0,
+        ),
         GetSetDef(0, 0, 0, 0, 0),
     ]
 

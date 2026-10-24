@@ -265,7 +265,9 @@ def fill[
     if words.len == 0:  # null, with nothing to write
         return
     if columns == 1:
-        write_words(arena, id, width, sign_shift, words.slots[word]())
+        write_words(
+            arena, id, width, words.slots[word](), sign_shift=sign_shift
+        )
     elif width <= NARROW_WIDTH:
         write_rows[Narrow](arena, id, width, columns, words.slots[word]())
     else:

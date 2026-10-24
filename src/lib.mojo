@@ -167,19 +167,20 @@ def PyInit_bdd() abi("C") -> PyObjectPtr:
     slots.append(ModuleSlot(0, 0))
     var definition = unsafe_alloc[ModuleDef](1)
     definition[] = ModuleDef(
-        1,
-        0,
-        0,
-        0,
-        0,
-        text("bitpattern.bdd"),
-        text(DOC),
-        8,  # the address of a State
-        methods(),
-        leaked(slots^),
-        address(module_traverse),
-        address(module_clear),
-        address(module_free),
+        # PyModuleDef_HEAD_INIT
+        ob_refcnt=1,
+        ob_type=0,
+        m_init=0,
+        m_index=0,
+        m_copy=0,
+        m_name=text("bitpattern.bdd"),
+        m_doc=text(DOC),
+        m_size=8,  # the address of a State
+        m_methods=methods(),
+        m_slots=leaked(slots^),
+        m_traverse=address(module_traverse),
+        m_clear=address(module_clear),
+        m_free=address(module_free),
     )
     return PyModuleDef_Init(Int(definition))
 

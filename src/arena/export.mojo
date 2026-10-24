@@ -44,8 +44,9 @@ def write_words[
     mut arena: Arena,
     id: Id,
     width: Int32,
-    sign_shift: UInt64,
     slots: Slots[word],
+    *,
+    sign_shift: UInt64,
 ) raises Interrupted:
     """For widths up to 64. Members under free bits are written once, then copied for
     each other value of the free bits."""
@@ -67,7 +68,7 @@ def write_words[
             )
             continue
         var first, free = descend(
-            arena, steps, written, step.id, step.width, step.at
+            arena, steps, step.id, step.width, step.at, block_start=written
         )
         var run = 1 << Int(free)
         fill_run(
@@ -83,10 +84,11 @@ def write_words[
 def descend(
     arena: Arena,
     mut steps: List[WriteStep],
-    block_start: Int,
     var id: Id,
     var width: Int32,
     var prefix: UInt64,
+    *,
+    block_start: Int,
 ) -> Tuple[UInt64, Int32]:
     """The first run under `id` (not REJECT), as its first member and free bits. Pushes
     what it passes:
