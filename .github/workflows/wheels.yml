@@ -1,0 +1,51 @@
+name: wheels
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  wheel:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build --wheel --out-dir dist
+      - run: uvx abi3audit --strict --summary --assume-minimum-abi3 3.11 dist/*.whl
+      - name: Check the manylinux_2_34 tag
+        if: runner.os == 'Linux'
+        # The build tags the wheel without auditwheel. A repair to the same tag with
+        # no patcher fails on glibc symbols newer than 2.34 and on libraries the wheel
+        # would have to bundle. mojo-compiler (a dependency) provides
+        # libKGENCompilerRTShared.so.
+        run: |
+          uvx auditwheel repair --plat "manylinux_2_34_$(uname -m)" --patcher none \
+            --exclude libKGENCompilerRTShared.so -w "$RUNNER_TEMP/repaired" dist/*.whl
+      - name: Show the module's minimum macOS and libraries
+        if: runner.os == 'macOS'
+        run: |
+          unzip -q dist/*.whl bitpattern/bdd.abi3.so -d "$RUNNER_TEMP"
+          otool -l "$RUNNER_TEMP/bitpattern/bdd.abi3.so" | grep -A4 LC_BUILD_VERSION
+          otool -L "$RUNNER_TEMP/bitpattern/bdd.abi3.so"
+      - name: Test the wheel on Python 3.11 to 3.14
+        # The tests run from a copy outside the checkout, so they import the installed
+        # wheel. test_surface.py runs README.md's examples.
+        run: |
+          mkdir "$RUNNER_TEMP/suite"
+          cp -r tests README.md "$RUNNER_TEMP/suite"
+          cd "$RUNNER_TEMP/suite"
+          failed=""
+          for python in 3.11 3.12 3.13 3.14; do
+            uv venv --python "$python" "venv-$python"
+            uv pip install --python "venv-$python" "$GITHUB_WORKSPACE"/dist/*.whl \
+              pytest hypothesis numpy max
+            "venv-$python/bin/python" -m pytest -q tests || failed="$failed $python"
+          done
+          test -z "$failed" || { echo "Tests failed on Python$failed"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ runner.os }}-${{ runner.arch }}
+          path: dist/*.whl
