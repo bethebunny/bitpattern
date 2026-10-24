@@ -198,7 +198,7 @@ def module_exec(module: PyObjectPtr) abi("C") -> c_int:
                 "bitpattern.bdd can't find the int functions it needs",
             )
         var arena = unsafe_alloc[Arena](1)
-        arena.unsafe_write(Arena(pause, Int(state)))
+        arena.unsafe_write(Arena(pause, state.unsafe_bitcast[NoneType]()))
         state[].arena = Int(arena)
         state[].bdd_type = bdd_type(module)
         state[].batches_type = batches_type(module)

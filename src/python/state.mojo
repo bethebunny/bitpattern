@@ -121,7 +121,9 @@ struct Lease:
         give_back(self.state, self.arena)
 
 
-def pause(mut arena: Arena, context: Int) -> Bool:
+def pause(
+    mut arena: Arena, pause_state: OpaquePointer[MutUntrackedOrigin]
+) -> Bool:
     """Runs Python's SIGINT handler after a Ctrl-C and stops the walk if it raised.
 
     The handler can use the arena, so the walk lends it the real one and holds a
@@ -132,7 +134,7 @@ def pause(mut arena: Arena, context: Int) -> Bool:
     # Clears SIGINT's flag, so Python won't run the handler itself.
     if PyOS_InterruptOccurred() == 0:
         return True
-    var state = StatePointer(unsafe_from_address=context)
+    var state = pause_state.unsafe_bitcast[State]()
     # On the heap since the handler reaches it by an address the compiler can't track.
     var lent = alloc(Layout[Arena].single())
     var real = lent.unsafe_ptr()

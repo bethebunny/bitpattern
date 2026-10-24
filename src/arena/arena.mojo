@@ -107,12 +107,14 @@ struct Sizes(Movable):
         self.wide = Dict[Int, BigUInt]()
 
 
-comptime Pause = def(mut Arena, Int) thin -> Bool
-"""Runs every PAUSE_INTERVAL steps of a walk with the arena's context and returns
-whether the walk goes on."""
+comptime Pause = def(mut Arena, OpaquePointer[MutUntrackedOrigin]) thin -> Bool
+"""Runs every PAUSE_INTERVAL steps of a walk with the arena's `pause_state` and
+returns whether the walk goes on."""
 
 
-def never_pause(mut arena: Arena, context: Int) -> Bool:
+def never_pause(
+    mut arena: Arena, pause_state: OpaquePointer[MutUntrackedOrigin]
+) -> Bool:
     return True
 
 
@@ -129,11 +131,13 @@ struct Arena(Movable):
     var spare: Spare
     var schedule: Schedule
     var pause: Pause
-    var context: Int
+    var pause_state: OpaquePointer[MutUntrackedOrigin]
     var countdown: Int
     """Steps until the next pause."""
 
-    def __init__(out self, pause: Pause, context: Int):
+    def __init__(
+        out self, pause: Pause, pause_state: OpaquePointer[MutUntrackedOrigin]
+    ):
         self.nodes = List[Decision](length=2, fill=LEAF_SLOT)
         self.sizes = Sizes(2)
         self.unique = UniqueTable()
@@ -142,14 +146,16 @@ struct Arena(Movable):
         self.spare = Spare()
         self.schedule = Schedule(made=0, due=MIN_COLLECTION_INTERVAL)
         self.pause = pause
-        self.context = context
+        self.pause_state = pause_state
         self.countdown = PAUSE_INTERVAL
 
     @staticmethod
     def placeholder() -> Arena:
         """No nodes at all, not even the leaves. A paused walk holds this while Python's
         Ctrl-C handler has the real arena."""
-        var arena = Arena(never_pause, 0)
+        var arena = Arena(
+            never_pause, OpaquePointer[MutUntrackedOrigin].unsafe_dangling()
+        )
         arena.nodes = []
         arena.sizes = Sizes(0)
         return arena^
@@ -223,7 +229,7 @@ struct Arena(Movable):
         if self.countdown > 0:
             return
         self.countdown = PAUSE_INTERVAL
-        if not self.pause(self, self.context):
+        if not self.pause(self, self.pause_state):
             raise Interrupted()
 
     def size(self, id: Id) -> BigUInt:
