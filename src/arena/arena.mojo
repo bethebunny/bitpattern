@@ -247,5 +247,5 @@ struct Arena(Movable):
         if id == REJECT:
             return BigUInt()
         if id == ACCEPT:
-            return BigUInt(1) << Int(width)
-        return self.size(id) << Int(width - 1 - self.decision(id).bit)
+            return BigUInt(1) << width
+        return self.size(id) << (width - 1 - self.decision(id).bit)

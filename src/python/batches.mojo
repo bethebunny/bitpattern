@@ -169,7 +169,7 @@ def run_range[
     V: Prefix
 ](state: StatePointer, run: Run[V]) raises PyError -> PyObjectPtr:
     """`range(first, first + 2 ** free)`."""
-    var length = BigUInt(1) << Int(run.free)
+    var length = BigUInt(1) << run.free
     var stop: BigUInt
     comptime if V == Narrow:
         stop = BigUInt(rebind[Narrow](run.first).value) + length

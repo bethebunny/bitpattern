@@ -13,7 +13,7 @@ def narrow_bit(value: UInt128, bit: Int32) -> Bool:
 
 @always_inline
 def wide_bit(value: BigUInt, bit: Int32) -> Bool:
-    return value.bit(Int(bit))
+    return value.bit(bit)
 
 
 def exactly_these[

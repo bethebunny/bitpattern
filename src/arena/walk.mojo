@@ -65,13 +65,13 @@ struct Wide(Copyable, Prefix):
         self.value = BigUInt()
 
     def bit(self, bit: Int32) -> Bool:
-        return self.value.bit(Int(bit))
+        return self.value.bit(bit)
 
     def set(mut self, bit: Int32, value: Bool):
-        self.value.set_bit(Int(bit), value)
+        self.value.set_bit(bit, value)
 
     def cleared_below(self, width: Int32) -> Self:
-        return Self((self.value >> Int(width)) << Int(width))
+        return Self((self.value >> width) << width)
 
     def plus(self, n: UInt64) -> Self:
         return Self(self.value.plus(n))

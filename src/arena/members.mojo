@@ -17,7 +17,7 @@ def bits_between(value: UInt128, *, low: Int32, high: Int32) -> UInt128:
 
 
 def wide_bits_between(value: BigUInt, *, low: Int32, high: Int32) -> BigUInt:
-    return (value >> Int(low)).low_bits(Int(high - low))
+    return (value >> low).low_bits(high - low)
 
 
 def accepts[
@@ -62,7 +62,7 @@ def nth(arena: Arena, root: Id, n: BigUInt) -> BigUInt:
         var node = arena.decision(id)
         var size = arena.size(id)
         if rest >= size:
-            member |= (rest // size) << Int(node.bit + 1)
+            member |= (rest // size) << (node.bit + 1)
             rest = rest % size
         if node.bit < NARROW_WIDTH:
             var low = nth_narrow(arena, id, rest.uint128_or_none().value())
@@ -71,7 +71,7 @@ def nth(arena: Arena, root: Id, n: BigUInt) -> BigUInt:
         if rest < lo_count:
             id = node.lo
         else:
-            member.set_bit(Int(node.bit), True)
+            member.set_bit(node.bit, True)
             rest -= lo_count
             id = node.hi
     return member | rest
@@ -108,10 +108,10 @@ def rank(arena: Arena, root: Id, value: BigUInt, width: Int32) -> BigUInt:
     var top = width
     while id != REJECT:
         if top <= NARROW_WIDTH:
-            var low = value.low_bits(Int(top)).uint128_or_none().value()
+            var low = value.low_bits(top).uint128_or_none().value()
             return below + BigUInt(rank_narrow(arena, id, low, top))
         if id == ACCEPT:
-            return below + value.low_bits(Int(top))
+            return below + value.low_bits(top)
         var node = arena.decision(id)
         below += arena.size(id) * wide_bits_between(
             value, low=node.bit + 1, high=top

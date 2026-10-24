@@ -505,7 +505,7 @@ def interval(
         return wrap(state, REJECT)
     var last = high.magnitude - 1
     if last.bits() > Int(width):
-        last = BigUInt.mask(Int(width))
+        last = BigUInt.mask(width)
     var first = BigUInt() if low.negative else low.magnitude.copy()
     if first > last:
         return wrap(state, REJECT)

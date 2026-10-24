@@ -154,8 +154,9 @@ struct BigUInt(
         _trim(self.limbs)
 
     @staticmethod
-    def mask(bits: Int) -> Self:
-        """`2**bits - 1`."""
+    def mask(width: Some[Indexer]) -> Self:
+        """`2**width - 1`."""
+        var bits = index(width)
         var limbs = Limbs(capacity=(bits + 63) >> 6)
         limbs.resize(bits >> 6, ~UInt64(0))
         if bits & 63:
@@ -192,14 +193,16 @@ struct BigUInt(
             total += Int(pop_count(self.limbs.unsafe_get(i)))
         return total
 
-    def bit(self, i: Int) -> Bool:
+    def bit(self, bit: Some[Indexer]) -> Bool:
+        var i = index(bit)
         assert i >= 0
         var limb = i >> 6
         if limb >= len(self.limbs):
             return False
         return (self.limbs.unsafe_get(limb) >> UInt64(i & 63)) & 1 == 1
 
-    def set_bit(mut self, i: Int, value: Bool):
+    def set_bit(mut self, bit: Some[Indexer], value: Bool):
+        var i = index(bit)
         assert i >= 0
         var limb = i >> 6
         var flag = UInt64(1) << UInt64(i & 63)
@@ -211,8 +214,9 @@ struct BigUInt(
             self.limbs.unsafe_get(limb) &= ~flag
             _trim(self.limbs)
 
-    def low_bits(self, bits: Int) -> Self:
-        """`self & BigUInt.mask(bits)`."""
+    def low_bits(self, width: Some[Indexer]) -> Self:
+        """`self & BigUInt.mask(width)`."""
+        var bits = index(width)
         var full = bits >> 6
         if full >= len(self.limbs):
             return self.copy()
@@ -268,7 +272,8 @@ struct BigUInt(
         for i in range(len(rhs.limbs)):
             self.limbs.unsafe_get(i) |= rhs.limbs.unsafe_get(i)
 
-    def __lshift__(self, shift: Int) -> Self:
+    def __lshift__(self, rhs: Some[Indexer]) -> Self:
+        var shift = index(rhs)
         assert shift >= 0
         var n = len(self.limbs)
         if n == 0:
@@ -295,7 +300,8 @@ struct BigUInt(
             )
         return Self(limbs=limbs^)
 
-    def __rshift__(self, shift: Int) -> Self:
+    def __rshift__(self, rhs: Some[Indexer]) -> Self:
+        var shift = index(rhs)
         assert shift >= 0
         var whole = shift >> 6
         var n = len(self.limbs) - whole
