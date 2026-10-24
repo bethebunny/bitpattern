@@ -475,31 +475,55 @@ def test_a_walk_goes_on_from_where_a_ctrl_c_paused_it():
     seen = []
     rng = random.Random(1)
     values = [rng.getrandbits(64) for _ in range(20_000)]
-    pid = os.getpid()
     here = sys._getframe()
+    reader, writer = os.pipe()
+    lost = False
+    asked = 0
 
     def handler(signum, frame):
         # A pause passes `here` (the frame that called the walk). Python runs the
         # handler itself for a Ctrl-C that comes in mid-pause, with the frame of
-        # whatever code runs next (eg. signal.getsignal or this handler).
-        if frame is here:
-            seen.append(bdd.stats()["nodes"])
+        # whatever code runs next (eg. this handler). That uses up the Ctrl-C meant
+        # for the next pause.
+        nonlocal lost, asked
+        if frame is not here:
+            lost = True
+            return
+        seen.append(bdd.stats()["nodes"])
+        lost = True
+        # Until a Ctrl-C is on its way to the next pause. The cap lets a walk that
+        # starts over at each pause still finish.
+        while lost and asked < 10_000:
+            lost = False
+            asked += 1
+            os.write(writer, b"\n")
 
     previous = signal.signal(signal.SIGINT, handler)
     try:
-        # A thread can't press Ctrl-C during the walk, which holds the GIL.
+        # A thread can't press Ctrl-C during the walk, which holds the GIL. The
+        # presser presses once for each line the handler writes, so each pause asks
+        # for the next Ctrl-C, however fast the walk runs.
         presser = subprocess.Popen(
-            ["sh", "-c", f"for _ in $(seq 400); do kill -INT {pid}; sleep 0.005; done"]
+            ["sh", "-c", f"echo; while read -r _; do kill -INT {os.getpid()}; done"],
+            stdin=reader,
+            stdout=subprocess.PIPE,
         )
+        assert presser.stdout is not None
         try:
+            presser.stdout.readline()  # the presser is up
+            before = bdd.stats()["nodes"]
+            os.write(writer, b"\n")  # the walk's first Ctrl-C
             bdd.exactly_these(values, width=64)  # a walk that keeps no memo
             made = bdd.stats()["nodes"]
         finally:
             presser.kill()
             presser.wait()  # then every Ctrl-C it sent has come in
+            presser.stdout.close()
     finally:
         signal.signal(signal.SIGINT, previous)
-    during = [nodes for nodes in seen if nodes < made]
+        os.close(reader)
+        os.close(writer)
+    during = [nodes for nodes in seen if before < nodes < made]
     assert len(during) > 2
     assert during == sorted(set(during))  # each pause found the walk further on
 
