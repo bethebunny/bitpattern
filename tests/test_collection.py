@@ -13,7 +13,6 @@ import socket
 import subprocess
 import sys
 import sysconfig
-import time
 import weakref
 
 import pytest
@@ -477,10 +476,18 @@ def test_a_walk_goes_on_from_where_a_ctrl_c_paused_it():
     rng = random.Random(1)
     values = [rng.getrandbits(64) for _ in range(20_000)]
     pid = os.getpid()
-    previous = signal.signal(
-        signal.SIGINT, lambda signum, frame: seen.append(bdd.stats()["nodes"])
-    )
+    here = sys._getframe()
+
+    def handler(signum, frame):
+        # A pause passes `here` (the frame that called the walk). Python runs the
+        # handler itself for a Ctrl-C that comes in mid-pause, with the frame of
+        # whatever code runs next (eg. signal.getsignal or this handler).
+        if frame is here:
+            seen.append(bdd.stats()["nodes"])
+
+    previous = signal.signal(signal.SIGINT, handler)
     try:
+        # A thread can't press Ctrl-C during the walk, which holds the GIL.
         presser = subprocess.Popen(
             ["sh", "-c", f"for _ in $(seq 400); do kill -INT {pid}; sleep 0.005; done"]
         )
@@ -489,8 +496,7 @@ def test_a_walk_goes_on_from_where_a_ctrl_c_paused_it():
             made = bdd.stats()["nodes"]
         finally:
             presser.kill()
-            presser.wait()
-            time.sleep(0.05)  # for any Ctrl-C still on its way
+            presser.wait()  # then every Ctrl-C it sent has come in
     finally:
         signal.signal(signal.SIGINT, previous)
     during = [nodes for nodes in seen if nodes < made]
