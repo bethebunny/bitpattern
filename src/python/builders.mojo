@@ -145,9 +145,7 @@ def lshift(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
 
 
 def shifted_out(by: String, bit: Int32) -> PyError:
-    return value_error(
-        String("shifting by ", by, " moves bit ", bit, " out of range")
-    )
+    return value_error(String(t"shifting by {by} moves bit {bit} out of range"))
 
 
 comptime FREED_BETWEEN = Signature(
@@ -234,10 +232,10 @@ def diagram(state: StatePointer, args: Arguments) raises PyError -> PyObjectPtr:
             # Bits are ASCII, so the first byte that isn't one starts a character.
             var decoded = Codepoint.unsafe_decode_utf8_codepoint(bytes[index:])
             raise value_error(
-                String("bits are 0, 1 or ?, not ", repr_of(decoded[0]))
+                String(t"bits are 0, 1 or ?, not {repr_of(decoded[0])}")
             )
     if size > Int(MAX_WIDTH):
-        raise value_error(String(size, " bits is too many"))
+        raise value_error(String(t"{size} bits is too many"))
 
     def walk(mut arena: Arena) raises Interrupted {var bits} -> Id:
         return build.diagram(arena, bits)
@@ -280,7 +278,7 @@ def exactly_these(
     var bits = members.bits()
     if bits > Int(MAX_WIDTH):
         raise value_error(
-            String("a value of ", bits, " bits is wider than any set")
+            String(t"a value of {bits} bits is wider than any set")
         )
     var width = max(least_width, Int32(bits))
 
@@ -441,8 +439,8 @@ struct Members(Movable):
             if signed.negative:
                 var error = value_error(
                     String(
-                        "IntSets can't hold negative numbers, got ",
-                        str_or_size(int),
+                        t"IntSets can't hold negative numbers,"
+                        t" got {str_or_size(int)}"
                     )
                 )
                 Py_DecRef(int)
@@ -617,8 +615,8 @@ def row_of(state: StatePointer, o: PyObjectPtr) raises PyError -> Row:
     if PyTuple_Size(o) != 3:
         raise value_error(
             String(
-                "expected tuple of length 3, but got tuple of length ",
-                PyTuple_Size(o),
+                t"expected tuple of length 3,"
+                t" but got tuple of length {PyTuple_Size(o)}"
             )
         )
     var bit = bit_as_int32(PyTuple_GetItem(o, 0))

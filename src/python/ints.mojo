@@ -324,13 +324,13 @@ def repr_of_count(ints: Ints, total: PyObjectPtr) raises PyError -> String:
     var magnitude = Signed.from_int(ints, total).magnitude.copy()
     var bits = magnitude.bits()
     if bits > 10 and magnitude.count_ones() == 1:
-        return String("2**", bits - 1)
+        return String(t"2**{bits - 1}")
     # Writing out more digits than Python's limit takes quadratic time.
     if bits > WRITABLE_BITS:
         var shift = bits - 64
         var top = UInt64((magnitude >> shift).uint128_or_none().value())
         var tenths = Int((Float64(shift) + log2(Float64(top))) * 10 + 0.5)
-        return String("~2**", tenths // 10, ".", tenths % 10)
+        return String(t"~2**{tenths // 10}.{tenths % 10}")
     var digits = PyObject_Str(total)
     if not digits:
         raise PyError()

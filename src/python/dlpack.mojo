@@ -72,17 +72,14 @@ struct DataType(TrivialRegisterPassable):
             and self.bits != 64
         ):
             raise value_error(
-                String("words are 8, 16, 32 or 64 bits, not ", self.bits)
+                String(t"words are 8, 16, 32 or 64 bits, not {self.bits}")
             )
         var columns = max(ceildiv(Int(width), Int(self.bits)), 1)
         if columns > 1 and self.code != UINT:
             raise value_error(
                 String(
-                    width,
-                    "-bit members don't fit ",
-                    self.bits,
-                    "-bit words of type ",
-                    self.code,
+                    t"{width}-bit members don't fit"
+                    t" {self.bits}-bit words of type {self.code}"
                 )
             )
         return columns
@@ -288,7 +285,9 @@ def member_words(
     )
     if words_or_none is None:
         var total = int_from_count(state[].ints, members)
-        var message = String(str_or_size(total), " members don't fit in memory")
+        var message = String(
+            t"{str_or_size(total)} members don't fit in memory"
+        )
         Py_DecRef(total)
         raise error(pointer_symbol("PyExc_MemoryError"), message)
     var words = words_or_none.take()
@@ -333,7 +332,7 @@ def int_up_to[dtype: DType](o: PyObjectPtr) raises PyError -> Scalar[dtype]:
         and int_or_overflow.value <= most
     ):
         return Scalar[dtype](int_or_overflow.value)
-    raise overflow_error(String("expected an int in [0, ", most, "]"))
+    raise overflow_error(String(t"expected an int in [0, {most}]"))
 
 
 def version_of(
@@ -348,7 +347,7 @@ def version_of(
     if length != 2:
         raise value_error(
             String(
-                "expected tuple of length 2, but got tuple of length ", length
+                t"expected tuple of length 2, but got tuple of length {length}"
             )
         )
     var major = int_up_to[DType.uint32](PyTuple_GetItem(o, 0))

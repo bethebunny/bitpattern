@@ -61,7 +61,7 @@ def checked_width(
     give_back(state, arena)
     if bit >= width:
         raise value_error(
-            String("node tests bit ", bit, ", outside width ", width)
+            String(t"node tests bit {bit}, outside width {width}")
         )
     return width
 

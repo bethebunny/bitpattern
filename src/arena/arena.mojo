@@ -90,7 +90,7 @@ struct Misordered(TrivialRegisterPassable, Writable):
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write(
-            "children must test bits below ", self.bit, ", not ", self.child_bit
+            t"children must test bits below {self.bit}, not {self.child_bit}"
         )
 
 

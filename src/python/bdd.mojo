@@ -290,13 +290,7 @@ def bdd_repr(o: PyObjectPtr) abi("C") -> PyObjectPtr:
                 raise e
             Py_DecRef(total)
             written = String(
-                "<BDD bit=",
-                tested,
-                ", ",
-                found,
-                " nodes, ",
-                counted,
-                " members>",
+                t"<BDD bit={tested}, {found} nodes, {counted} members>"
             )
         return PyUnicode_FromStringAndSize(written)
     except:

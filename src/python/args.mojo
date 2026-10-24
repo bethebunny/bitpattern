@@ -70,14 +70,13 @@ struct Signature(Copyable):
 
     def method_doc(self) -> String:
         """`doc` after the text signature that `inspect.signature` reads."""
-        var written = String(self.function, "(")
-        for index in range(self.arity()):
-            if index > 0:
-                written += ", "
-            if index == len(self.positional):
-                written += "*, "
-            written += self.name(index)
-        return String(written, ")\n--\n\n", self.doc)
+        var parameters = self.positional.copy()
+        if self.keywords:
+            parameters.append("*")
+            parameters.extend(self.keywords.copy())
+        return String(
+            t"{self.function}({', '.join(parameters)})\n--\n\n{self.doc}"
+        )
 
 
 struct Arguments(Movable):
@@ -158,20 +157,16 @@ def add_keyword[
             if arguments.items[index]:
                 raise type_error(
                     String(
-                        signature.function,
-                        "() got multiple values for argument '",
-                        name,
-                        "'",
+                        t"{signature.function}() got multiple values"
+                        t" for argument '{name}'"
                     )
                 )
             arguments.items[index] = value
             return
     raise type_error(
         String(
-            signature.function,
-            "() got an unexpected keyword argument '",
-            utf8(key),
-            "'",
+            t"{signature.function}() got an unexpected keyword argument"
+            t" '{utf8(key)}'"
         )
     )
 
@@ -191,12 +186,8 @@ def too_many[signature: Signature](given: Int) -> PyError:
     comptime positional = len(signature.positional)
     return type_error(
         String(
-            signature.function,
-            "() takes ",
-            positional,
-            " positional arguments but ",
-            given,
-            " were given",
+            t"{signature.function}() takes {positional} positional arguments"
+            t" but {given} were given"
         )
     )
 
@@ -216,7 +207,7 @@ def missing[signature: Signature](arguments: Arguments) -> PyError:
         if not arguments[index]:
             names.append(declared.name(index))
     var message = String(
-        signature.function, "() missing ", len(names), " required ", kind
+        t"{signature.function}() missing {len(names)} required {kind}"
     )
     message += " arguments: " if len(names) > 1 else " argument: "
     for index, name in enumerate(names):
@@ -224,7 +215,7 @@ def missing[signature: Signature](arguments: Arguments) -> PyError:
             if len(names) > 2:
                 message += ","
             message += " and " if index == len(names) - 1 else " "
-        message += String("'", name, "'")
+        message += String(t"'{name}'")
     return type_error(message)
 
 
@@ -240,7 +231,7 @@ def not_an_instance(
     """The TypeError for an argument of the wrong type (eg. "'str' object is not an
     instance of 'BDD'")."""
     if o == state[].none:
-        return type_error(String("'None' is not an instance of '", type, "'"))
+        return type_error(String(t"'None' is not an instance of '{type}'"))
     var name = PyType_GetQualName(ob_type(o))
     var written: String = "?"
     if name:
@@ -249,7 +240,7 @@ def not_an_instance(
     else:
         PyErr_Clear()
     return type_error(
-        String("'", written, "' object is not an instance of '", type, "'")
+        String(t"'{written}' object is not an instance of '{type}'")
     )
 
 
@@ -274,7 +265,7 @@ def str_or_size(o: PyObjectPtr) -> String:
     var overflow: c_int = 0
     var bits = PyLong_AsLongLongAndOverflow(bit_length, overflow)
     Py_DecRef(bit_length)
-    return String("an int of ", bits, " bits")
+    return String(t"an int of {bits} bits")
 
 
 def int32_up_to(o: PyObjectPtr, most: Int32) raises PyError -> Optional[Int32]:
