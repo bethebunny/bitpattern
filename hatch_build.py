@@ -52,6 +52,9 @@ class MojoBuildHook(BuildHookInterface):
             # site-packages/modular/lib, where mojo-compiler (a dependency) puts the
             # runtime libraries.
             rpath = "$ORIGIN/../modular/lib"
+            # The symbol table is most of the module's size. Editable installs keep the
+            # symbols for debuggers and profilers.
+            flags += ["-Xlinker", "--strip-all"]
         # Linker arguments, in place of mojo's default: an rpath into this build
         # environment, which an isolated build deletes.
         shared_libs = f"-Xlinker,-rpath,-Xlinker,{rpath}"
