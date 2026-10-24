@@ -106,7 +106,7 @@ def descend(
             steps.append(WriteStep.visit(node.hi, node.bit, hi_prefix))
             id = node.lo
         else:
-            prefix |= UInt64(Int(node.lo == REJECT)) << UInt64(node.bit)
+            prefix |= UInt64(node.lo == REJECT) << UInt64(node.bit)
             id = node.sole_branch()
         width = node.bit
     return (prefix, width)

@@ -55,7 +55,5 @@ def rebuilt(
     var ids: List[Id] = [REJECT, ACCEPT]
     for row in rows:
         arena.tick()
-        ids.append(
-            arena.make_checked(row.bit, ids[Int(row.lo)], ids[Int(row.hi)])
-        )
+        ids.append(arena.make_checked(row.bit, ids[row.lo], ids[row.hi]))
     return ids[len(ids) - 1]

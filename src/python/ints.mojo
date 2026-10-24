@@ -208,14 +208,14 @@ def u128_of(ints: Ints, int: PyObjectPtr) -> Optional[UInt128]:
     var overflow: c_int = 0
     var small = PyLong_AsLongLongAndOverflow(int, overflow)
     if overflow == 0:
-        return None if small < 0 else Optional(UInt128(small))
+        return None if small < 0 else UInt128(small)
     if overflow < 0:
         return None
     var value: UInt128 = 0
     if ints.native:
         var flags = LITTLE_ENDIAN | UNSIGNED_BUFFER
         var needed = ints.as_native_bytes(int, value, flags)
-        return Optional(value) if needed <= 16 else None
+        return value if needed <= 16 else None
     if ints.num_bits(int) > 128:
         return None
     _ = ints.as_byte_array(int, value, 1, 0)
@@ -230,7 +230,7 @@ def i128_of(ints: Ints, int: PyObjectPtr) -> Optional[Int128]:
     if ints.native:
         var value: Int128 = 0
         var needed = ints.as_native_bytes(int, value, LITTLE_ENDIAN)
-        return Optional(value) if needed <= 16 else None
+        return value if needed <= 16 else None
     if ints.num_bits(int) > 128:
         return None
     # Of the 128-bit ints only -2**127 fits, so read with room for the sign.
@@ -254,7 +254,7 @@ struct Signed(Movable):
         var small = PyLong_AsLongLongAndOverflow(int, overflow)
         if overflow == 0:
             var magnitude = UInt64(small) if small >= 0 else 0 - UInt64(small)
-            return Self(small < 0, BigUInt(UInt128(magnitude)))
+            return Self(small < 0, BigUInt(magnitude))
         # Two's complement, with room for the sign.
         var bytes: Int
         if ints.native:
@@ -328,7 +328,7 @@ def repr_of_count(ints: Ints, total: PyObjectPtr) raises PyError -> String:
     # Writing out more digits than Python's limit takes quadratic time.
     if bits > WRITABLE_BITS:
         var shift = bits - 64
-        var top = UInt64((magnitude >> shift).uint128_or_none().value())
+        var top = (magnitude >> shift).limb(0)
         var tenths = Int((Float64(shift) + log2(Float64(top))) * 10 + 0.5)
         return String(t"~2**{tenths // 10}.{tenths % 10}")
     var digits = PyObject_Str(total)
