@@ -5,12 +5,6 @@
 > pip install bitpattern
 > pip install 'bitpattern[hypothesis]'  # with the hypothesis strategies
 > ```
->
-> bitpattern has wheels for Linux on x86-64 and aarch64 (glibc 2.34+) and for macOS
-> 13+ on Apple Silicon. The wheels depend on mojo-compiler (about 80 MB to download
-> and 240 to 275 MB installed) for the Mojo runtime library. On other platforms (eg.
-> Windows, Intel Macs or musl) and on free-threaded Python, pip installs 0.2.0, the
-> last pure-Python release.
 
 bitpattern provides `BDDSet`, a set type for values that can be encoded as fixed-width
 integers: for instance, IEEE floats and twos-complement integers, unicode codepoints,
@@ -304,13 +298,6 @@ array([  1,  20, 300], dtype=uint16)
 array([0.25, 0.5 , 1.  ], dtype=float32)
 
 ```
-
-## Development
-
-The diagrams are in Mojo: the arena and its algorithms in `src/arena/`, the Python module
-in `src/python/`, and the module's entry point in `src/lib.mojo`. Building bitpattern from
-source takes the Mojo compiler, which uv installs, and `uv run pytest` builds the module
-before it tests.
 
 [DLPack]: https://dmlc.github.io/dlpack/latest/python_spec.html
 [Bryant, 1986]: https://doi.org/10.1109/TC.1986.1676819
